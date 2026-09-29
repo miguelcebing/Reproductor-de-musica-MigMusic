@@ -1,0 +1,1525 @@
+# AGEND.md — MigMusic
+
+> **Fuente de verdad del proyecto MigMusic.**
+> Este archivo es leído por el **agente de desarrollo**. No es documentación pasiva: es una guía operativa.
+> El agente de desarrollo **debe entrevistar al usuario** (sección [Requirements Interview](#requirements-interview)), registrar las respuestas aquí mismo, y solo cuando se cumpla el [Implementation Gate](#implementation-gate) comenzar a programar.
+
+- **Idioma de conversación con el usuario:** español.
+- **Idioma del código:** inglés (ver [Restricciones globales](#restricciones-globales)).
+- **Propietario del proyecto:** Miguel.
+- **Versión del documento:** 1.1.0 (entrevista F0 completada y gate aprobado el 2026-09-28).
+
+---
+
+## 0. Cómo debe usar este archivo el agente de desarrollo
+
+Orden obligatorio de lectura y actuación:
+
+1. Leer este archivo completo, de arriba abajo.
+2. Leer las skills listadas en [Índice de skills](#índice-de-skills). Empezar por `requirements-interview`, que gobierna la entrevista.
+3. Ejecutar la entrevista **progresiva** (rondas de 4–6 preguntas, nunca todo de golpe).
+4. Tras cada respuesta del usuario, **editar este archivo**: cambiar `Status`, rellenar `Answer` y `DecidedOn`, y añadir una línea al [Decision Log](#decision-log).
+5. Cuando el [Implementation Gate](#implementation-gate) esté verde, implementar siguiendo el [Roadmap](#roadmap) y las skills técnicas.
+6. Ante cualquier cambio de alcance posterior, volver a este archivo, actualizarlo y **solo entonces** cambiar el código.
+
+Regla de oro: **si algo no está `CONFIRMED` aquí, el agente no lo asume.** Puede recomendarlo, pero debe preguntarlo.
+
+---
+
+## 1. Contexto del proyecto
+
+**MigMusic** es un reproductor de música web completo. Nació como un **taller académico de estructuras de datos** cuyo núcleo es la **lista doblemente enlazada** aplicada a una lista de reproducción de canciones. El objetivo es convertir ese ejercicio en un producto real: con reproductor funcional, música de Spotify, música local del equipo del usuario, interfaz moderna y animada, diseño responsive y despliegue en la nube.
+
+Dos dimensiones conviven y ambas son evaluables:
+
+| Dimensión | Qué debe demostrar |
+|---|---|
+| **Académica** | Una lista doblemente enlazada **real** (nodos con `previous`/`next`), no un array disfrazado, explicable paso a paso. |
+| **Producto** | Un reproductor web usable, bonito, seguro, probado y desplegado. |
+
+## 2. Requisitos originales del taller (inmutables)
+
+El taller solicita construir una aplicación usando el concepto de **LISTA DOBLEMENTE ENLAZADA** para simular y gestionar una lista de reproducción:
+
+- [ ] Agregar una canción al inicio.
+- [ ] Agregar una canción al final.
+- [ ] Agregar una canción en cualquier posición.
+- [ ] Eliminar una canción.
+- [ ] Adelantar canción (siguiente).
+- [ ] Retroceder canción (anterior).
+- [ ] Interfaz frontend con la que el usuario interactúe.
+- [ ] Otras funcionalidades adicionales pertinentes (mínimo 2, propuestas por el agente y elegidas por el usuario — ver `FEAT-*`).
+
+> Estos requisitos **no pueden eliminarse ni degradarse** por ninguna decisión posterior.
+
+## 3. Objetivo de MigMusic
+
+Debe tener: reproductor funcional · playlist funcional · lista doblemente enlazada · música de Spotify · música local · interfaz moderna · animaciones · diseño responsive · controles de reproducción · adelantar segundos · retroceder segundos · agregar canciones · eliminar canciones · navegar entre canciones · despliegue en la nube.
+
+## 4. Requisitos funcionales (RF)
+
+| ID | Requisito | Origen |
+|---|---|---|
+| RF-01 | Play / Pause | Producto |
+| RF-02 | Next / Previous (navegación por la lista doblemente enlazada) | Taller |
+| RF-03 | **Skip forward N segundos** (N definido en `PLAYER-001`) | Producto |
+| RF-04 | **Skip backward N segundos** (N definido en `PLAYER-002`) | Producto |
+| RF-05 | Seek mediante barra de progreso | Producto |
+| RF-06 | Volume y Mute | Producto |
+| RF-07 | Agregar canción al inicio / al final / en posición arbitraria | Taller |
+| RF-08 | Eliminar canción (por referencia y por posición) | Taller |
+| RF-09 | Seleccionar canción de la lista y reproducirla | Producto |
+| RF-10 | Fuente **Spotify** (Web API + Web Playback SDK) | Producto |
+| RF-11 | Fuente **Música local** (File Picker, HTML5 Audio o alternativa adecuada) | Producto |
+| RF-12 | Playlist unificada que puede contener canciones de ambas fuentes, respetando sus límites técnicos | Producto |
+| RF-13 | ≥ 2 funcionalidades adicionales aprobadas por el usuario | Taller |
+| RF-14 | Interfaz **funcional**, no mockup: todos los controles principales operan de verdad | Producto |
+
+## 5. Requisitos no funcionales (RNF)
+
+| ID | Requisito |
+|---|---|
+| RNF-01 | **POO** en todo el sistema (backend Python y frontend). Ver [Arquitectura](#8-arquitectura-objetivo). |
+| RNF-02 | Estructura de carpetas **bien organizada y separada por capas/responsabilidades**, de modo que se note buena arquitectura. |
+| RNF-03 | Backend **100 % Python**. Ninguna lógica de servidor en otro lenguaje. |
+| RNF-04 | Código, comentarios técnicos, nombres y tipos **en inglés**. |
+| RNF-05 | Responsive: desktop, laptop, tablet y mobile. |
+| RNF-06 | Animaciones acordes al nivel decidido (`VIS-006`), respetando `prefers-reduced-motion`. |
+| RNF-07 | Seguridad: secretos solo en variables de entorno; OAuth correcto; sin secretos en el frontend. |
+| RNF-08 | Testing automatizado (unitario, integración, e2e mínimo). |
+| RNF-09 | Desplegable en la nube con HTTPS, CORS, logs y configuración de producción. |
+| RNF-10 | Accesibilidad básica (teclado, foco visible, ARIA en controles, contraste). |
+
+## Restricciones globales
+
+1. **Backend: Python obligatorio.** El framework (FastAPI / Flask / Django) se decide en `BACK-001`.
+2. **Programación Orientada a Objetos** obligatoria: clases con responsabilidad única, encapsulación, abstracción mediante interfaces/clases abstractas, polimorfismo entre fuentes de audio, composición sobre herencia, inyección de dependencias.
+3. **Código en inglés**: variables, funciones, clases, interfaces, tipos, componentes, métodos y comentarios técnicos.
+4. **La lista doblemente enlazada no puede sustituirse por un array/list nativo** como estructura de la playlist activa.
+5. **Spotify y música local son dos fuentes distintas.** El Web Playback SDK **no** reproduce archivos locales. Ver skill `spotify-integration` y `local-audio`.
+6. **Ningún secreto** (Client Secret, tokens, claves) en el repositorio ni en el bundle del frontend.
+7. **Estructura organizada y separada** (ver sección 8): cada capa en su carpeta, sin dependencias circulares, sin lógica de negocio en controladores/rutas ni en componentes de UI.
+
+---
+
+## 8. Arquitectura objetivo
+
+> Esta arquitectura es la **hipótesis de trabajo** que el agente debe evaluar y ajustar con el usuario (`ARCH-*`, `BACK-*`, `FRONT-*`). Los principios (capas, POO, separación) **no son negociables**; los detalles sí.
+
+### 8.1 Principios
+
+- **Arquitectura por capas / hexagonal (ports & adapters):** el dominio no conoce frameworks, HTTP, Spotify ni base de datos.
+- **Dependencias hacia adentro:** `api → application → domain`; `infrastructure → domain` (implementa puertos definidos en dominio/aplicación).
+- **SOLID** aplicado explícitamente (y demostrable en revisión de código).
+- **Inyección de dependencias** en el punto de composición (`container`/`main`), nunca `import` de implementaciones concretas dentro del dominio.
+- **DTOs/Schemas** en el borde (API); las entidades de dominio nunca se serializan directamente.
+- **Excepciones de dominio propias**, traducidas a respuestas HTTP en un único lugar.
+
+### 8.2 Estructura de carpetas propuesta (monorepo)
+
+```
+migmusic/
+├── AGEND.md
+├── README.md
+├── .env.example                      # solo nombres de variables, jamás valores reales
+├── docker-compose.yml                # entorno local reproducible
+├── docs/
+│   ├── architecture.md               # diagramas y decisiones (ADR)
+│   ├── adr/                          # Architecture Decision Records (uno por decisión)
+│   └── api.md
+├── skills/                           # skills para el agente (entregadas junto a este archivo)
+├── backend/                          # 100 % Python
+│   ├── pyproject.toml
+│   ├── src/migmusic/
+│   │   ├── main.py                   # composition root: crea app y cablea dependencias
+│   │   ├── core/                     # transversal: config, logging, errores base, seguridad
+│   │   │   ├── config.py             # Settings (lee variables de entorno)
+│   │   │   ├── logging.py
+│   │   │   └── exceptions.py
+│   │   ├── domain/                   # REGLAS DE NEGOCIO PURAS (sin frameworks)
+│   │   │   ├── entities/
+│   │   │   │   ├── song.py           # Song (value object / entity)
+│   │   │   │   ├── playlist.py       # Playlist (usa DoublyLinkedList)
+│   │   │   │   └── audio_source.py   # enum AudioSourceType {LOCAL, SPOTIFY}
+│   │   │   ├── structures/
+│   │   │   │   ├── node.py           # Node
+│   │   │   │   └── doubly_linked_list.py  # DoublyLinkedList
+│   │   │   ├── ports/                # interfaces abstractas (ABC / Protocol)
+│   │   │   │   ├── playlist_repository.py
+│   │   │   │   ├── music_provider.py # contrato común para fuentes de música
+│   │   │   │   └── token_store.py
+│   │   │   └── exceptions.py         # EmptyPlaylistError, InvalidPositionError...
+│   │   ├── application/              # CASOS DE USO (orquestan dominio + puertos)
+│   │   │   ├── services/
+│   │   │   │   ├── playlist_service.py
+│   │   │   │   ├── playback_service.py
+│   │   │   │   └── spotify_auth_service.py
+│   │   │   └── dto/
+│   │   ├── infrastructure/          # ADAPTADORES concretos
+│   │   │   ├── spotify/
+│   │   │   │   ├── spotify_client.py       # cliente HTTP a Spotify Web API
+│   │   │   │   ├── spotify_oauth.py        # Authorization Code + PKCE, refresh
+│   │   │   │   └── spotify_music_provider.py  # implementa MusicProvider
+│   │   │   ├── persistence/
+│   │   │   │   ├── in_memory_playlist_repository.py
+│   │   │   │   └── sql_playlist_repository.py   # solo si se aprueba DB
+│   │   │   └── security/
+│   │   │       └── session_token_store.py
+│   │   └── api/                      # CAPA DE ENTRADA (HTTP)
+│   │       ├── routers/              # controladores delgados: sin lógica de negocio
+│   │       ├── schemas/              # request/response models
+│   │       ├── dependencies.py       # inyección de dependencias del framework
+│   │       └── error_handlers.py     # excepciones de dominio → HTTP
+│   └── tests/
+│       ├── unit/                     # dominio y servicios (sin red, sin disco)
+│       ├── integration/              # API + adaptadores (con dobles de Spotify)
+│       └── conftest.py
+├── frontend/                         # tecnología según FRONT-001
+│   ├── package.json
+│   └── src/
+│       ├── domain/                   # DoublyLinkedList (espejo, si se aprueba ARCH-001), Song, tipos
+│       ├── players/                  # POO: AudioPlayer (abstracto), LocalAudioPlayer, SpotifyPlayer
+│       ├── services/                 # ApiClient, PlaylistController, PlaybackController
+│       ├── storage/                  # LocalLibraryRepository (IndexedDB) si se aprueba
+│       ├── ui/
+│       │   ├── components/           # presentacionales, sin lógica de negocio
+│       │   ├── layouts/
+│       │   └── animations/
+│       ├── styles/                   # design tokens (colores, espaciado, motion)
+│       └── main.*
+└── deploy/                           # IaC / config por plataforma (según DEPLOY-001)
+```
+
+### 8.3 Clases centrales (nombres de referencia)
+
+| Clase | Capa | Responsabilidad única |
+|---|---|---|
+| `Node` | domain | Contener `song`, `previous`, `next`. |
+| `DoublyLinkedList` | domain | Operaciones estructurales de la lista y puntero `current`. |
+| `Song` | domain | Datos inmutables de una canción y su `AudioSourceType`. |
+| `Playlist` | domain | Nombre + `DoublyLinkedList`; reglas propias (duplicados, modos repeat/shuffle si se aprueban). |
+| `MusicProvider` (ABC) | domain/ports | Contrato de una fuente de música (búsqueda, resolución de reproducción). |
+| `SpotifyMusicProvider` | infrastructure | Implementa `MusicProvider` con Spotify Web API. |
+| `PlaylistRepository` (ABC) | domain/ports | Persistir/recuperar playlists. |
+| `PlaylistService` | application | Casos de uso: crear, añadir, insertar, eliminar, mover. |
+| `PlaybackService` | application | Casos de uso: next, previous, seek, skip N segundos (estado de reproducción). |
+| `SpotifyAuthService` | application | Flujo OAuth, refresh de tokens, cierre de sesión. |
+| `AudioPlayer` (abstracta, frontend) | frontend/players | `play/pause/seek/setVolume/onEnded...` |
+| `LocalAudioPlayer` / `SpotifyPlayer` | frontend/players | Polimorfismo: misma interfaz, distinto motor. |
+
+### 8.4 Patrones esperados (justificar en ADR si se cambian)
+
+Strategy (fuentes de audio) · Repository (persistencia) · Factory (creación de players/providers) · Adapter (Spotify) · Observer/Event emitter (estado del player → UI) · Dependency Injection (composition root).
+
+### 8.5 Dónde vive la lista doblemente enlazada (decisión crítica → `ARCH-001`)
+
+El reproductor de música local corre **en el navegador**; los archivos locales no deben viajar al servidor salvo decisión explícita. El backend es Python. Hay tensión que el agente debe resolver con el usuario:
+
+- **Opción A — DLL solo en backend (Python):** máxima pureza académica en Python, pero cada Next/Previous implica red; incómodo con archivos locales.
+- **Opción B — DLL solo en frontend:** respuesta inmediata, pero el backend Python queda reducido a OAuth/persistencia y pierde peso académico.
+- **Opción C — DLL en ambos con contrato compartido (recomendada como hipótesis):** el backend Python es la fuente de verdad de playlists persistidas y expone la API; el frontend mantiene una implementación equivalente para navegación instantánea; ambas se validan con **los mismos casos de prueba (fixtures de contrato)**. Costo: duplicación controlada y disciplina de sincronización.
+
+El agente debe explicar esto, recomendar y **preguntar**; no asumir.
+
+---
+
+## 9. Lista doblemente enlazada — especificación
+
+Estructura mínima:
+
+```
+Node
+- song
+- previous
+- next
+
+DoublyLinkedList
+- head
+- tail
+- current
+- size
+```
+
+Operaciones mínimas (nombres en inglés; adaptar al estilo del lenguaje, ej. `snake_case` en Python):
+
+`insertAtBeginning()` · `insertAtEnd()` · `insertAt()` · `remove()` · `removeAt()` · `find()` · `moveNext()` · `movePrevious()` · `getCurrent()` · `getSize()` · `clear()`
+
+Reglas:
+
+- Implementación **real** con nodos enlazados. Prohibido usar `list`/`Array` como almacenamiento interno de la estructura.
+- Mantener invariantes: `head.previous is None`, `tail.next is None`, `size` coherente, `current` válido o `None`.
+- Casos borde obligatorios: lista vacía, un solo elemento, inserción/eliminación en extremos, posición fuera de rango, eliminar el nodo `current`, `moveNext` en `tail`, `movePrevious` en `head`.
+- Decisión pendiente: comportamiento en extremos (¿se detiene o es circular?) → `PLAYLIST-009`.
+- El agente debe poder **explicar al usuario cómo la lista se usa dentro de la playlist** (skill `doubly-linked-list` incluye guion de explicación).
+- Complejidad documentada por operación (ej. `insertAtBeginning` O(1), `insertAt` O(n)).
+
+## 10. Spotify
+
+MigMusic usa **Spotify Web API** y **Spotify Web Playback SDK**. Debe documentarse y respetarse:
+
+- **OAuth** con *Authorization Code Flow* (con PKCE cuando el cliente lo requiera). No usar Implicit Grant (obsoleto).
+- **Tokens:** access token de vida corta + refresh token; **el Client Secret jamás sale del backend**.
+- **Scopes** mínimos necesarios (el agente los lista y justifica en `SPOTIFY-*`).
+- **Redirect URI:** debe coincidir exactamente con la registrada en el Spotify Dashboard; las reglas de HTTPS/loopback **deben verificarse en la documentación vigente** antes de configurar.
+- **Client ID / Client Secret / variables de entorno:** solo por `.env` local (ignorado por git) y variables del proveedor cloud.
+- **Requisitos de cuenta:** el Web Playback SDK exige cuenta **Spotify Premium**; verificar limitaciones actuales de modo desarrollo (usuarios permitidos, cuotas) y de navegadores/móviles soportados.
+- **Manejo de errores:** 401 (token expirado → refresh), 403, 429 (respetar `Retry-After`), errores del SDK (`initialization_error`, `authentication_error`, `account_error`, `playback_error`).
+- **Sesiones y expiración:** cookie de sesión `HttpOnly`, `Secure`, `SameSite` adecuada; refresh transparente.
+- **Separación de fuentes:** el SDK reproduce solo contenido de Spotify. **Nunca** intentar reproducir archivos locales con él.
+
+> El agente **debe consultar la documentación oficial vigente de Spotify** antes de implementar (las políticas de acceso y endpoints cambian con el tiempo) y registrar en un ADR cualquier limitación encontrada.
+
+Detalle operativo: skill `spotify-integration`.
+
+## 11. Música local
+
+- Selección con **File Picker**; **drag and drop** si se aprueba (`LOCAL-003`).
+- Formatos: MP3, WAV y otros compatibles con el navegador (lista final en `LOCAL-001`; el agente debe advertir diferencias de soporte entre navegadores).
+- Reproducción con **HTML5 Audio API** (o alternativa técnicamente adecuada, ej. Web Audio API si se aprueba visualizador/ecualizador).
+- Debe poder: reproducir, pausar, avanzar, retroceder, seek, cambiar canción, eliminar canción.
+- Persistencia tras cerrar el navegador: implica almacenar blobs (IndexedDB) o solo metadatos con re-selección de archivos → **explicar implicaciones** (`LOCAL-006`, `LOCAL-008`).
+- Gestión de memoria: liberar `URL.createObjectURL` con `revokeObjectURL`.
+- Privacidad: por defecto, los archivos locales **no se suben** al servidor.
+
+Detalle operativo: skill `local-audio`.
+
+## 12. Seguridad
+
+- Secretos solo en variables de entorno; `.env` en `.gitignore`; `.env.example` sin valores.
+- Client Secret y refresh tokens solo en backend; sesión por cookie `HttpOnly`.
+- Validar `state` en OAuth (anti-CSRF) y usar PKCE.
+- CORS restrictivo (orígenes explícitos, nunca `*` con credenciales).
+- Validación de entrada con schemas; límites de tamaño y tipo para cualquier subida.
+- Cabeceras de seguridad (CSP compatible con el SDK de Spotify, HSTS en producción).
+- Dependencias fijadas y auditadas; logs **sin** tokens ni datos sensibles.
+- Rate limiting básico en endpoints de autenticación.
+
+## 13. Testing
+
+- **Unit (obligatorio, alta cobertura en dominio):** `DoublyLinkedList`, `Playlist`, servicios.
+- **Integración:** rutas API con dobles de Spotify (sin llamar a Spotify real en CI).
+- **Contrato DLL:** mismos casos en Python y en frontend si aplica `ARCH-001 = C`.
+- **Frontend:** pruebas de componentes/controladores y de los players con dobles.
+- **E2E mínimo:** flujo agregar → reproducir → next → previous → skip N seg → eliminar.
+- **Manual guiado:** checklist responsive y Spotify real (requiere cuenta Premium).
+- Herramientas concretas: `TEST-001`.
+
+Detalle operativo: skill `testing-quality`.
+
+## 14. Despliegue
+
+Debe contemplarse: frontend, backend, HTTPS, variables de entorno, Spotify OAuth, CORS, Redirect URI de producción, logs y configuración de producción. Plataforma y topología: `DEPLOY-*`. Detalle operativo: skill `deployment-cloud`.
+
+---
+
+## Índice de skills
+
+Ubicación: carpeta `skills/<nombre>/SKILL.md`. Cada una tiene **una responsabilidad concreta**.
+
+| Skill | Responsabilidad | Cuándo se activa |
+|---|---|---|
+| `requirements-interview` | Conducir la entrevista progresiva, registrar respuestas, controlar el gate. | **Siempre primero.** |
+| `backend-architecture-python` | Estructura por capas, POO, SOLID y reglas de organización del backend Python. | Al iniciar implementación backend y en cada revisión. |
+| `doubly-linked-list` | Implementar, probar y explicar la lista doblemente enlazada. | Al implementar la playlist. |
+| `spotify-integration` | OAuth, tokens, Web API, Web Playback SDK, errores. | Tras `SPOTIFY-*` confirmadas. |
+| `local-audio` | Audio local, metadata, persistencia, formatos. | Tras `LOCAL-*` confirmadas. |
+| `ui-ux-design` | Diseño visual, animaciones, responsive, accesibilidad, frontend POO. | Tras `VIS-*`, `UX-*`, `FRONT-*` confirmadas. |
+| `testing-quality` | Estrategia y ejecución de pruebas, criterios de calidad. | Continuamente y antes de cada entrega. |
+| `deployment-cloud` | Despliegue, HTTPS, CORS, entornos, logs. | Tras `DEPLOY-*` confirmadas. |
+
+---
+
+## Sistema de estados
+
+| Estado | Significado | Acción del agente |
+|---|---|---|
+| `PENDING` | Aún no preguntada o sin respuesta. | Preguntar (cuando le toque por orden y dependencias). |
+| `PROPOSED` | El agente propuso una opción/recomendación y espera confirmación. | No implementar; pedir confirmación. |
+| `CONFIRMED` | El usuario decidió; respuesta registrada. | Usar como requisito firme. No volver a preguntar. |
+| `REJECTED` | El usuario descartó la opción/funcionalidad. | No implementar; no volver a proponer salvo que el usuario lo pida. |
+
+Transiciones válidas: `PENDING → PROPOSED → CONFIRMED | REJECTED`, `PENDING → CONFIRMED | REJECTED`, y `CONFIRMED → PENDING` únicamente si el usuario quiere **reabrir** la decisión (registrar en Decision Log).
+
+Cada pregunta tiene: `Status`, `Priority` (`CRITICAL` bloquea el gate / `NORMAL` no), `DependsOn`, `Question`, `Guidance` (qué explicar/alternativas), `FollowUps` (preguntas adicionales condicionales), `Answer`, `DecidedOn`.
+
+Al confirmar, el agente escribe por ejemplo:
+
+```yaml
+VIS-001:
+  Status: CONFIRMED
+  Answer: "Glassmorphism oscuro con acentos neón"
+  DecidedOn: 2026-10-01
+```
+
+---
+
+## Requirements Interview
+
+### Reglas de la entrevista (resumen; el detalle está en la skill `requirements-interview`)
+
+1. **Progresiva:** rondas temáticas de **4–6 preguntas**. Anunciar la ronda ("Vamos a definir el diseño visual de MigMusic."), preguntar, esperar respuesta, registrar, y pasar a la siguiente.
+2. **Nunca** preguntar todo de una vez ni repetir preguntas `CONFIRMED`/`REJECTED`.
+3. Respetar `DependsOn`: no preguntar una pregunta si sus dependencias siguen `PENDING`, salvo dependencia técnica que justifique alterar el orden (explicarlo).
+4. Si una respuesta abre una decisión nueva, **crear** la pregunta adicional (ID nuevo con sufijo, ej. `LOCAL-006a`) en `PENDING` y hacerla en la misma ronda o la siguiente.
+5. Para decisiones técnicas: explicar opciones, ventajas/desventajas, **recomendar**, preguntar y registrar. No asumir.
+6. Si el usuario dice "no sé / lo que recomiendes": pasar a `PROPOSED` con la recomendación, pedir un "sí" explícito y entonces `CONFIRMED`.
+7. Usar lenguaje claro; el usuario tiene interés en computación y redes y prefiere explicaciones **profundas y conceptuales**: cuando una decisión tenga consecuencias técnicas, explicar el porqué, no solo el qué.
+
+### Orden recomendado de rondas
+
+| Ronda | Tema | Prefijo | Depende de |
+|---|---|---|---|
+| R1 | Restricciones del proyecto | `CONS` | — |
+| R2 | Diseño visual | `VIS` | R1 |
+| R3 | UX | `UX` | R2 |
+| R4 | Reproductor (core) | `PLAYER` | R1 |
+| R5 | Playlist | `PLAYLIST` | R4 |
+| R6 | Música local | `LOCAL` | R4, R5 |
+| R7 | Spotify | `SPOTIFY` | R4, R5 |
+| R8 | Frontend | `FRONT` | R2, R3, R6, R7 |
+| R9 | Backend | `BACK` | R5, R7 |
+| R10 | Base de datos | `DB` | R5, R6, R9 |
+| R11 | Funcionalidades adicionales | `FEAT` | R4–R10 |
+| R12 | Despliegue | `DEPLOY` | R8, R9, R10 |
+| R13 | Testing | `TEST` | R8, R9 |
+
+Transversal: `ARCH` (arquitectura) se plantea en **R5** y se afina en **R8–R9** porque depende de dónde vive la lista y de la persistencia.
+
+**Dependencias técnicas que autorizan alterar el orden (ejemplos):**
+- `SPOTIFY-004` (entorno de despliegue/Redirect URI) depende de `DEPLOY-001`.
+- `FRONT-001` (tecnología) puede adelantarse si `VIS-*`/`FEAT-*` exigen capacidades concretas (ej. visualizador con Web Audio).
+- `DB-001` depende de `LOCAL-006` (persistencia local) y `PLAYLIST-001` (múltiples playlists).
+- `FEAT-*` de Web Audio (ecualizador/visualizador) modifica `LOCAL-*` y `SPOTIFY-*` (el SDK **no** expone audio para análisis; explicarlo).
+
+---
+
+### R1 — Project Constraints Questions
+
+```yaml
+CONS-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: []
+  Question: "¿Este proyecto se entrega y evalúa como trabajo académico (con sustentación de la lista doblemente enlazada) además de ser un producto real? ¿Hay fecha límite?"
+  Guidance: "Define el peso de la parte académica (documentación, explicabilidad) y el plazo, que condiciona el alcance del roadmap."
+  Answer: "Trabajo académico + producto real. Fecha límite: 2026-10-02"
+  DecidedOn: 2026-09-28
+
+CONS-001a:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-001]
+  Question: "Con 4 días hasta el 02/10, ¿qué nivel de alcance aceptas?"
+  Guidance: "A: alcance completo recomendado. B: sin Spotify. C: todo el alcance con riesgo de no cerrar."
+  Answer: "A - alcance completo recomendado; FEAT reducidas a 4 de bajo coste; sin visualizador/waveform/ecualizador/queue/velocidad/atajos"
+  DecidedOn: 2026-09-28
+
+CONS-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "¿Trabajarás solo o en equipo? ¿Cuál es tu nivel con Python, POO y el frontend que elijamos?"
+  Guidance: "Ajusta la profundidad de explicaciones, comentarios y nivel de abstracción."
+  Answer: "Trabajo en solo. Nivel técnico: ver CONS-002a"
+  DecidedOn: 2026-09-28
+
+CONS-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "¿Qué entorno de desarrollo usas (sistema operativo, editor, versión de Python/Node instaladas, Docker disponible)?"
+  Guidance: "Determina scripts de arranque, Docker Compose y versiones mínimas."
+  Answer: "Windows, VS Code, Python 3.11/3.13, Node 26, npm 11, Git 2.55, sin Docker"
+  DecidedOn: 2026-09-28
+
+CONS-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "¿Tienes o puedes crear una cuenta de Spotify Premium para probar el Web Playback SDK? ¿Quién más necesitará probar (usuarios de prueba)?"
+  Guidance: "El SDK requiere Premium y el modo desarrollo de Spotify limita usuarios. Puede cambiar el alcance de la demo."
+  Answer: "Cuenta Spotify Premium disponible"
+  DecidedOn: 2026-09-28
+
+CONS-005:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "¿Hay presupuesto para la nube (gratis únicamente, o puedes pagar algo)? ¿Tienes dominio propio?"
+  Guidance: "Condiciona la plataforma de despliegue y HTTPS."
+  Answer: "Solo planes gratuitos en nube y herramientas"
+  DecidedOn: 2026-09-28
+
+CONS-006:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "¿Qué idioma debe tener la interfaz de usuario de MigMusic (español, inglés o ambos)?"
+  Guidance: "El código va en inglés siempre; esto se refiere solo a los textos visibles. Si son ambos, planificar i18n."
+  Answer: "Interfaz bilingüe: español + inglés (i18n por diccionario de claves)"
+  DecidedOn: 2026-09-28
+
+CONS-002a:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [CONS-002]
+  Question: "¿Cuál es tu nivel con Python, POO y frontend?"
+  Guidance: "Ajusta profundidad de explicaciones y comentarios. Se pregunta en la fase de pulido (F9)."
+  Answer: null
+  DecidedOn: null
+```
+
+### R2 — Visual Design Questions
+
+```yaml
+VIS-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-001]
+  Question: "¿Qué estilo visual quieres para MigMusic? (moderno, futurista, minimalista, neón, glassmorphism, retro, oscuro tipo reproductor musical, otro)"
+  Guidance: "Ofrecer 2–3 combinaciones concretas con una breve descripción de cómo se vería cada una."
+  Answer: "D - Retro/vinilo"
+  DecidedOn: 2026-09-28
+
+VIS-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-001]
+  Question: "¿Prefieres tema oscuro, claro o ambos (con selector)?"
+  Guidance: "Ambos implica design tokens con dos paletas y mayor esfuerzo de pruebas de contraste."
+  Answer: "Ambos temas con selector"
+  DecidedOn: 2026-09-28
+
+VIS-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-001]
+  Question: "¿Qué colores principales quieres?"
+  Guidance: "Aceptar nombres, hex o una referencia (una app, una imagen). Validar contraste accesible."
+  Answer: "Azul marino / eléctrico + negro; acentos a cargo del agente"
+  DecidedOn: 2026-09-28
+
+VIS-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-003]
+  Question: "¿Qué colores secundarios / de acento quieres?"
+  Guidance: "Proponer una paleta derivada si no tiene preferencia."
+  Answer: "Primario #1E6BFF, acento #4338CA, fondo #0A0D14 (opción i, sobria)"
+  DecidedOn: 2026-09-28
+
+VIS-005:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [VIS-003]
+  Question: "¿Quieres usar gradientes? ¿Fijos o que cambien según la portada de la canción?"
+  Guidance: "Gradientes dinámicos por portada requieren extraer color dominante (costo técnico moderado)."
+  Answer: "Sin gradientes (propuesta de paleta anterior rechazada)"
+  DecidedOn: 2026-09-28
+
+VIS-006:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [VIS-001]
+  Question: "¿Qué tan intensas quieres las animaciones: sutiles, moderadas o muy animadas?"
+  Guidance: "Explicar impacto en rendimiento móvil y en accesibilidad (prefers-reduced-motion)."
+  Answer: "Sutiles, respetando prefers-reduced-motion"
+  DecidedOn: 2026-09-28
+
+VIS-007:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [VIS-006]
+  Question: "¿Quieres un visualizador de audio?"
+  Guidance: "Con música local es viable (Web Audio API AnalyserNode). Con Spotify SDK NO se puede analizar el audio: advertir. Puede simularse visualmente (no real) — explicar la diferencia honestamente."
+  FollowUps: ["Si sí: crear FEAT-* de visualizador y revisar LOCAL-* (Web Audio)."]
+  Answer: "No aplica por CONS-001a (sin visualizador)"
+  DecidedOn: 2026-09-28
+
+VIS-008:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [VIS-007]
+  Question: "¿Quieres ondas de audio (waveform) en la barra de progreso?"
+  Guidance: "Waveform real requiere decodificar el archivo local; para Spotify no está disponible."
+  Answer: "No aplica por CONS-001a (sin waveform)"
+  DecidedOn: 2026-09-28
+
+VIS-009:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [VIS-006]
+  Question: "¿Quieres animaciones en la portada de la canción (giro tipo vinilo, pulso, parallax)?"
+  Guidance: "Mostrar opciones con una descripción visual."
+  Answer: null
+  DecidedOn: null
+
+VIS-010:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [VIS-006]
+  Question: "¿Quieres efectos visuales cuando cambia la canción (transición de portada, cambio de fondo, etc.)?"
+  Guidance: "Vincular con VIS-005 si hay gradientes dinámicos."
+  Answer: null
+  DecidedOn: null
+
+VIS-011:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [VIS-006]
+  Question: "¿Quieres microinteracciones en botones y controles (hover, ripple, rebote al pulsar)?"
+  Guidance: "Bajo costo, alto efecto percibido."
+  Answer: null
+  DecidedOn: null
+
+VIS-012:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [VIS-001]
+  Question: "¿Cómo quieres distribuir la interfaz? (sidebar, barra inferior, reproductor central, layout tipo dashboard, otro)"
+  Guidance: "Mostrar un esquema ASCII de cada opción y cómo se adapta a mobile."
+  Answer: "B - Reproductor central + lista debajo"
+  DecidedOn: 2026-09-28
+```
+
+### R3 — UX Questions
+
+```yaml
+UX-001:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-012]
+  Question: "¿Cómo quieres que se vea la lista de canciones: filas con portada, tarjetas, tabla compacta?"
+  Guidance: "Debe permitir ver qué nodo es el actual y, opcionalmente, una visualización didáctica de los nodos enlazados."
+  Answer: "A - filas con portada pequeña y duración"
+  DecidedOn: 2026-09-28
+
+UX-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres una vista didáctica que muestre la lista doblemente enlazada (nodos y flechas prev/next) en tiempo real? ¿Siempre visible o en un panel opcional?"
+  Guidance: "Muy valiosa para sustentación académica. Recomendarla si CONS-001 indica evaluación."
+  Answer: "B - vista didáctica de nodos alternable con botón"
+  DecidedOn: 2026-09-28
+
+UX-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-012]
+  Question: "¿Cómo quieres agregar canciones: botón + modal, panel lateral, arrastrando archivos, buscador de Spotify integrado?"
+  Guidance: "Debe cubrir inicio, final y posición arbitraria de forma comprensible."
+  Answer: "A - botón + modal con pestañas Local/Spotify y selector de posición"
+  DecidedOn: 2026-09-28
+
+UX-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [VIS-012]
+  Question: "¿Cómo deben comportarse los mensajes de error/estado (toasts, banners, diálogos) y qué debe ver el usuario si Spotify no está conectado?"
+  Guidance: "Definir estados vacíos, cargando, error y sin conexión."
+  Answer: "A - toasts + pantalla vacía ilustrada sin Spotify conectado"
+  DecidedOn: 2026-09-28
+```
+
+### R4 — Player Questions
+
+```yaml
+PLAYER-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-001]
+  Question: "¿Cuántos segundos debe adelantar el botón de avance?"
+  Guidance: "Sugerir 10 s como valor habitual; permitir configurable si el usuario lo desea."
+  Answer: "5 segundos"
+  DecidedOn: 2026-09-28
+
+PLAYER-002:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYER-001]
+  Question: "¿Cuántos segundos debe retroceder el botón de retroceso?"
+  Guidance: "Puede ser igual o distinto al avance."
+  Answer: "5 segundos"
+  DecidedOn: 2026-09-28
+
+PLAYER-002a:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYER-002]
+  Question: "Retroceso de 5 s: si la posición es <= 5 s, ¿ir a la pista anterior o quedarse en 0:00?"
+  Guidance: "A es el comportamiento estándar y evita el conflicto con Previous."
+  Answer: "A - si posicion <= 5 s -> pista anterior; si no -> retroceder 5 s"
+  DecidedOn: 2026-09-28
+
+PLAYER-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres reproducción automática de la siguiente canción al terminar la actual?"
+  Guidance: "Se implementa con el evento de fin de pista + moveNext() de la lista."
+  Answer: "A - autoplay a la siguiente (moveNext)"
+  DecidedOn: 2026-09-28
+
+PLAYER-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYER-003]
+  Question: "¿Quieres reproducción aleatoria (shuffle)?"
+  Guidance: "Explicar que shuffle sobre una lista enlazada exige una estrategia (permutación de índices o reordenar nodos) y cómo afecta a 'anterior'."
+  FollowUps: ["Si sí: crear PLAYLIST-* sobre cómo se conserva el historial para Previous."]
+  Answer: "Sí, estrategia (b): lista intacta + índice de orden de reproducción"
+  DecidedOn: 2026-09-28
+
+PLAYER-005:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYER-003]
+  Question: "¿Quieres repetir una canción?"
+  Guidance: "Modo 'repeat one'."
+  Answer: "Sí (repeat one), vía FEAT-001-d"
+  DecidedOn: 2026-09-28
+
+PLAYER-006:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYER-003, PLAYLIST-009]
+  Question: "¿Quieres repetir toda la playlist?"
+  Guidance: "Relacionado con si la lista se comporta como circular al llegar a los extremos."
+  Answer: "Sí (repeat all como modo en el servicio), vía FEAT-001-d"
+  DecidedOn: 2026-09-28
+
+PLAYER-007:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres una barra de progreso interactiva (click y arrastre para hacer seek)?"
+  Guidance: "Recomendado; es parte del requisito de seek."
+  Answer: "Sí - barra de progreso interactiva (click y arrastre)"
+  DecidedOn: 2026-09-28
+
+PLAYER-008:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres control de volumen (slider) y mute?"
+  Guidance: "Recomendado. Explicar que en algunos móviles el volumen lo controla el sistema."
+  Answer: "Sí - slider de volumen y mute"
+  DecidedOn: 2026-09-28
+
+PLAYER-009:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres control de velocidad de reproducción?"
+  Guidance: "Viable en audio local (playbackRate). El Web Playback SDK de Spotify no ofrece control de velocidad: advertir."
+  Answer: "No aplica por CONS-001a (sin control de velocidad)"
+  DecidedOn: 2026-09-28
+
+PLAYER-010:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [CONS-001]
+  Question: "¿Quieres atajos de teclado? Si sí, ¿cuáles (espacio = play/pausa, flechas = skip, etc.)?"
+  Guidance: "Cuidar accesibilidad y no interferir con campos de texto."
+  Answer: "No aplica por FEAT-001-a rechazada (sin atajos de teclado)"
+  DecidedOn: 2026-09-28
+```
+
+### R5 — Playlist Questions
+
+```yaml
+PLAYLIST-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYER-003]
+  Question: "¿Quieres una única playlist o múltiples playlists?"
+  Guidance: "Múltiples playlists = una DoublyLinkedList por playlist; impacta en persistencia y UI."
+  Answer: "B - varias playlists con persistencia en Postgres"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-001a:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001, DB-001]
+  Question: "Si Neon (Postgres gratuito) falla o se agota, ¿qué plan degradado aceptas?"
+  Guidance: "Opciones: (a) solo lectura con aviso, (b) reiniciar en memoria y avisar, (c) exportar/importar JSON. Se pregunta antes de F10."
+  Answer: null
+  DecidedOn: null
+
+PLAYLIST-002:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres poder crear playlists nuevas?"
+  Guidance: "Solo aplica si hay múltiples."
+  Answer: null
+  DecidedOn: null
+
+PLAYLIST-003:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres renombrar playlists?"
+  Guidance: "Solo aplica si hay múltiples."
+  Answer: null
+  DecidedOn: null
+
+PLAYLIST-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres reordenar canciones mediante drag and drop?"
+  Guidance: "Explicar que se traduce en removeAt + insertAt (o reenlazado de nodos) y qué costo tiene O(n)."
+  Answer: "Sí, vía FEAT-001-e (drag and drop)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-005:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres favoritos?"
+  Guidance: "Puede ser una marca en Song o una playlist especial."
+  Answer: "Sí, vía FEAT-001-b (favoritos)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-006:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [PLAYER-003]
+  Question: "¿Quieres historial de reproducción?"
+  Guidance: "Distinto de 'anterior' de la lista; explicar diferencia."
+  Answer: null
+  DecidedOn: null
+
+PLAYLIST-007:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres una cola de reproducción (queue) independiente de la playlist?"
+  Guidance: "La cola es una estructura distinta (posible uso de Queue); aclarar que no sustituye la lista doblemente enlazada."
+  Answer: "No aplica por CONS-001a (sin queue)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-008:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres búsqueda dentro de la playlist?"
+  Guidance: "Usa find(); mencionar O(n)."
+  Answer: "Sí, vía FEAT-001-c (búsqueda con find)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-009:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYER-003]
+  Question: "Al llegar al final (o al inicio) de la lista, ¿debe detenerse o dar la vuelta (comportamiento circular)?"
+  Guidance: "Circular implica enlazar tail↔head o simularlo en la capa de servicio. Explicar cuál conserva mejor el concepto puro de lista doblemente enlazada."
+  Answer: "A - detenerse en los extremos (tail.next = None)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-010:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [LOCAL-001, SPOTIFY-001]
+  Question: "¿Puede una misma playlist mezclar canciones locales y de Spotify?"
+  Guidance: "Técnicamente posible con dos motores (Strategy), pero implica cambio de player entre pistas; explicar posibles saltos/latencia y pérdida de gapless."
+  Answer: null
+  DecidedOn: null
+
+ARCH-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Dónde debe vivir la lista doblemente enlazada: solo backend Python, solo frontend, o en ambos con contrato de pruebas compartido?"
+  Guidance: "Ver sección 8.5 de AGEND.md. Explicar A/B/C con ventajas y desventajas y recomendar."
+  Answer: "A - DLL solo en backend Python (tramo inicial de C)"
+  DecidedOn: 2026-09-28
+
+ARCH-002:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [ARCH-001]
+  Question: "¿Aceptas la arquitectura por capas/hexagonal propuesta (domain / application / infrastructure / api) con inyección de dependencias? ¿Quieres ajustar algo de la estructura de carpetas?"
+  Guidance: "Mostrar el árbol de la sección 8.2 y justificar cada carpeta. La separación y la POO no son negociables; los nombres sí."
+  Answer: "Sí - arquitectura hexagonal por capas con DI y árbol 8.2"
+  DecidedOn: 2026-09-28
+
+ARCH-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [ARCH-002]
+  Question: "¿Quieres documentar las decisiones como ADRs en docs/adr y diagramas (UML/Mermaid) de clases y secuencia?"
+  Guidance: "Refuerza la evidencia de buena arquitectura, útil para sustentación."
+  Answer: "Sí - ADRs en docs/adr y diagramas Mermaid"
+  DecidedOn: 2026-09-28
+```
+
+### R6 — Local Music Questions
+
+```yaml
+LOCAL-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Qué formatos de audio quieres admitir (MP3, WAV, OGG, FLAC, AAC/M4A, otros)?"
+  Guidance: "Explicar soporte real por navegador (ej. FLAC/OGG varían) y la validación por MIME y extensión."
+  Answer: "A - MP3 y WAV (validación por MIME y extensión)"
+  DecidedOn: 2026-09-28
+
+LOCAL-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [LOCAL-001]
+  Question: "¿Quieres permitir seleccionar múltiples archivos a la vez?"
+  Guidance: "Atributo multiple del input; definir en qué orden entran a la lista (inicio/final)."
+  Answer: "Sí - selección múltiple; entra al final de la lista"
+  DecidedOn: 2026-09-28
+
+LOCAL-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [LOCAL-002]
+  Question: "¿Quieres drag and drop de archivos sobre la aplicación?"
+  Guidance: "Complementa el File Picker; no lo reemplaza (accesibilidad y móvil)."
+  Answer: "Sí - drag and drop además del File Picker"
+  DecidedOn: 2026-09-28
+
+LOCAL-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [LOCAL-001]
+  Question: "¿Quieres obtener automáticamente metadata de los archivos (título, artista, álbum, duración)?"
+  Guidance: "Se puede leer en el navegador con una librería de tags ID3; alternativa: procesar en backend Python (mutagen), pero implicaría subir el archivo. Explicar la implicación de privacidad."
+  Answer: "A - tags ID3 en el navegador (sin subir archivos)"
+  DecidedOn: 2026-09-28
+
+LOCAL-005:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [LOCAL-004]
+  Question: "¿Quieres mostrar la portada extraída de la metadata?"
+  Guidance: "Definir portada por defecto cuando no exista."
+  Answer: null
+  DecidedOn: null
+
+LOCAL-006:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [LOCAL-001]
+  Question: "¿Quieres que la música local persista después de cerrar el navegador?"
+  Guidance: "Explicar: (a) no persistir (simple, se pierde), (b) guardar solo metadatos y pedir re-seleccionar archivos, (c) guardar los blobs en IndexedDB (persistente pero ocupa disco del navegador y tiene cuotas). Recomendar según el caso."
+  FollowUps: ["Si (c): confirmar LOCAL-008 y límites de espacio."]
+  Answer: "B - solo metadatos; al volver se re-seleccionan los archivos"
+  DecidedOn: 2026-09-28
+
+LOCAL-006a:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [LOCAL-006]
+  Question: "¿Cómo marca la UI los temas cuyo archivo local necesita re-selección?"
+  Guidance: "Propuesta: borde ámbar + badge 'archivo perdido' + acción de re-selección. Se pregunta en F5."
+  Answer: null
+  DecidedOn: null
+
+LOCAL-007:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-001]
+  Question: "¿Quieres guardar las playlists localmente (en el navegador)?"
+  Guidance: "Diferenciar de la persistencia en servidor (DB-001)."
+  Answer: "Sí - playlists también en el navegador"
+  DecidedOn: 2026-09-28
+
+LOCAL-008:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [LOCAL-006, LOCAL-007]
+  Question: "¿Qué estrategia de almacenamiento local prefieres (IndexedDB, localStorage, File System Access API, ninguna)?"
+  Guidance: "localStorage no sirve para blobs; File System Access API no está en todos los navegadores. Explicar y recomendar (normalmente IndexedDB)."
+  Answer: "A - IndexedDB (gratis; ninguna opción de pago)"
+  DecidedOn: 2026-09-28
+```
+
+### R7 — Spotify Questions
+
+```yaml
+SPOTIFY-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-004]
+  Question: "¿Ya tienes creada una app en el Spotify Developer Dashboard? Si no, ¿te guío para crearla?"
+  Guidance: "Explicar qué se configura allí (Client ID, Redirect URIs, usuarios permitidos). No pedir que pegue secretos en el chat ni en archivos versionados."
+  Answer: "App creada; Client ID df3caeb1d0f94b5db0fc0072b248cf53"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-002:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [SPOTIFY-001]
+  Question: "¿Puedes proporcionar el Client ID (público) y confirmar que el Client Secret quedará solo en variables de entorno del backend (nunca en el código ni en el frontend)?"
+  Guidance: "Indicar exactamente los nombres de variables: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI."
+  Answer: "Sí - Client ID en .env; Client Secret jamás en chat ni en código"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-003:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [SPOTIFY-001, DEPLOY-001]
+  Question: "¿Cuáles serán las Redirect URIs (local y producción)?"
+  Guidance: "Verificar en la documentación vigente las reglas de HTTPS/loopback. Deben coincidir exactamente con las registradas."
+  Answer: "Dev: http://127.0.0.1:5173/callback · Prod: https://migmusic.vercel.app/api/auth/callback"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-004:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [DEPLOY-001]
+  Question: "¿En qué entorno se desplegará (dominio/URL final) para configurar OAuth y CORS correctamente?"
+  Guidance: "Se conecta con DEPLOY-001 y DEPLOY-002."
+  Answer: "https://migmusic.vercel.app (proxy /api/* hacia Render)"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-005:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-004]
+  Question: "Para usar el Web Playback SDK se requiere una cuenta Spotify Premium: ¿confirmas que tendrás una para desarrollar y demostrar?"
+  Guidance: "Si no, proponer alternativa: modo demo sin reproducción Spotify o reproducción vía Spotify Connect; registrar el impacto en el alcance."
+  Answer: "Sí - cuenta Premium confirmada (CONS-004)"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-006:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [SPOTIFY-001]
+  Question: "¿Qué funciones de Spotify quieres exactamente: buscar canciones, ver tus playlists, agregar canciones de búsqueda a la lista, ver tus canciones guardadas?"
+  Guidance: "Determina los scopes. Aplicar mínimo privilegio y verificar disponibilidad vigente de endpoints."
+  Answer: "C - buscar, playlists propias, guardadas, seguir artistas/álbumes"
+  DecidedOn: 2026-09-28
+
+SPOTIFY-007:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [SPOTIFY-002]
+  Question: "¿Cómo quieres manejar la sesión de Spotify (recordar al usuario, cerrar sesión, expiración) y qué debe pasar si el token expira mientras suena algo?"
+  Guidance: "Propuesta: cookie HttpOnly + refresh automático en backend."
+  Answer: null
+  DecidedOn: null
+
+SPOTIFY-008:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FRONT-001]
+  Question: "En móvil, el Web Playback SDK tiene limitaciones de soporte: ¿aceptas que en dispositivos móviles Spotify funcione con una alternativa (por ejemplo controlar el reproductor de Spotify vía Web API) o solo música local?"
+  Guidance: "Verificar compatibilidad vigente antes de prometer nada. Registrar en ADR."
+  Answer: "A - móvil: música local + Spotify vía Web API (sin SDK en móvil)"
+  DecidedOn: 2026-09-28
+```
+
+### R8 — Frontend Questions
+
+```yaml
+FRONT-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [VIS-006, LOCAL-006, SPOTIFY-008]
+  Question: "¿Qué tecnología frontend prefieres (React, Vue, Svelte, otra)?"
+  Guidance: "Si no tiene preferencia: comparar brevemente y recomendar una según la complejidad del estado del reproductor, ecosistema de animación y curva de aprendizaje. Debe permitir estructura POO clara."
+  Answer: "A - React + Vite"
+  DecidedOn: 2026-09-28
+
+FRONT-002:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [FRONT-001]
+  Question: "¿Quieres TypeScript?"
+  Guidance: "Recomendar TypeScript: interfaces y clases abstractas hacen más visible la POO y la arquitectura."
+  Answer: "Sí - TypeScript"
+  DecidedOn: 2026-09-28
+
+FRONT-003:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [VIS-006]
+  Question: "¿Qué nivel de animación técnica quieres implementar (CSS puro, animaciones por librería, canvas/WebGL)?"
+  Guidance: "Relacionar con VIS-006 y rendimiento."
+  Answer: null
+  DecidedOn: null
+
+FRONT-004:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [FRONT-003]
+  Question: "¿Prefieres alguna librería de animaciones (Framer Motion, GSAP, Motion One, anime.js u otra)?"
+  Guidance: "Si no, recomendar según FRONT-001."
+  Answer: null
+  DecidedOn: null
+
+FRONT-005:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [FRONT-001]
+  Question: "¿Qué estrategia de estado y estilos prefieres (stores, context, CSS Modules, Tailwind, etc.) o delego la recomendación?"
+  Guidance: "Debe respetar la separación de UI y lógica."
+  Answer: null
+  DecidedOn: null
+
+FRONT-006:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [FRONT-001]
+  Question: "¿Qué estrategia responsive quieres (mobile-first, breakpoints específicos, layout distinto por dispositivo)?"
+  Guidance: "Proponer mobile-first con 4 rangos: mobile, tablet, laptop, desktop. Confirmar."
+  Answer: null
+  DecidedOn: null
+```
+
+### R9 — Backend Questions
+
+```yaml
+BACK-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [ARCH-002, SPOTIFY-002]
+  Question: "¿Qué framework Python quieres usar (FastAPI, Flask, Django)?"
+  Guidance: "Si no tiene preferencia: FastAPI (tipado, async, validación con Pydantic, OpenAPI automática, bueno para arquitectura limpia); Flask (minimalista, más manual); Django (completo, más pesado, ORM/admin). Explicar y recomendar."
+  Answer: "A - FastAPI"
+  DecidedOn: 2026-09-28
+
+BACK-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [BACK-001]
+  Question: "¿Qué versión de Python y gestor de dependencias usarás (venv+pip, Poetry, uv)?"
+  Guidance: "Alinear con CONS-003."
+  Answer: "A - uv (fallback a venv+pip si no está disponible)"
+  DecidedOn: 2026-09-28
+
+BACK-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [BACK-001]
+  Question: "¿Qué herramientas de calidad de código quieres (ruff, black, mypy, pre-commit)?"
+  Guidance: "Recomendar type hints estrictos para reforzar POO."
+  Answer: "A - ruff + mypy estricto"
+  DecidedOn: 2026-09-28
+```
+
+### R10 — Database Questions
+
+```yaml
+DB-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [PLAYLIST-001, LOCAL-007, BACK-001]
+  Question: "¿Quieres persistencia de playlists en el servidor (que sobrevivan entre dispositivos y sesiones) o basta con memoria/almacenamiento local?"
+  Guidance: "Explicar cuándo REALMENTE se necesita base de datos: múltiples dispositivos, cuentas de usuario, compartir playlists. Si solo hay una sesión y datos locales, no es necesaria y añadirla es sobreingeniería."
+  Answer: "Sí - persistencia de playlists en servidor"
+  DecidedOn: 2026-09-28
+
+DB-002:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DB-001]
+  Question: "Si se necesita base de datos: ¿SQLite, PostgreSQL u otra?"
+  Guidance: "SQLite: simple, archivo único, ideal en desarrollo/demo pero cuidado con discos efímeros en cloud. PostgreSQL: robusto, apto para producción. Recomendar según DEPLOY-001."
+  Answer: "A - PostgreSQL en Neon (plan gratuito)"
+  DecidedOn: 2026-09-28
+
+DB-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DB-002]
+  Question: "¿Cómo se guardará el orden de la lista enlazada en la base de datos (columnas prev/next, campo position, u otra estrategia) y aceptas reconstruir la DoublyLinkedList al cargar?"
+  Guidance: "Explicar el mapeo objeto-relacional de una estructura enlazada y sus trade-offs. Mantener el dominio libre de ORM (Repository)."
+  Answer: "B - columnas prev_id/next_id reflejando el enlace; DLL se reconstruye al cargar"
+  DecidedOn: 2026-09-28
+```
+
+### R11 — Additional Features Questions
+
+> El agente **debe proponer como mínimo 2** funcionalidades adicionales y **no agregarlas automáticamente**. Para cada propuesta: qué hace, por qué es útil, complejidad aproximada e impacto en la arquitectura. Candidatas: Shuffle, Repeat, Favorites, History, Queue, Search, Filters, Audio visualizer, Equalizer, Keyboard shortcuts, Multiple playlists, Sleep timer, Playback speed. (Excluir las que el usuario ya haya aceptado/rechazado antes.)
+
+```yaml
+FEAT-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [R4, R5, R6, R7]
+  Question: "Te propongo estas funcionalidades adicionales (con explicación de cada una). ¿Cuáles quieres incluir? (mínimo 2 para cumplir el taller)"
+  Guidance: "Presentar tabla: funcionalidad | qué hace | utilidad | complejidad | impacto arquitectónico. Registrar cada una como sub-entrada FEAT-001-<nombre> con CONFIRMED o REJECTED."
+  Answer: "Elegidas b, c, d, e (4 funcionalidades; mínimo 2 requerido)"
+  DecidedOn: 2026-09-28
+
+FEAT-001-a:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Atajos de teclado (espacio, flechas)"
+  Guidance: "Descartada por el usuario."
+  Answer: "REJECTED"
+  DecidedOn: 2026-09-28
+
+FEAT-001-b:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Favoritos: marcar canción con corazón (flag en Song + vista)"
+  Guidance: "Bajo coste, impacto en Song + UI."
+  Answer: "CONFIRMED"
+  DecidedOn: 2026-09-28
+
+FEAT-001-c:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Búsqueda dentro de la playlist usando find()"
+  Guidance: "Bajo coste, usa la lista (O(n))."
+  Answer: "CONFIRMED"
+  DecidedOn: 2026-09-28
+
+FEAT-001-d:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Repeat one / repeat all (modos en PlaybackService)"
+  Guidance: "Bajo coste; coherente con PLAYLIST-009=A."
+  Answer: "CONFIRMED"
+  DecidedOn: 2026-09-28
+
+FEAT-001-e:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Reordenar con drag and drop (removeAt + insertAt)"
+  Guidance: "Coste medio; impacto en UI + lista."
+  Answer: "CONFIRMED"
+  DecidedOn: 2026-09-28
+
+FEAT-002:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "¿Alguna funcionalidad propia que quieras agregar y que no esté en la lista?"
+  Guidance: "Evaluar impacto y clasificarla."
+  Answer: null
+  DecidedOn: null
+
+FEAT-003:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Para las funcionalidades aceptadas, ¿en qué orden de prioridad las implementamos?"
+  Guidance: "Reflejar en el Roadmap."
+  Answer: null
+  DecidedOn: null
+```
+
+### R12 — Deployment Questions
+
+```yaml
+DEPLOY-001:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [CONS-005, FRONT-001, BACK-001, DB-001]
+  Question: "¿Dónde quieres desplegar MigMusic (Vercel, Render, Railway, Fly.io, AWS, Azure, Google Cloud, otro)?"
+  Guidance: "Si no tiene preferencia: recomendar una arquitectura (ej. frontend estático en Vercel/Netlify + backend Python en Render/Railway/Fly.io + PostgreSQL gestionado si aplica), explicando por qué, costos y limitaciones (arranque en frío, disco efímero)."
+  Answer: "A - Vercel (frontend) + Render (backend)"
+  DecidedOn: 2026-09-28
+
+DEPLOY-002:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [DEPLOY-001]
+  Question: "¿Frontend y backend estarán en el mismo dominio (o subdominios) o en dominios distintos?"
+  Guidance: "Determina CORS, cookies SameSite y la Redirect URI de Spotify."
+  Answer: "X - proxy /api/* en Vercel: un solo origen (migmusic.vercel.app)"
+  DecidedOn: 2026-09-28
+
+DEPLOY-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DEPLOY-001]
+  Question: "¿Quieres CI/CD (GitHub Actions) con despliegue automático al hacer push?"
+  Guidance: "Recomendar como mínimo: lint + tests en cada PR."
+  Answer: "Sí - GitHub Actions con lint y tests que bloquean"
+  DecidedOn: 2026-09-28
+
+DEPLOY-004:
+  Status: REJECTED
+  Priority: NORMAL
+  DependsOn: [DEPLOY-001]
+  Question: "¿Quieres contenedores Docker para desarrollo y producción?"
+  Guidance: "Ayuda a reproducibilidad; puede ser obligatorio según la plataforma."
+  Answer: "No aplica por CONS-003 (entorno sin Docker)"
+  DecidedOn: 2026-09-28
+
+DEPLOY-005:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DEPLOY-001]
+  Question: "¿Qué nivel de logs y monitoreo quieres (logs estructurados, healthcheck, alertas)?"
+  Guidance: "Nunca registrar tokens ni datos sensibles."
+  Answer: "Vercel: miguelcebing; Render y Neon conectadas vía GitHub. Logs estructurados básicos + healthcheck (recomendado, 0 $)"
+  DecidedOn: 2026-09-28
+```
+
+### R13 — Testing Questions
+
+```yaml
+TEST-001:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FRONT-001, BACK-001]
+  Question: "¿Qué herramientas de prueba prefieres (pytest en backend; Vitest/Jest y Playwright/Cypress en frontend) o delego la recomendación?"
+  Guidance: "Recomendar pytest + herramienta nativa del bundler + Playwright."
+  Answer: "A - pytest + Vitest + Playwright"
+  DecidedOn: 2026-09-28
+
+TEST-002:
+  Status: PENDING
+  Priority: NORMAL
+  DependsOn: [TEST-001]
+  Question: "¿Qué cobertura mínima esperas (por ejemplo ≥ 90 % en el dominio y la lista doblemente enlazada)?"
+  Guidance: "Proponer umbrales por capa."
+  Answer: null
+  DecidedOn: null
+
+TEST-003:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DEPLOY-003]
+  Question: "¿Quieres que las pruebas se ejecuten automáticamente en CI y bloqueen el despliegue si fallan?"
+  Guidance: "Recomendado."
+  Answer: "Sí - los tests corren en CI y bloquean (implícito en DEPLOY-003)"
+  DecidedOn: 2026-09-28
+```
+
+---
+
+## Implementation Gate
+
+El agente **NO** escribe código de aplicación (más allá de exploración o prototipos descartables explícitamente anunciados) hasta que se cumplan **todas** estas condiciones:
+
+- [x] Todas las preguntas con `Priority: CRITICAL` están en `CONFIRMED` o `REJECTED`.
+- [x] **Arquitectura:** `ARCH-001`, `ARCH-002` confirmadas.
+- [x] **Frontend:** `FRONT-001`, `FRONT-002` confirmadas.
+- [x] **Backend:** `BACK-001` confirmada (Python).
+- [x] **Spotify:** `SPOTIFY-001`…`SPOTIFY-005` confirmadas.
+- [x] **Reproducción local:** `LOCAL-001`, `LOCAL-006` confirmadas.
+- [x] **Diseño principal:** `VIS-001`, `VIS-006`, `VIS-012` confirmadas.
+- [x] **Estrategia de playlist:** `PLAYLIST-001`, `PLAYLIST-009` confirmadas.
+- [x] **Lista doblemente enlazada:** ubicación (`ARCH-001`) y comportamiento en extremos (`PLAYLIST-009`) confirmados.
+- [x] **Deployment:** `DEPLOY-001`, `DEPLOY-002` confirmadas.
+- [x] Ninguna pregunta adicional creada por el agente con prioridad `CRITICAL` sigue `PENDING`.
+- [x] El agente ha presentado un **resumen de decisiones** y el usuario ha dicho explícitamente que puede empezar.
+
+**Excepciones:** las preguntas `NORMAL` pendientes **no bloquean** el gate; se preguntan en la fase del roadmap donde se necesiten (registrando el momento en el Decision Log).
+
+---
+
+## Reglas para decisiones técnicas
+
+Cuando surja una decisión técnica no definida, el agente:
+
+1. Explica **brevemente** las opciones.
+2. Expone **ventajas y desventajas** de cada una.
+3. **Recomienda** una opción técnicamente razonable y dice por qué.
+4. **Pregunta** cuál prefiere el usuario.
+5. **Registra** la decisión (Answer + Decision Log + ADR si es arquitectónica).
+
+Nunca asume la elección del usuario. Si el usuario delega ("lo que recomiendes"), la recomendación pasa a `PROPOSED` y se pide un "sí" explícito.
+
+## Interpretación de respuestas
+
+- **Respuesta clara:** registrar literal + resumen, `CONFIRMED`.
+- **Respuesta ambigua:** reformular con una pregunta de confirmación; mantener `PROPOSED`.
+- **Respuesta parcial:** confirmar la parte resuelta; crear sub-pregunta `-a` para la pendiente.
+- **Respuesta contradictoria con otra decisión:** señalar el conflicto, explicar consecuencias y pedir que elija; actualizar ambas.
+- **"No quiero X":** `REJECTED`; no volver a proponer.
+- **Cambio de opinión posterior:** reabrir (`CONFIRMED → PENDING`), evaluar impacto en código ya escrito y en el gate, registrar en Decision Log.
+
+## Preguntas adicionales (cuándo crearlas)
+
+El agente crea nuevas preguntas cuando:
+
+- Una respuesta introduce una tecnología o funcionalidad nueva sin decisiones asociadas.
+- Hay una incompatibilidad técnica descubierta (ej. visualizador de audio con Spotify SDK).
+- Aparece una limitación de las plataformas (Spotify, navegadores, cloud) que cambia el alcance.
+- La respuesta del usuario es demasiado vaga para implementar.
+- Se descubre una dependencia entre decisiones no prevista.
+
+Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo de letra (`LOCAL-006a`) cuando derive de otra.
+
+---
+
+## Roadmap
+
+> Las fases se ajustan tras la entrevista. Cada fase termina con pruebas verdes y actualización de este archivo.
+
+| Fase | Contenido | Skills |
+|---|---|---|
+| **F0 — Entrevista y gate** | Rondas R1–R13, resumen de decisiones, aprobación para empezar. | `requirements-interview` |
+| **F1 — Fundaciones** | Repositorio, estructura de carpetas (8.2), tooling, config por entorno, logging, CI base. | `backend-architecture-python`, `testing-quality` |
+| **F2 — Núcleo de dominio** | `Node`, `DoublyLinkedList`, `Song`, `Playlist` + suite de pruebas completa. | `doubly-linked-list`, `testing-quality` |
+| **F3 — Servicios y API** | `PlaylistService`, `PlaybackService`, rutas, schemas, manejo de errores. | `backend-architecture-python` |
+| **F4 — Frontend base** | Layout, design tokens, componentes, cliente API, controladores. | `ui-ux-design` |
+| **F5 — Audio local** | `LocalAudioPlayer`, File Picker, seek, skip N seg, volumen, persistencia si se aprobó. | `local-audio` |
+| **F6 — Spotify** | OAuth, sesión, búsqueda, `SpotifyPlayer` con Web Playback SDK, manejo de errores. | `spotify-integration` |
+| **F7 — Integración** | Playlist unificada, cambio entre players, vista didáctica de la lista. | todas |
+| **F8 — Funcionalidades adicionales** | Las aprobadas en `FEAT-*`. | según cada una |
+| **F9 — Pulido** | Animaciones, responsive, accesibilidad, rendimiento. | `ui-ux-design` |
+| **F10 — Despliegue** | Cloud, HTTPS, CORS, Redirect URI de producción, logs. | `deployment-cloud` |
+| **F11 — Cierre** | E2E, documentación final, checklist de aceptación, demo. | `testing-quality` |
+
+---
+
+## Criterios de aceptación
+
+**Lista doblemente enlazada**
+- [ ] `Node`/`DoublyLinkedList` implementados con enlaces reales `previous`/`next`, `head`, `tail`, `current`, `size`.
+- [ ] Todas las operaciones mínimas de la sección 9 implementadas y probadas, incluidos casos borde.
+- [ ] La playlist activa usa la lista (no un array) y el agente puede explicar cómo.
+
+**Reproductor**
+- [ ] Play, Pause, Next, Previous, Seek, Volume, Mute funcionan con audio real.
+- [ ] Skip forward y skip backward mueven exactamente N segundos configurados (`PLAYER-001/002`) sin salirse de los límites de la pista.
+- [ ] Agregar (inicio/final/posición), eliminar y seleccionar canción funcionan desde la UI.
+
+**Fuentes**
+- [ ] Música local: File Picker, reproducir/pausar/seek/cambiar/eliminar.
+- [ ] Spotify: login OAuth completo, refresh de token, reproducción con Web Playback SDK (con cuenta Premium), errores manejados.
+- [ ] Spotify y local se tratan como fuentes separadas y polimórficas.
+
+**Arquitectura y código**
+- [ ] Estructura por capas visible y respetada (sin lógica en rutas/componentes).
+- [ ] POO: abstracciones (ABC/interfaces), polimorfismo, inyección de dependencias, SOLID justificable.
+- [ ] Backend 100 % Python. Código en inglés.
+- [ ] Sin secretos en repositorio ni en frontend; `.env.example` presente.
+
+**Interfaz**
+- [ ] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado.
+- [ ] Responsive verificado en mobile, tablet, laptop y desktop.
+- [ ] Accesibilidad básica cumplida (teclado, foco, ARIA, contraste).
+
+**Calidad y despliegue**
+- [ ] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`.
+- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción.
+- [ ] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas.
+- [ ] Documentación (README, docs/architecture, ADRs) actualizada.
+
+---
+
+## Decision Log
+
+> El agente añade una línea por cada decisión o cambio. Formato: `AAAA-MM-DD | ID | Decisión | Motivo/Impacto`.
+
+| Fecha | ID | Decisión | Motivo / Impacto |
+|---|---|---|---|
+| 2026-09-28 | CONS-001 | Académico + producto; límite 2026-10-02 | Fija plazo: 4 días, recorte de alcance negociado |
+| 2026-09-28 | CONS-002 | Trabajo solo | Sin revisión por pares; nivel en CONS-002a |
+| 2026-09-28 | CONS-003 | Windows/VS Code/Python 3.11-3.13/Node 26; sin Docker | DEPLOY-004 pasa a REJECTED; scripts .ps1 |
+| 2026-09-28 | CONS-004 | Cuenta Spotify Premium disponible | Web Playback SDK viable en desktop |
+| 2026-09-28 | CONS-005 | Solo planes gratuitos | Vercel + Render + Neon free; UptimeRobot |
+| 2026-09-28 | CONS-006 | Interfaz en español e inglés | Añade capa i18n en F4 |
+| 2026-09-28 | CONS-001a | Alcance A (recomendado) | RNF/FEAT recortadas; 4 FEAT en F8 |
+| 2026-09-28 | VIS-001 | Estilo retro/vinilo | Define tokens y microinteracciones |
+| 2026-09-28 | VIS-002 | Tema dual con selector | Dos paletas de design tokens |
+| 2026-09-28 | VIS-003 | Azul marino/eléctrico + negro | Base de la paleta |
+| 2026-09-28 | VIS-004 | #1E6BFF + #4338CA sobre #0A0D14 | Design tokens F4 |
+| 2026-09-28 | VIS-005 | Sin gradientes | Ahorro de implementación |
+| 2026-09-28 | VIS-006 | Animaciones sutiles | CSS/WAAPI + prefers-reduced-motion |
+| 2026-09-28 | VIS-007 | Sin visualizador | Excluido por CONS-001a |
+| 2026-09-28 | VIS-008 | Sin waveform | Excluido por CONS-001a |
+| 2026-09-28 | VIS-012 | Layout B: reproductor central + lista | Estructura de layouts F4 |
+| 2026-09-28 | UX-001 | Filas con portada | Componente SongRow |
+| 2026-09-28 | UX-002 | Vista de nodos alternable | Panel didáctico para sustentación |
+| 2026-09-28 | UX-003 | Modal con pestañas Local/Spotify + posición | Cubre RF-07 íntegro |
+| 2026-09-28 | UX-004 | Toasts + estado vacío | Manejo de errores global |
+| 2026-09-28 | PLAYER-001 | Avanzar 5 s | Constante SKIP_FORWARD_SECONDS |
+| 2026-09-28 | PLAYER-002 | Retroceder 5 s | Constante SKIP_BACKWARD_SECONDS |
+| 2026-09-28 | PLAYER-002a | Si posicion <= 5 s -> pista anterior | Regla de borde en PlaybackService |
+| 2026-09-28 | PLAYER-003 | Autoplay con moveNext | evento ended + moveNext |
+| 2026-09-28 | PLAYER-004 | Shuffle por índice (estrategia b) | Lista intacta; historial separado |
+| 2026-09-28 | PLAYER-005 | Repeat one | Modo en PlaybackService |
+| 2026-09-28 | PLAYER-006 | Repeat all | Modo en servicio, no circularidad |
+| 2026-09-28 | PLAYER-007 | Barra interactiva | RF-05 |
+| 2026-09-28 | PLAYER-008 | Volumen + mute | RF-06 |
+| 2026-09-28 | PLAYER-009 | Sin velocidad | Excluido por CONS-001a |
+| 2026-09-28 | PLAYER-010 | Sin atajos | FEAT-001-a rechazada |
+| 2026-09-28 | PLAYLIST-001 | Varias playlists + Postgres | Impacta DB, UI y ARCH |
+| 2026-09-28 | PLAYLIST-004 | Drag and drop | FEAT-001-e |
+| 2026-09-28 | PLAYLIST-005 | Favoritos | FEAT-001-b |
+| 2026-09-28 | PLAYLIST-007 | Sin queue | Excluido por CONS-001a |
+| 2026-09-28 | PLAYLIST-008 | Búsqueda con find | FEAT-001-c |
+| 2026-09-28 | PLAYLIST-009 | Parada en extremos | DLL no circular; repeat como modo |
+| 2026-09-28 | ARCH-001 | DLL solo en backend Python | Decisiones de red en Next/Previous; tramo inicial de C |
+| 2026-09-28 | ARCH-002 | Hexagonal por capas + DI | Estructura §8.2 fijada |
+| 2026-09-28 | ARCH-003 | ADRs + Mermaid | Evidencia para sustentación |
+| 2026-09-28 | LOCAL-001 | MP3 + WAV | Validación MIME/extensión |
+| 2026-09-28 | LOCAL-002 | Selección múltiple | Orden: al final |
+| 2026-09-28 | LOCAL-003 | Drag and drop de archivos | Complementa File Picker |
+| 2026-09-28 | LOCAL-004 | ID3 en navegador | Privacidad: no se suben archivos |
+| 2026-09-28 | LOCAL-006 | Solo metadatos + re-selección | Sin blobs; LOCAL-006a pendiente |
+| 2026-09-28 | LOCAL-007 | Playlists también en navegador | IndexedDB como respaldo |
+| 2026-09-28 | LOCAL-008 | IndexedDB | Almacenamiento local gratuito |
+| 2026-09-28 | SPOTIFY-001 | App creada; Client ID df3caeb... | Base de OAuth |
+| 2026-09-28 | SPOTIFY-002 | Secretos solo en variables de entorno | RNF-07 |
+| 2026-09-28 | SPOTIFY-003 | 127.0.0.1:5173 y vercel.app/api/auth/callback | localhost prohibido desde 27/11/2025 |
+| 2026-09-28 | SPOTIFY-004 | Producción en migmusic.vercel.app | CORS y OAuth sobre un origen |
+| 2026-09-28 | SPOTIFY-005 | Premium confirmada | SDK habilitado en desktop |
+| 2026-09-28 | SPOTIFY-006 | Alcance C (buscar, playlists, guardadas, seguir) | Scopes a verificar en F6 |
+| 2026-09-28 | SPOTIFY-008 | Móvil sin SDK, vía Web API | Polimorfismo de players |
+| 2026-09-28 | FRONT-001 | React + Vite | Base del frontend |
+| 2026-09-28 | FRONT-002 | TypeScript | POO visible y verificable |
+| 2026-09-28 | BACK-001 | FastAPI | Validación Pydantic + OpenAPI |
+| 2026-09-28 | BACK-002 | uv | pyproject.toml único |
+| 2026-09-28 | BACK-003 | ruff + mypy estricto | RNF-04/08 |
+| 2026-09-28 | DB-001 | Persistencia en servidor | Postgres obligatorio por PLAYLIST-001 |
+| 2026-09-28 | DB-002 | Neon (gratuito) | Sobrevive a discos efímeros de Render |
+| 2026-09-28 | DB-003 | prev_id/next_id + reconstrucción | Mantiene el dominio libre de ORM |
+| 2026-09-28 | FEAT-001 | Elegidas b, c, d, e | Cumple mínimo de 2 del taller |
+| 2026-09-28 | FEAT-001-a | Atajos: REJECTED | Fuera de alcance |
+| 2026-09-28 | FEAT-001-b | Favoritos: CONFIRMED | F8 |
+| 2026-09-28 | FEAT-001-c | Búsqueda: CONFIRMED | F8 |
+| 2026-09-28 | FEAT-001-d | Repeat: CONFIRMED | F8 |
+| 2026-09-28 | FEAT-001-e | Drag and drop: CONFIRMED | F8 |
+| 2026-09-28 | DEPLOY-001 | Vercel + Render | Arquitectura de despliegue |
+| 2026-09-28 | DEPLOY-002 | Proxy /api/* en Vercel | Un origen: sin CORS ni SameSite=None |
+| 2026-09-28 | DEPLOY-003 | CI con GitHub Actions | Lint + tests bloquean |
+| 2026-09-28 | DEPLOY-004 | Sin Docker | No aplica por CONS-003 |
+| 2026-09-28 | DEPLOY-005 | Cuentas Vercel(miguelcebing)/Render/Neon vía GitHub | Listo para F10 |
+| 2026-09-28 | TEST-001 | pytest + Vitest + Playwright | F11 |
+| 2026-09-28 | TEST-003 | CI bloquea el despliegue | Calidad por fase |
+| 2026-09-28 | GATE | Implementation Gate aprobado por el usuario (sí empieza) | Autoriza F1+; entrevista F0 completada |
+
+## Validación de entrega de este AGEND.md
+
+- [x] Contexto del proyecto
+- [x] Nombre MigMusic
+- [x] Requisitos originales del taller
+- [x] Lista doblemente enlazada
+- [x] Spotify Web API
+- [x] Spotify Web Playback SDK
+- [x] Música local
+- [x] Backend Python
+- [x] Frontend
+- [x] Reproductor funcional
+- [x] Adelantar segundos
+- [x] Retroceder segundos
+- [x] Diseño animado
+- [x] Responsive
+- [x] Cloud deployment
+- [x] Seguridad
+- [x] Testing
+- [x] Roadmap
+- [x] Criterios de aceptación
+- [x] Preguntas para el agente de desarrollo
+- [x] IDs únicos para las preguntas
+- [x] Estados de las preguntas
+- [x] Orden de entrevista
+- [x] Dependencias entre preguntas
+- [x] Reglas para decisiones técnicas
+- [x] POO obligatoria y estructura por capas (requisito adicional)
+- [x] Backend completamente en Python (requisito adicional)
