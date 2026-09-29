@@ -1,0 +1,75 @@
+/* Feedback surfaces: empty states and toasts (UX-004). */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.emptyBody {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.disc {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  border: 2px dashed var(--color-border);
+  display: grid;
+  place-items: center;
+  font-size: var(--font-size-xl);
+}
+
+.toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 60;
+  max-width: min(360px, calc(100vw - var(--space-8)));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-sm);
+  animation: mm-fade-in var(--motion-base) var(--ease-out);
+}
+
+.toastError {
+  border-color: var(--color-danger);
+}
+
+.toastSuccess {
+  border-color: var(--color-success);
+}
+
+.toastClose {
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}

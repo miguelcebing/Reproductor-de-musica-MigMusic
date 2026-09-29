@@ -1,0 +1,310 @@
+/* Queue zone: playlist bar, track list, add dialog and the node view. */
+
+/* --- Playlist bar --------------------------------------------------------- */
+
+.playlistBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.select,
+.input {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.search {
+  margin-top: var(--space-3);
+  width: 100%;
+}
+
+.count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.button {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: var(--transition-colors), transform var(--motion-fast) var(--ease-out);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--color-primary-strong);
+}
+
+/* --- Track list ----------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  border-bottom: 1px solid var(--color-border);
+  animation: mm-fade-in var(--motion-base) var(--ease-out);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowCurrent {
+  background: var(--color-surface-raised);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.rowCover {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-surface-raised);
+  display: grid;
+  place-items: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.rowMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.badge {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rowActions {
+  display: flex;
+  gap: 4px;
+}
+
+.duration {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.loading {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Dialog --------------------------------------------------------------- */
+
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  z-index: 50;
+  animation: mm-fade-in var(--motion-fast) var(--ease-out);
+}
+
+.dialog {
+  width: min(480px, 100%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tab {
+  flex: 1;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.tabActive {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: var(--color-surface-raised);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.positions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.position {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.positionActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Linked list view ----------------------------------------------------- */
+
+.nodesPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.node {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-raised);
+  animation: mm-fade-in var(--motion-base) var(--ease-out);
+}
+
+.nodeCurrent {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.nodeArrow {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.nodeHead,
+.nodeTail {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}

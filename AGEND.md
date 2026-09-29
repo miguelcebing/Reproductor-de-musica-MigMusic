@@ -546,31 +546,31 @@ VIS-008:
   DecidedOn: 2026-09-28
 
 VIS-009:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [VIS-006]
   Question: "¿Quieres animaciones en la portada de la canción (giro tipo vinilo, pulso, parallax)?"
   Guidance: "Mostrar opciones con una descripción visual."
-  Answer: null
-  DecidedOn: null
+  Answer: "Solo microinteracciones sutiles en CSS puro: pulso suave en la portada al reproducir, sin giro tipo vinilo ni parallax"
+  DecidedOn: 2026-09-28
 
 VIS-010:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [VIS-006]
   Question: "¿Quieres efectos visuales cuando cambia la canción (transición de portada, cambio de fondo, etc.)?"
   Guidance: "Vincular con VIS-005 si hay gradientes dinámicos."
-  Answer: null
-  DecidedOn: null
+  Answer: "Cross-fade de portada y titulo al cambiar de cancion, en CSS puro (transform/opacity)"
+  DecidedOn: 2026-09-28
 
 VIS-011:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [VIS-006]
   Question: "¿Quieres microinteracciones en botones y controles (hover, ripple, rebote al pulsar)?"
   Guidance: "Bajo costo, alto efecto percibido."
-  Answer: null
-  DecidedOn: null
+  Answer: "Si - hover, ripple y foco visibles en botones y controles, con prefers-reduced-motion respetado"
+  DecidedOn: 2026-09-28
 
 VIS-012:
   Status: CONFIRMED
@@ -1067,40 +1067,40 @@ FRONT-002:
   DecidedOn: 2026-09-28
 
 FRONT-003:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [VIS-006]
   Question: "¿Qué nivel de animación técnica quieres implementar (CSS puro, animaciones por librería, canvas/WebGL)?"
   Guidance: "Relacionar con VIS-006 y rendimiento."
-  Answer: null
-  DecidedOn: null
+  Answer: "A - CSS puro sobre transform/opacity, con prefers-reduced-motion; sin canvas/WebGL"
+  DecidedOn: 2026-09-28
 
 FRONT-004:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [FRONT-003]
   Question: "¿Prefieres alguna librería de animaciones (Framer Motion, GSAP, Motion One, anime.js u otra)?"
   Guidance: "Si no, recomendar según FRONT-001."
-  Answer: null
-  DecidedOn: null
+  Answer: "Ninguna libreria; CSS puro (cierra FRONT-003 = A)"
+  DecidedOn: 2026-09-28
 
 FRONT-005:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [FRONT-001]
   Question: "¿Qué estrategia de estado y estilos prefieres (stores, context, CSS Modules, Tailwind, etc.) o delego la recomendación?"
   Guidance: "Debe respetar la separación de UI y lógica."
-  Answer: null
-  DecidedOn: null
+  Answer: "CSS Modules + Zustand (mantiene tokens.css de F1 y da stores minimos para playlist y reproductor)"
+  DecidedOn: 2026-09-28
 
 FRONT-006:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [FRONT-001]
   Question: "¿Qué estrategia responsive quieres (mobile-first, breakpoints específicos, layout distinto por dispositivo)?"
   Guidance: "Proponer mobile-first con 4 rangos: mobile, tablet, laptop, desktop. Confirmar."
-  Answer: null
-  DecidedOn: null
+  Answer: "Mobile-first con breakpoints sm 640 / md 1024 / lg 1440; reproductor central y lista debajo (VIS-012)"
+  DecidedOn: 2026-09-28
 ```
 
 ### R9 — Backend Questions
@@ -1564,6 +1564,10 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F3-REPO | F3 entrega el puerto PlaylistRepository con InMemory; el SQL llega en F10 | DB-001/002/003 confirmados; API verde sin credenciales de Neon |
 | 2026-09-28 | F3-OWNER | Playlists con UUID opaco y sin cuentas de usuario | DB-004; anadir un dueno despues es una columna extra |
 | 2026-09-28 | F3-GATE | PlaylistService y PlaybackService + API REST (playlists y playback) | PRD F3; ruff/mypy limpios y cobertura al 100% |
+| 2026-09-28 | F4-STYLES | Estado con Zustand y estilos con CSS Modules | FRONT-005; conserva tokens.css de F1 y la separacion UI/logica |
+| 2026-09-28 | F4-RESPONSIVE | Mobile-first con breakpoints 640 / 1024 / 1440 | FRONT-006 con VIS-012 (reproductor central + lista debajo) |
+| 2026-09-28 | F4-ANIM | Microinteracciones en CSS puro, sin libreria de animaciones | VIS-009/010/011 + FRONT-003/004; VIS-006 (sutiles) y reduced-motion |
+| 2026-09-28 | F4-GATE | Layout, tokens, componentes, API client y controladores completos | FRONT-005/006, VIS-001/002/003/004/006/012, UX-001/002/003/004; build OK, typecheck OK, lint OK |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1578,6 +1582,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] Frontend
 - [x] Reproductor funcional
 - [x] Adelantar segundos
+- [x] F4: Layout, design tokens, componentes, API client, controladores
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

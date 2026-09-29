@@ -1,0 +1,215 @@
+/* Player zone: cover, now playing, transport bar and volume. */
+
+.player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+/* --- Cover ---------------------------------------------------------------- */
+
+.cover {
+  position: relative;
+  width: clamp(160px, 45vw, 260px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  animation: mm-crossfade var(--motion-base) var(--ease-out);
+}
+
+.coverImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.coverPlaying {
+  animation: mm-pulse 3.2s var(--ease-out) infinite;
+}
+
+.discHole {
+  position: absolute;
+  width: 18%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+/* --- Now playing ---------------------------------------------------------- */
+
+.nowPlaying {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.trackTitle {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackArtist {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+/* --- Progress ------------------------------------------------------------- */
+
+.progress {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progressTrack {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.progressTrack[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  transition: width var(--motion-fast) linear;
+}
+
+.progressKnob {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-contrast);
+  border: 2px solid var(--color-primary);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.progressTrack:hover .progressKnob,
+.progressTrack:focus-visible .progressKnob {
+  opacity: 1;
+}
+
+.progressTimes {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* --- Controls ------------------------------------------------------------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: var(--transition-colors), transform var(--motion-fast) var(--ease-out);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  border-color: var(--color-border);
+}
+
+.iconButton:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.iconButtonActive {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-surface-raised);
+}
+
+.primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+  min-width: 56px;
+  min-height: 56px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-lg);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-primary-strong);
+  border-color: var(--color-primary-strong);
+}
+
+.ripple {
+  animation: mm-ripple var(--motion-base) var(--ease-out);
+}
+
+/* --- Volume --------------------------------------------------------------- */
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: min(280px, 100%);
+}
+
+.volumeSlider {
+  flex: 1;
+  accent-color: var(--color-primary);
+  height: 44px;
+}
+
+@media (min-width: 640px) {
+  .controls {
+    gap: var(--space-3);
+  }
+}
