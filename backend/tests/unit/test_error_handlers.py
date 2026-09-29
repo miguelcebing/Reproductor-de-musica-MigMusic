@@ -16,6 +16,7 @@ from migmusic.core import (
     NotFoundError,
     ValidationError,
 )
+from migmusic.domain import EmptyPlaylistError, InvalidPositionError, ItemNotFoundError
 
 
 def _build_client() -> TestClient:
@@ -48,6 +49,18 @@ def _build_client() -> TestClient:
     async def boom() -> None:
         raise ConfigurationError("unexpected failure")
 
+    @app.get("/domain-empty")
+    async def domain_empty() -> None:
+        raise EmptyPlaylistError("the list is empty")
+
+    @app.get("/domain-position")
+    async def domain_position() -> None:
+        raise InvalidPositionError(7, 3)
+
+    @app.get("/domain-missing")
+    async def domain_missing() -> None:
+        raise ItemNotFoundError("song not found in the list")
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -60,6 +73,9 @@ def _build_client() -> TestClient:
         ("/upstream", 429, "upstream_error"),
         ("/upstream-unknown", 502, "upstream_error"),
         ("/boom", 500, "internal_error"),
+        ("/domain-empty", 400, "bad_request"),
+        ("/domain-position", 422, "validation_error"),
+        ("/domain-missing", 404, "not_found"),
     ],
 )
 def test_exceptions_map_to_the_expected_response(

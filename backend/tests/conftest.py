@@ -7,11 +7,16 @@ or real Spotify credentials.
 
 from __future__ import annotations
 
+import itertools
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
+
+if TYPE_CHECKING:
+    from migmusic.domain import Song
 
 # Dummy values: no real secret is ever loaded in the test suite.
 _TEST_ENV = {
@@ -59,3 +64,28 @@ def client(settings: Settings) -> Iterator[TestClient]:
     app = create_app(settings)
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def make_song() -> Callable[..., Song]:
+    """Factory producing unique local :class:`Song` instances.
+
+    Usage: ``song = make_song()`` or ``make_song(title="Nocturne")``.
+    """
+    from migmusic.domain import AudioSourceType, Song
+
+    counter = itertools.count(1)
+
+    def _make(**overrides: object) -> Song:
+        index = next(counter)
+        values: dict[str, object] = {
+            "id": f"local-{index}",
+            "title": f"Song {index}",
+            "artist": "MigMusic",
+            "source": AudioSourceType.LOCAL,
+            "duration": 180.0,
+        }
+        values.update(overrides)
+        return Song(**values)  # type: ignore[arg-type]
+
+    return _make

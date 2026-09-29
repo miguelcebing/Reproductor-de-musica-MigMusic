@@ -35,12 +35,21 @@ def _payload(request: Request, status_code: int, code: str, detail: Any) -> dict
     }
 
 
+def _status_for(exc: BaseException) -> tuple[int, str]:
+    """Resolve the mapping for ``exc``, walking its MRO so subclasses inherit."""
+    for candidate in type(exc).__mro__:
+        mapped = _DOMAIN_STATUS.get(candidate)
+        if mapped is not None:
+            return mapped
+    return 400, "domain_error"
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Attach the single mapping from exceptions to HTTP responses."""
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(request: Request, exc: DomainError) -> JSONResponse:
-        status_code, code = _DOMAIN_STATUS.get(type(exc), (400, "domain_error"))
+        status_code, code = _status_for(exc)
         return JSONResponse(
             status_code=status_code,
             content=_payload(request, status_code, code, exc),

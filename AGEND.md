@@ -7,7 +7,7 @@
 - **Idioma de conversación con el usuario:** español.
 - **Idioma del código:** inglés (ver [Restricciones globales](#restricciones-globales)).
 - **Propietario del proyecto:** Miguel.
-- **Versión del documento:** 1.1.0 (entrevista F0 completada y gate aprobado el 2026-09-28).
+- **Versión del documento:** 1.2.0 (entrevista F0 completada y gate aprobado el 2026-09-28).
 
 ---
 
@@ -748,22 +748,22 @@ PLAYLIST-001a:
   DecidedOn: null
 
 PLAYLIST-002:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [PLAYLIST-001]
   Question: "¿Quieres poder crear playlists nuevas?"
   Guidance: "Solo aplica si hay múltiples."
-  Answer: null
-  DecidedOn: null
+  Answer: "Sí - crear playlists (PlaylistService.create)"
+  DecidedOn: 2026-09-28
 
 PLAYLIST-003:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [PLAYLIST-001]
   Question: "¿Quieres renombrar playlists?"
   Guidance: "Solo aplica si hay múltiples."
-  Answer: null
-  DecidedOn: null
+  Answer: "Sí - renombrar (PlaylistService.rename)"
+  DecidedOn: 2026-09-28
 
 PLAYLIST-004:
   Status: CONFIRMED
@@ -817,6 +817,24 @@ PLAYLIST-009:
   Question: "Al llegar al final (o al inicio) de la lista, ¿debe detenerse o dar la vuelta (comportamiento circular)?"
   Guidance: "Circular implica enlazar tail↔head o simularlo en la capa de servicio. Explicar cuál conserva mejor el concepto puro de lista doblemente enlazada."
   Answer: "A - detenerse en los extremos (tail.next = None)"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-009a:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-009]
+  Question: "¿Cómo señala DoublyLinkedList que llegó al extremo: excepción o valor de retorno?"
+  Guidance: "SKILL2 admite ambas; documentar la elegida."
+  Answer: "Retorna bool (True = se movió); current no cambia en el extremo. Sin excepción"
+  DecidedOn: 2026-09-28
+
+PLAYLIST-009b:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [PLAYLIST-009]
+  Question: "Al eliminar el nodo que está en current, ¿a dónde pasa current?"
+  Guidance: "Afecta a lo que se reproduce tras borrar desde la UI."
+  Answer: "Al siguiente; si era tail, al anterior; si era el único, current = None"
   DecidedOn: 2026-09-28
 
 PLAYLIST-010:
@@ -1278,13 +1296,13 @@ TEST-001:
   DecidedOn: 2026-09-28
 
 TEST-002:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [TEST-001]
   Question: "¿Qué cobertura mínima esperas (por ejemplo ≥ 90 % en el dominio y la lista doblemente enlazada)?"
   Guidance: "Proponer umbrales por capa."
-  Answer: null
-  DecidedOn: null
+  Answer: "≥95% en domain/ (núcleo académico) y ≥80% global; el CI lo bloquea"
+  DecidedOn: 2026-09-28
 
 TEST-003:
   Status: CONFIRMED
@@ -1293,6 +1311,15 @@ TEST-003:
   Question: "¿Quieres que las pruebas se ejecuten automáticamente en CI y bloqueen el despliegue si fallan?"
   Guidance: "Recomendado."
   Answer: "Sí - los tests corren en CI y bloquean (implícito en DEPLOY-003)"
+  DecidedOn: 2026-09-28
+
+TEST-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [TEST-001]
+  Question: "¿Quieres tests property-based con hypothesis para los invariantes de la lista?"
+  Guidance: "SKILL2 lo propone como opcional; añade una dependencia de desarrollo."
+  Answer: "Sí - hypothesis para invariantes y secuencias aleatorias"
   DecidedOn: 2026-09-28
 ```
 
@@ -1378,9 +1405,9 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 ## Criterios de aceptación
 
 **Lista doblemente enlazada**
-- [ ] `Node`/`DoublyLinkedList` implementados con enlaces reales `previous`/`next`, `head`, `tail`, `current`, `size`.
-- [ ] Todas las operaciones mínimas de la sección 9 implementadas y probadas, incluidos casos borde.
-- [ ] La playlist activa usa la lista (no un array) y el agente puede explicar cómo.
+- [x] `Node`/`DoublyLinkedList` implementados con enlaces reales `previous`/`next`, `head`, `tail`, `current`, `size`.
+- [x] Todas las operaciones mínimas de la sección 9 implementadas y probadas, incluidos casos borde.
+- [x] La playlist activa usa la lista (no un array) y el agente puede explicar cómo.
 
 **Reproductor**
 - [ ] Play, Pause, Next, Previous, Seek, Volume, Mute funcionan con audio real.
@@ -1396,7 +1423,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [ ] Estructura por capas visible y respetada (sin lógica en rutas/componentes).
 - [ ] POO: abstracciones (ABC/interfaces), polimorfismo, inyección de dependencias, SOLID justificable.
 - [ ] Backend 100 % Python. Código en inglés.
-- [ ] Sin secretos en repositorio ni en frontend; `.env.example` presente.
+- [x] Sin secretos en repositorio ni en frontend; `.env.example` presente.
 
 **Interfaz**
 - [ ] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado.
@@ -1502,6 +1529,19 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F1-PROXY | Vite proxy /api -> 127.0.0.1:8000 en desarrollo | Un solo origen también en local, como en producción |
 | 2026-09-28 | F1-CI | GitHub Actions: backend + frontend + chequeo de secretos | DEPLOY-003 y TEST-003: bloquean el despliegue |
 | 2026-09-28 | F1-DOCS | ADR-001..004 + architecture.md con diagramas Mermaid | ARCH-003; evidencia para la sustentación |
+| 2026-09-28 | TEST-002 | Cobertura ≥95% dominio y ≥80% global | Umbrales en pyproject + CI |
+| 2026-09-28 | PLAYLIST-009a | Extremos retornan bool, sin excepción | Flujo normal sin try/except |
+| 2026-09-28 | PLAYLIST-009b | Al borrar current, pasa a next (o prev si era tail) | No se pierde la posición en la UI |
+| 2026-09-28 | PLAYLIST-002 | Crear playlists habilitado | Requerido por PLAYLIST-001=B |
+| 2026-09-28 | PLAYLIST-003 | Renombrar playlists habilitado | Requerido por PLAYLIST-001=B |
+| 2026-09-28 | TEST-004 | Tests property-based con hypothesis | Invariantes de la lista verificables |
+| 2026-09-28 | F2-DLL | Node + DoublyLinkedList con nodos reales (prohibido array) | ARCH-001=A y sección 9; invariantes verificables en cada operación |
+| 2026-09-28 | F2-EDGE | move_next/move_previous retornan bool y paran en los extremos | PLAYLIST-009=A + 009a; sin excepciones en el flujo normal |
+| 2026-09-28 | F2-CURSOR | Al borrar current pasa al siguiente (al anterior si era tail) | PLAYLIST-009b; no se pierde la posición al eliminar desde la UI |
+| 2026-09-28 | F2-PLAYLIST | Playlist compone la lista; crear y renombrar habilitados | PLAYLIST-001=B, 002 y 003; duplicados permitidos (sin decisión en contra) |
+| 2026-09-28 | F2-PROP | Suite property-based con hypothesis contra un modelo de referencia | TEST-004; aleatoriedad contrastada con una list() solo en tests |
+| 2026-09-28 | F2-GATE | Umbrales de cobertura en el CI: 80% global y 95% en domain/ | TEST-002; hoy 98.8% global y 100% en domain/ |
+| 2026-09-28 | F2-ERRORS | Dominio -> HTTP hereda por MRO en error_handlers | SOLID; los routers siguen sin try/except |
 
 ## Validación de entrega de este AGEND.md
 

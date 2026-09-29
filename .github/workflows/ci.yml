@@ -46,6 +46,10 @@ jobs:
       - name: Pytest with coverage
         run: uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
 
+      # TEST-002: the academic core is held to a higher bar than the rest.
+      - name: Domain coverage gate (>= 95%)
+        run: uv run coverage report --include="*/migmusic/domain/*" --fail-under=95
+
   frontend:
     name: Frontend (eslint · tsc · vitest)
     runs-on: ubuntu-latest

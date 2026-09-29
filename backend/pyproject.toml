@@ -19,10 +19,13 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.7",
     "mypy>=1.13",
+    "hypothesis>=6.168.3",
 ]
 
 [tool.uv]
 package = true
+# The project lives inside OneDrive, where hardlinked cache files break (os error 396).
+link-mode = "copy"
 
 [build-system]
 requires = ["hatchling"]
@@ -100,6 +103,8 @@ omit = ["*/__main__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+# TEST-002: global floor; domain/ is held to 95% by the CI coverage gate.
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
