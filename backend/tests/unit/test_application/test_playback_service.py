@@ -1,0 +1,536 @@
+"""Tests for ``PlaybackService`` — the transport rules of the player."""
+
+from __future__ import annotations
+
+import random
+from collections.abc import Callable
+
+import pytest
+
+from migmusic.application.dto import RepeatMode, SkipDirection
+from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.core import ValidationError
+from migmusic.domain import (
+    EmptyPlaylistError,
+    InvalidPositionError,
+    NoActivePlaybackError,
+    Playlist,
+    PlaylistNotFoundError,
+    Song,
+)
+from migmusic.infrastructure.persistence import InMemoryPlaylistRepository
+
+
+def test_state_before_any_open_raises(playback_service: PlaybackService) -> None:
+    """There is no implicit playlist: the frontend must open one first."""
+    with pytest.raises(NoActivePlaybackError):
+        playback_service.state()
+
+
+def test_open_unknown_playlist_raises(playback_service: PlaybackService) -> None:
+    """404 for an unknown playlist id."""
+    with pytest.raises(PlaylistNotFoundError):
+        playback_service.open("missing")
+
+
+def test_open_starts_on_the_first_song(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``open`` is deterministic: index 0, position 0, playing."""
+    playlist = seed_playlist(count=3)
+
+    state = playback_service.open(playlist.id)
+
+    assert state.index == 0
+    assert state.position == 0.0
+    assert state.playing is True
+    assert state.size == 3
+    assert playlist.current_index == 0
+
+
+def test_open_an_empty_playlist_stays_silent(
+    playback_service: PlaybackService, repository: InMemoryPlaylistRepository
+) -> None:
+    """A brand new playlist (``PLAYLIST-002``) opens without raising."""
+    empty = Playlist("Fresh")
+    repository.save(empty)
+
+    state = playback_service.open(empty.id)
+
+    assert state.song is None
+    assert state.index is None
+    assert state.playing is False
+    assert state.size == 0
+    assert state.available_next is False
+
+
+def test_next_walks_the_list_in_order(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The cursor advances through the real nodes, one song at a time."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+
+    assert playback_service.next().index == 1
+    assert playback_service.next().index == 2
+
+
+def test_next_stops_at_the_tail(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYLIST-009 = A``: no wrap-around, playback simply stops."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.next()
+    playback_service.next()
+
+    state = playback_service.next()
+
+    assert state.index == 2
+    assert state.playing is False
+    assert state.available_next is False
+
+
+def test_previous_stops_at_the_head(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYLIST-009 = A`` on the way back too."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+
+    state = playback_service.previous()
+
+    assert state.index == 0
+    assert state.playing is True
+    assert state.available_previous is False
+
+
+def test_previous_walks_backwards(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Manual navigation mirrors ``next``."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.next()
+
+    assert playback_service.previous().index == 0
+
+
+def test_repeat_all_wraps_at_both_ends(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``FEAT-001-d``: the *service* wraps, the list itself never becomes circular."""
+    playlist = seed_playlist(count=3)
+    original = [song.id for song in playlist]
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ALL)
+    playback_service.next()
+    playback_service.next()
+
+    assert playback_service.next().index == 0
+    assert playback_service.previous().index == 2
+    assert [song.id for song in playlist] == original
+
+
+def test_manual_next_ignores_repeat_one(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """A user pressing "next" expects the next song, even under repeat one."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ONE)
+
+    assert playback_service.next().index == 1
+
+
+def test_track_end_replays_the_song_under_repeat_one(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-003`` + ``FEAT-001-d``: the song restarts instead of advancing."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ONE)
+    playback_service.seek(150.0)
+
+    state = playback_service.advance_on_end()
+
+    assert state.index == 0
+    assert state.position == 0.0
+    assert state.playing is True
+
+
+def test_track_end_advances_without_repeat_one(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-003``: autoplay calls ``moveNext`` through the service."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+
+    assert playback_service.advance_on_end().index == 1
+
+
+def test_track_end_stops_at_the_tail_without_repeat(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Autoplay respects ``PLAYLIST-009 = A`` as well."""
+    playlist = seed_playlist(count=2)
+    playback_service.open(playlist.id)
+    playback_service.advance_on_end()
+
+    state = playback_service.advance_on_end()
+
+    assert state.index == 1
+    assert state.playing is False
+
+
+def test_transport_on_an_empty_playlist_raises(
+    playback_service: PlaybackService, repository: InMemoryPlaylistRepository
+) -> None:
+    """There is nothing to advance when the list has no songs."""
+    empty = Playlist("Fresh")
+    repository.save(empty)
+    playback_service.open(empty.id)
+
+    with pytest.raises(EmptyPlaylistError):
+        playback_service.next()
+
+
+def test_select_jumps_to_an_index(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Clicking a row (``UX-003``) selects and starts that song."""
+    playlist = seed_playlist(count=3)
+
+    state = playback_service.select(playlist.id, 2)
+
+    assert state.index == 2
+    assert state.playing is True
+    assert playlist.current_index == 2
+
+
+def test_select_rejects_an_out_of_range_index(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Bounds come from the list, so the answer is 422."""
+    playlist = seed_playlist(count=2)
+
+    with pytest.raises(InvalidPositionError):
+        playback_service.select(playlist.id, 9)
+
+
+def test_select_activates_another_playlist(
+    playback_service: PlaybackService,
+    seed_playlist: Callable[..., Playlist],
+    repository: InMemoryPlaylistRepository,
+    make_song: Callable[..., Song],
+) -> None:
+    """Only one playlist plays at a time (``PLAYLIST-001 = B``)."""
+    first = seed_playlist(name="First", count=3)
+    second = Playlist("Second")
+    second.add(make_song())
+    repository.save(second)
+
+    state = playback_service.select(second.id, 0)
+
+    assert state.playlist_id == second.id
+    assert state.playlist_id != first.id
+    assert state.size == 1
+
+
+def test_skip_forward_moves_exactly_the_configured_seconds(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-001``: the step is exact and comes from the service."""
+    playlist = seed_playlist(count=2, duration=180.0)
+    playback_service.open(playlist.id)
+
+    assert playback_service.skip(SkipDirection.FORWARD).position == 5.0
+    assert playback_service.skip(SkipDirection.FORWARD).position == 10.0
+
+
+def test_skip_forward_is_clamped_to_the_duration(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Skipping never leaves the song."""
+    playlist = seed_playlist(count=1, duration=8.0)
+    playback_service.open(playlist.id)
+    playback_service.seek(6.0)
+
+    assert playback_service.skip(SkipDirection.FORWARD).position == 8.0
+
+
+def test_skip_backward_from_zero_goes_to_the_previous_song(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-002a``: at ``<= 5 s`` the previous song wins over rewinding."""
+    playlist = seed_playlist(count=3, duration=180.0)
+    playback_service.open(playlist.id)
+    playback_service.next()
+
+    state = playback_service.skip(SkipDirection.BACKWARD)
+
+    assert state.index == 0
+    assert state.position == 0.0
+
+
+def test_skip_backward_inside_the_song_rewinds_five_seconds(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-002a``: past 5 s the step is applied in place."""
+    playlist = seed_playlist(count=3, duration=180.0)
+    playback_service.open(playlist.id)
+    playback_service.seek(30.0)
+
+    assert playback_service.skip(SkipDirection.BACKWARD).position == 25.0
+    assert playback_service.state().index == 0
+
+
+def test_skip_backward_at_the_head_rewinds_to_zero(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """There is no previous song, so the position lands on 0:00."""
+    playlist = seed_playlist(count=2, duration=180.0)
+    playback_service.open(playlist.id)
+    playback_service.seek(3.0)
+
+    state = playback_service.skip(SkipDirection.BACKWARD)
+
+    assert state.index == 0
+    assert state.position == 0.0
+
+
+def test_seek_moves_inside_the_current_song(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-007``: the progress bar can jump anywhere valid."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    assert playback_service.seek(42.5).position == 42.5
+
+
+def test_seek_rejects_a_negative_position(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Positions before the start of the song are 422."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    with pytest.raises(ValidationError):
+        playback_service.seek(-1.0)
+
+
+def test_seek_rejects_a_position_past_the_end(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Positions after the duration are 422."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    with pytest.raises(ValidationError):
+        playback_service.seek(500.0)
+
+
+def test_report_syncs_the_observed_position(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-011``: the backend tracks what the browser is doing."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    state = playback_service.report(position=77.0, playing=False)
+
+    assert state.position == 77.0
+    assert state.playing is False
+
+
+def test_report_can_move_the_playing_flag_alone(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Pause/play reports arrive without a position (the clock keeps ticking)."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+    playback_service.seek(20.0)
+
+    state = playback_service.report(playing=False)
+
+    assert state.playing is False
+    assert state.position == 20.0
+
+
+def test_report_clamps_a_position_past_the_end(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """A lagging browser cannot push the state beyond the duration."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    assert playback_service.report(position=400.0).position == 180.0
+
+
+def test_report_rejects_a_negative_position(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Negative time is nonsense and answers 422."""
+    playlist = seed_playlist(count=1, duration=180.0)
+    playback_service.open(playlist.id)
+
+    with pytest.raises(ValidationError):
+        playback_service.report(position=-5.0)
+
+
+def test_shuffle_keeps_the_list_intact_and_visits_every_song_once(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``PLAYER-004 = b``: an auxiliary order, never a reordered chain."""
+    playlist = seed_playlist(count=5)
+    original = [song.id for song in playlist]
+    playback_service.open(playlist.id)
+
+    playback_service.set_modes(shuffle=True)
+
+    seen = [playback_service.state().index]
+    for _ in range(6):
+        state = playback_service.next()
+        if not state.playing:
+            break
+        seen.append(state.index)
+
+    assert sorted(seen) == [0, 1, 2, 3, 4]
+    assert [song.id for song in playlist] == original
+    assert playback_service.state().shuffle is True
+
+
+def test_disabling_shuffle_restores_the_natural_order(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Turning shuffle off returns to sequential ``move_next`` navigation."""
+    playlist = seed_playlist(count=5)
+    original = [song.id for song in playlist]
+    playback_service.open(playlist.id)
+    playback_service.set_modes(shuffle=True)
+    playback_service.next()
+    playback_service.set_modes(shuffle=False)
+    before = playlist.current_index
+    assert before is not None
+
+    state = playback_service.next()
+
+    assert state.shuffle is False
+    assert state.index == before + 1
+    assert playlist.current_index == before + 1
+    assert [song.id for song in playlist] == original
+
+
+def test_shuffle_previous_steps_back_through_the_permutation(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Under shuffle, "previous" undoes "next" instead of following the list."""
+    playlist = seed_playlist(count=6)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(shuffle=True)
+    first = playback_service.next().index
+
+    state = playback_service.previous()
+
+    assert state.index == 0
+    assert first != 0
+
+
+def test_shuffle_previous_stops_at_the_first_song_of_the_order(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Without repeat all the transport stays put at the start of the order."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(shuffle=True)
+
+    state = playback_service.previous()
+
+    assert state.index == 0
+    assert state.playing is True
+
+
+def test_shuffle_with_repeat_all_wraps_to_the_end(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Repeat all applies to the playback order, not to the chain."""
+    playlist = seed_playlist(count=4)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ALL, shuffle=True)
+    seen = [0]
+    for _ in range(3):
+        seen.append(playback_service.next().index)
+
+    state = playback_service.next()
+
+    assert state.index == 0
+    assert state.playing is True
+
+    # Going back from the first song of the order lands on its last one.
+    assert playback_service.previous().index == seen[-1]
+
+
+def test_edges_are_reported_to_the_ui(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The frontend disables the buttons from ``available_next/previous``."""
+    playlist = seed_playlist(count=2)
+    state = playback_service.open(playlist.id)
+
+    assert state.available_previous is False
+    assert state.available_next is True
+
+    playback_service.next()
+    assert playback_service.state().available_next is False
+
+
+def test_state_after_the_playlist_was_deleted_raises(
+    playback_service: PlaybackService,
+    playlist_service: PlaylistService,
+    seed_playlist: Callable[..., Playlist],
+) -> None:
+    """Deleting the playlist being played invalidates the transport."""
+    playlist = seed_playlist(count=2)
+    playback_service.open(playlist.id)
+
+    playlist_service.delete(playlist.id)
+
+    with pytest.raises(PlaylistNotFoundError):
+        playback_service.next()
+
+
+def test_skip_seconds_is_exposed_to_the_frontend(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The UI shows the configured ``PLAYER-001/002`` step."""
+    playlist = seed_playlist(count=1)
+    playback_service.open(playlist.id)
+
+    state = playback_service.state()
+
+    assert state.skip_seconds == playback_service.skip_seconds == 5.0
+
+
+def test_shuffle_order_is_reproducible_with_a_seeded_rng(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """An injectable RNG keeps shuffle testable without losing randomness."""
+    playlist = seed_playlist(count=7)
+    order_a = _shuffle_order(repository, playlist)
+    order_b = _shuffle_order(repository, playlist)
+
+    assert order_a == order_b
+    assert sorted(order_a) == list(range(7))
+    assert order_a != list(range(7))
+
+
+def _shuffle_order(repository: InMemoryPlaylistRepository, playlist: Playlist) -> list[int]:
+    """Open, enable shuffle and record the whole playback order."""
+    service = PlaybackService(repository, rng=random.Random(1234))
+    service.open(playlist.id)
+    service.set_modes(shuffle=True)
+    order = [service.state().index]
+    for _ in range(playlist.size - 1):
+        order.append(service.next().index)
+    return order

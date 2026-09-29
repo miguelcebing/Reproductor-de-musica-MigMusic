@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import random
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 if TYPE_CHECKING:
-    from migmusic.domain import Song
+    from migmusic.application.services import PlaybackService, PlaylistService
+    from migmusic.domain import Playlist, Song
+    from migmusic.infrastructure.persistence import InMemoryPlaylistRepository
 
 # Dummy values: no real secret is ever loaded in the test suite.
 _TEST_ENV = {
@@ -35,7 +38,12 @@ _previous_env = {key: os.environ.get(key) for key in _TEST_ENV}
 os.environ.update(_TEST_ENV)
 
 # Imported only after the environment is seeded.
+from migmusic.application.services import (  # noqa: E402
+    PlaybackService,
+    PlaylistService,
+)
 from migmusic.core import Settings, clear_settings_cache  # noqa: E402
+from migmusic.infrastructure.persistence import InMemoryPlaylistRepository  # noqa: E402
 from migmusic.main import create_app  # noqa: E402
 
 
@@ -67,6 +75,24 @@ def client(settings: Settings) -> Iterator[TestClient]:
 
 
 @pytest.fixture
+def repository() -> InMemoryPlaylistRepository:
+    """Fresh repository per test, so cases never share state."""
+    return InMemoryPlaylistRepository()
+
+
+@pytest.fixture
+def playlist_service(repository: InMemoryPlaylistRepository) -> PlaylistService:
+    """Playlist use cases wired to the in-memory adapter."""
+    return PlaylistService(repository)
+
+
+@pytest.fixture
+def playback_service(repository: InMemoryPlaylistRepository) -> PlaybackService:
+    """Playback use cases with a seeded RNG so shuffle stays deterministic."""
+    return PlaybackService(repository, rng=random.Random(0))
+
+
+@pytest.fixture
 def make_song() -> Callable[..., Song]:
     """Factory producing unique local :class:`Song` instances.
 
@@ -89,3 +115,21 @@ def make_song() -> Callable[..., Song]:
         return Song(**values)  # type: ignore[arg-type]
 
     return _make
+
+
+@pytest.fixture
+def seed_playlist(
+    repository: InMemoryPlaylistRepository, make_song: Callable[..., Song]
+) -> Callable[..., Playlist]:
+    """Build and store a playlist with ``count`` local songs of ``duration`` seconds."""
+
+    from migmusic.domain import Playlist
+
+    def _seed(*, name: str = "Queue", count: int = 3, duration: float = 180.0) -> Playlist:
+        playlist = Playlist(name)
+        for _ in range(count):
+            playlist.add(make_song(duration=duration))
+        repository.save(playlist)
+        return playlist
+
+    return _seed

@@ -9,6 +9,8 @@ Exception                    Status  Code
 ``EmptyPlaylistError``       400     ``domain_error``
 ``InvalidPositionError``     422     ``validation_error``
 ``ItemNotFoundError``        404     ``not_found``
+``PlaylistNotFoundError``    404     ``not_found``
+``NoActivePlaybackError``    404     ``not_found``
 ===========================  ======  ==================
 """
 
@@ -32,3 +34,15 @@ class InvalidPositionError(ValidationError):
 
 class ItemNotFoundError(NotFoundError):
     """Raised when the song to remove or locate is not in the list."""
+
+
+class PlaylistNotFoundError(NotFoundError):
+    """Raised when a playlist id does not match any stored playlist."""
+
+    def __init__(self, playlist_id: str) -> None:
+        super().__init__(f"playlist not found: {playlist_id}")
+        self.playlist_id = playlist_id
+
+
+class NoActivePlaybackError(NotFoundError):
+    """Raised when a transport control is used before any playlist is open."""

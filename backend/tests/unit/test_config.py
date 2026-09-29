@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from migmusic.core import Settings, clear_settings_cache
+from migmusic.core import Settings, clear_settings_cache, get_settings
 
 
 def test_settings_load_from_environment(settings: Settings) -> None:
@@ -58,3 +58,14 @@ def test_repr_does_not_leak_secrets(settings: Settings) -> None:
 def test_is_production_flag(settings: Settings) -> None:
     """The production flag mirrors ``APP_ENV``."""
     assert settings.is_production is False
+
+
+def test_get_settings_returns_the_cached_instance() -> None:
+    """The process-wide accessor is built once and then reused."""
+    clear_settings_cache()
+
+    first = get_settings()
+
+    assert get_settings() is first
+    assert first.app_env == "development"
+    assert first.skip_seconds == 5.0

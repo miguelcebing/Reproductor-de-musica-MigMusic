@@ -80,6 +80,22 @@ class DoublyLinkedList(Generic[T]):
         """Payload under the cursor, or ``None`` when empty — O(1)."""
         return self._current.song if self._current is not None else None
 
+    @property
+    def current_index(self) -> int | None:
+        """0-based position of the cursor, or ``None`` when empty — O(n).
+
+        Walks the chain from ``head`` so duplicates are handled by *node*
+        identity rather than by value equality.
+        """
+        if self._current is None:
+            return None
+        index = 0
+        node = self._head
+        while node is not None and node is not self._current:
+            node = node.next
+            index += 1
+        return index if node is not None else None
+
     def __len__(self) -> int:
         """``len(list)`` — O(1)."""
         return self._size

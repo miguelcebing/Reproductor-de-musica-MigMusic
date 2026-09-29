@@ -724,6 +724,15 @@ PLAYER-010:
   Guidance: "Cuidar accesibilidad y no interferir con campos de texto."
   Answer: "No aplica por FEAT-001-a rechazada (sin atajos de teclado)"
   DecidedOn: 2026-09-28
+
+PLAYER-011:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [ARCH-001, PLAYER-002a]
+  Question: "¿Dónde vive el estado de reproducción (posición actual, seek y skip de 5 s)?"
+  Guidance: "Con ARCH-001=A la lista vive en el backend, pero el audio suena en el navegador. Afecta a cómo se prueba PLAYER-002a."
+  Answer: "Backend decide y frontend ejecuta: PlaybackService guarda pista, modos y posicion; el frontend reporta su posicion y envia skip"
+  DecidedOn: 2026-09-28
 ```
 
 ### R5 — Playlist Questions
@@ -1154,6 +1163,15 @@ DB-003:
   Guidance: "Explicar el mapeo objeto-relacional de una estructura enlazada y sus trade-offs. Mantener el dominio libre de ORM (Repository)."
   Answer: "B - columnas prev_id/next_id reflejando el enlace; DLL se reconstruye al cargar"
   DecidedOn: 2026-09-28
+
+DB-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [DB-001]
+  Question: "Con playlists guardadas en el servidor, ¿quién puede leerlas y editarlas? No hay cuentas de MigMusic."
+  Guidance: "Opciones: (a) sin cuentas, UUID opaco de acceso por enlace; (b) dueño = sesión de Spotify; (c) cuentas propias con registro/login."
+  Answer: "A - sin cuentas; UUID opaco. Añadir dueño después es una columna extra"
+  DecidedOn: 2026-09-28
 ```
 
 ### R11 — Additional Features Questions
@@ -1542,6 +1560,10 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F2-PROP | Suite property-based con hypothesis contra un modelo de referencia | TEST-004; aleatoriedad contrastada con una list() solo en tests |
 | 2026-09-28 | F2-GATE | Umbrales de cobertura en el CI: 80% global y 95% en domain/ | TEST-002; hoy 98.8% global y 100% en domain/ |
 | 2026-09-28 | F2-ERRORS | Dominio -> HTTP hereda por MRO en error_handlers | SOLID; los routers siguen sin try/except |
+| 2026-09-28 | F3-STATE | El backend decide seek/skip; el frontend solo ejecuta y reporta posicion | PLAYER-011; PLAYER-002a se prueba en Python |
+| 2026-09-28 | F3-REPO | F3 entrega el puerto PlaylistRepository con InMemory; el SQL llega en F10 | DB-001/002/003 confirmados; API verde sin credenciales de Neon |
+| 2026-09-28 | F3-OWNER | Playlists con UUID opaco y sin cuentas de usuario | DB-004; anadir un dueno despues es una columna extra |
+| 2026-09-28 | F3-GATE | PlaylistService y PlaybackService + API REST (playlists y playback) | PRD F3; ruff/mypy limpios y cobertura al 100% |
 
 ## Validación de entrega de este AGEND.md
 

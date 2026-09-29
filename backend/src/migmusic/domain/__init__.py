@@ -7,7 +7,10 @@ from migmusic.domain.exceptions import (
     EmptyPlaylistError,
     InvalidPositionError,
     ItemNotFoundError,
+    NoActivePlaybackError,
+    PlaylistNotFoundError,
 )
+from migmusic.domain.ports.playlist_repository import PlaylistRepository
 from migmusic.domain.structures.doubly_linked_list import DoublyLinkedList
 from migmusic.domain.structures.node import Node
 
@@ -17,7 +20,10 @@ __all__ = [
     "EmptyPlaylistError",
     "InvalidPositionError",
     "ItemNotFoundError",
+    "NoActivePlaybackError",
     "Node",
     "Playlist",
+    "PlaylistNotFoundError",
+    "PlaylistRepository",
     "Song",
 ]

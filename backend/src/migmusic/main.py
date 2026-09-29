@@ -15,8 +15,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
-from migmusic.api.routers import health
+from migmusic.api.routers import health, playback, playlists
+from migmusic.application.services import PlaybackService, PlaylistService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
+from migmusic.infrastructure.persistence import InMemoryPlaylistRepository
 
 logger = get_logger(__name__)
 
@@ -46,8 +48,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = config
     app.state.logger = logger
+
+    # Composition root: the only place where adapters are instantiated.
+    repository = InMemoryPlaylistRepository()
+    app.state.playlist_repository = repository
+    app.state.playlist_service = PlaylistService(repository)
+    app.state.playback_service = PlaybackService(repository, skip_seconds=config.skip_seconds)
+
     register_error_handlers(app)
     app.include_router(health.router)
+    app.include_router(playlists.router)
+    app.include_router(playback.router)
 
     logger.info(
         "application_started",

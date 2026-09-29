@@ -71,6 +71,11 @@ class Playlist:
         return self._songs.get_current()
 
     @property
+    def current_index(self) -> int | None:
+        """Position of the cursor in list order, or ``None`` when empty — O(n)."""
+        return self._songs.current_index
+
+    @property
     def size(self) -> int:
         """Number of songs — O(1)."""
         return self._songs.size

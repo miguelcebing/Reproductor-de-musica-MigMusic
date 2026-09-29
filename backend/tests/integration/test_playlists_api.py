@@ -1,0 +1,250 @@
+"""Tests for the playlist CRUD endpoints."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+PlaylistPayload = dict[str, Any]
+CreatePlaylist = Callable[..., PlaylistPayload]
+FilledPlaylist = Callable[..., PlaylistPayload]
+
+
+def test_create_playlist_returns_201(client: TestClient, create_playlist: CreatePlaylist) -> None:
+    """``PLAYLIST-002`` over HTTP: an empty playlist with a generated id."""
+    response = client.post("/api/playlists", json={"name": "Road trip"})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Road trip"
+    assert body["size"] == 0
+    assert body["songs"] == []
+    assert body["current_index"] is None
+    assert body["id"]
+
+
+def test_create_playlist_rejects_an_empty_name(
+    client: TestClient, create_playlist: CreatePlaylist
+) -> None:
+    """The domain rule surfaces as the uniform 422 envelope."""
+    response = client.post("/api/playlists", json={"name": "   "})
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert "playlist name" in error["message"]
+
+
+def test_list_playlists_returns_every_playlist(
+    client: TestClient, create_playlist: CreatePlaylist
+) -> None:
+    """``PLAYLIST-001 = B``: the collection endpoint lists them all."""
+    create_playlist("First")
+    create_playlist("Second")
+
+    response = client.get("/api/playlists")
+
+    assert response.status_code == 200
+    assert [item["name"] for item in response.json()] == ["First", "Second"]
+
+
+def test_get_playlist_returns_its_songs_in_order(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """Songs come back in list order, with the computed duration label."""
+    payload = filled_playlist(count=3)
+
+    response = client.get(f"/api/playlists/{payload['id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["size"] == 3
+    assert [song["title"] for song in body["songs"]] == ["Song 0", "Song 1", "Song 2"]
+    assert body["songs"][0]["duration_label"] == "3:00"
+
+
+def test_get_unknown_playlist_returns_a_404_envelope(client: TestClient) -> None:
+    """404s are structured the same way everywhere."""
+    response = client.get("/api/playlists/nope")
+
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["code"] == "not_found"
+    assert error["request_id"]
+
+
+def test_rename_playlist(client: TestClient, create_playlist: CreatePlaylist) -> None:
+    """``PLAYLIST-003`` over HTTP."""
+    payload = create_playlist("Old")
+
+    response = client.patch(f"/api/playlists/{payload['id']}", json={"name": "New"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "New"
+
+
+def test_rename_with_an_empty_name_is_422(
+    client: TestClient, create_playlist: CreatePlaylist
+) -> None:
+    """Validation happens once, in the domain."""
+    payload = create_playlist("Old")
+
+    response = client.patch(f"/api/playlists/{payload['id']}", json={"name": ""})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_delete_playlist_then_404(client: TestClient, create_playlist: CreatePlaylist) -> None:
+    """Deletion answers 204 and the playlist disappears."""
+    payload = create_playlist()
+
+    deleted = client.delete(f"/api/playlists/{payload['id']}")
+
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+    assert client.get(f"/api/playlists/{payload['id']}").status_code == 404
+
+
+def test_delete_unknown_playlist_returns_404(client: TestClient) -> None:
+    """Deleting nothing is not a success."""
+    response = client.delete("/api/playlists/nope")
+
+    assert response.status_code == 404
+
+
+def test_append_song(client: TestClient, create_playlist: CreatePlaylist) -> None:
+    """Default insertion is at the tail."""
+    payload = create_playlist()
+
+    response = client.post(
+        f"/api/playlists/{payload['id']}/songs",
+        json={
+            "song": {"id": "local-1", "title": "Nocturne", "artist": "Chopin", "source": "local"}
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["size"] == 1
+    assert body["songs"][0]["title"] == "Nocturne"
+
+
+def test_insert_song_at_a_position(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """``UX-003``: the modal can target an arbitrary position."""
+    payload = filled_playlist(count=3)
+
+    response = client.post(
+        f"/api/playlists/{payload['id']}/songs",
+        json={
+            "song": {
+                "id": "local-mid",
+                "title": "Inserted",
+                "artist": "MigMusic",
+                "source": "local",
+            },
+            "index": 1,
+        },
+    )
+
+    assert response.status_code == 201
+    titles = [song["title"] for song in response.json()["songs"]]
+    assert titles == ["Song 0", "Inserted", "Song 1", "Song 2"]
+
+
+def test_add_song_with_invalid_domain_data_is_422(
+    client: TestClient, create_playlist: CreatePlaylist
+) -> None:
+    """Structurally valid but domain-invalid data still fails uniformly."""
+    payload = create_playlist()
+
+    response = client.post(
+        f"/api/playlists/{payload['id']}/songs",
+        json={"song": {"id": "local-1", "title": "  ", "artist": "x", "source": "local"}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_remove_song_returns_it(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """The removed song comes back so the UI can undo."""
+    payload = filled_playlist(count=3)
+
+    response = client.delete(f"/api/playlists/{payload['id']}/songs/1")
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Song 1"
+    assert response.json()["id"] == "local-1"
+
+
+def test_remove_song_out_of_range_is_422(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """Index bounds are enforced by the list."""
+    payload = filled_playlist(count=2)
+
+    response = client.delete(f"/api/playlists/{payload['id']}/songs/9")
+
+    assert response.status_code == 422
+
+
+def test_move_song_reorders_the_list(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """``FEAT-001-e``: reorder through the API."""
+    payload = filled_playlist(count=3)
+
+    response = client.put(
+        f"/api/playlists/{payload['id']}/songs/order",
+        json={"from_index": 0, "to_index": 2},
+    )
+
+    assert response.status_code == 200
+    ids = [song["id"] for song in response.json()["songs"]]
+    assert ids == ["local-1", "local-2", "local-0"]
+
+
+def test_move_song_out_of_range_is_422(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """Both bounds are checked before anything moves."""
+    payload = filled_playlist(count=3)
+
+    response = client.put(
+        f"/api/playlists/{payload['id']}/songs/order",
+        json={"from_index": 0, "to_index": 9},
+    )
+
+    assert response.status_code == 422
+
+
+def test_select_song_returns_the_playback_state(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """Selecting a row activates the playlist and reports the transport state."""
+    payload = filled_playlist(count=3)
+
+    response = client.post(f"/api/playlists/{payload['id']}/songs/2/select")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["playlist_id"] == payload["id"]
+    assert body["index"] == 2
+    assert body["playing"] is True
+    assert body["position"] == 0.0
+    assert body["song"]["title"] == "Song 2"
+
+
+def test_select_out_of_range_is_422(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """Selecting a row that does not exist is a validation error."""
+    payload = filled_playlist(count=2)
+
+    response = client.post(f"/api/playlists/{payload['id']}/songs/7/select")
+
+    assert response.status_code == 422
+
+
+def test_select_on_an_unknown_playlist_is_404(client: TestClient) -> None:
+    """Unknown ids answer 404 across every endpoint."""
+    response = client.post("/api/playlists/nope/songs/0/select")
+
+    assert response.status_code == 404

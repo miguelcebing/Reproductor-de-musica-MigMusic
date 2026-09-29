@@ -1,0 +1,112 @@
+"""Playlist request/response models (the only place Pydantic appears)."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from migmusic.domain.entities.audio_source import AudioSourceType
+from migmusic.domain.entities.playlist import Playlist
+from migmusic.domain.entities.song import Song
+
+
+class SongIn(BaseModel):
+    """Song payload sent by the client.
+
+    Structural checks only: ``Song`` enforces the domain rules so a violation
+    always surfaces as the same ``422 validation_error``.
+    """
+
+    id: str
+    title: str
+    artist: str
+    source: AudioSourceType
+    duration: float = 0.0
+    album: str | None = None
+    artwork_url: str | None = None
+    external_url: str | None = None
+    available: bool = True
+
+    def to_entity(self) -> Song:
+        """Build the immutable domain entity; domain rules stay authoritative."""
+        return Song(**self.model_dump())
+
+
+class SongOut(BaseModel):
+    """Serialised song, including the computed ``m:ss`` label."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    artist: str
+    source: AudioSourceType
+    duration: float
+    album: str | None
+    artwork_url: str | None
+    external_url: str | None
+    available: bool
+    duration_label: str
+
+
+class PlaylistOut(BaseModel):
+    """Serialised playlist with its songs in list order."""
+
+    id: str
+    name: str
+    size: int
+    current_index: int | None
+    songs: list[SongOut]
+
+    @classmethod
+    def from_entity(cls, playlist: Playlist) -> PlaylistOut:
+        """Project a domain aggregate onto the wire model."""
+        return cls(
+            id=playlist.id,
+            name=playlist.name,
+            size=playlist.size,
+            current_index=playlist.current_index,
+            songs=[SongOut.model_validate(song) for song in playlist],
+        )
+
+
+class PlaylistCreate(BaseModel):
+    """Body of ``POST /api/playlists``."""
+
+    name: str
+
+
+class PlaylistRename(BaseModel):
+    """Body of ``PATCH /api/playlists/{id}``."""
+
+    name: str
+
+
+class SongCreate(BaseModel):
+    """Body of ``POST /api/playlists/{id}/songs``; ``index`` inserts mid-list."""
+
+    song: SongIn
+    index: int | None = Field(default=None, ge=0)
+
+
+class SongMove(BaseModel):
+    """Body of ``PUT /api/playlists/{id}/songs/order`` (``FEAT-001-e``)."""
+
+    from_index: int = Field(ge=0)
+    to_index: int = Field(ge=0)
+
+
+def song_out(song: Song) -> SongOut:
+    """Project one song onto the wire model."""
+    return SongOut.model_validate(song)
+
+
+__all__ = [
+    "PlaylistCreate",
+    "PlaylistOut",
+    "PlaylistRename",
+    "SongCreate",
+    "SongIn",
+    "SongMove",
+    "SongOut",
+    "song_out",
+]

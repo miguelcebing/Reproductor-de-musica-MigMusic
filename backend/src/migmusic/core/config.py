@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # --- Session ---
     session_secret_key: SecretStr = Field(alias="SESSION_SECRET_KEY")
 
+    # --- Playback ---
+    skip_seconds: float = Field(default=5.0, alias="SKIP_SECONDS", gt=0)
+
     # --- Persistence ---
     database_url: str = Field(default="", alias="DATABASE_URL")
 

@@ -41,7 +41,7 @@ def _status_for(exc: BaseException) -> tuple[int, str]:
         mapped = _DOMAIN_STATUS.get(candidate)
         if mapped is not None:
             return mapped
-    return 400, "domain_error"
+    return 400, "domain_error"  # pragma: no cover - unreachable: DomainError always maps
 
 
 def register_error_handlers(app: FastAPI) -> None:
