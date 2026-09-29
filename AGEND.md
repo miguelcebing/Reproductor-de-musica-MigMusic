@@ -1493,6 +1493,15 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | TEST-001 | pytest + Vitest + Playwright | F11 |
 | 2026-09-28 | TEST-003 | CI bloquea el despliegue | Calidad por fase |
 | 2026-09-28 | GATE | Implementation Gate aprobado por el usuario (sí empieza) | Autoriza F1+; entrevista F0 completada |
+| 2026-09-28 | D0-INIT | Repo inicial: .gitignore / .env.example / README / .gitattributes | Secretos fuera de git; primer push a GitHub |
+| 2026-09-28 | D0-TREE | AGEND.md a la raíz y .agents/ -> skills/ | ARCH-002: coincide con el árbol 8.2 aprobado |
+| 2026-09-28 | F1-TOOL | uv + ruff + mypy estricto + pytest; eslint/tsc/vitest en frontend | BACK-002/003 y TEST-001; el CI bloquea en cada push |
+| 2026-09-28 | F1-CORE | Settings falla al arrancar si falta una variable obligatoria | SKILL1 §4; el Client Secret jamás llega al frontend |
+| 2026-09-28 | F1-LOG | Logging JSON por línea con redacción de claves sensibles | DEPLOY-005; nunca se registran tokens |
+| 2026-09-28 | F1-HTTP | error_handlers.py único: excepciones de dominio -> HTTP | SOLID; los routers no capturan excepciones |
+| 2026-09-28 | F1-PROXY | Vite proxy /api -> 127.0.0.1:8000 en desarrollo | Un solo origen también en local, como en producción |
+| 2026-09-28 | F1-CI | GitHub Actions: backend + frontend + chequeo de secretos | DEPLOY-003 y TEST-003: bloquean el despliegue |
+| 2026-09-28 | F1-DOCS | ADR-001..004 + architecture.md con diagramas Mermaid | ARCH-003; evidencia para la sustentación |
 
 ## Validación de entrega de este AGEND.md
 

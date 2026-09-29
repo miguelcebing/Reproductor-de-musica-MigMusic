@@ -172,15 +172,16 @@ petición lenta.
 ```
 migmusic/
 ├── AGEND.md            # fuente de verdad del proyecto (requisitos + decisiones)
-├── .agents/            # skills del agente
+├── skills/             # skills del agente (SKILL0–SKILL7)
 ├── README.md
 ├── .env.example
+├── .github/workflows/  # CI: lint + tests que bloquean
 ├── docs/
-│   ├── architecture.md
+│   ├── architecture.md # capas + diagramas Mermaid (clases, secuencia, ER)
 │   ├── adr/            # Architecture Decision Records
 │   └── api.md
 ├── backend/            # 100 % Python
-│   ├── pyproject.toml
+│   ├── pyproject.toml  # uv · ruff · mypy estricto · pytest
 │   ├── src/migmusic/
 │   └── tests/          # unit / integration / conftest.py
 ├── frontend/           # React + Vite + TypeScript
