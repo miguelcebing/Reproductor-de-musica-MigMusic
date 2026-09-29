@@ -89,7 +89,7 @@ export class PlaylistController {
     );
   }
 
-  /** Add picked files as local tracks (`LOCAL-001`), honouring the position. */
+  /** Add picked files as local tracks (`LOCAL-003`), honouring the position. */
   async addLocalTracks(
     playlistId: string,
     files: readonly File[],
@@ -101,7 +101,8 @@ export class PlaylistController {
         let index =
           position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
         for (const file of files) {
-          await this.api.addSong(playlistId, localSongFromFile(file), index);
+          const song = await localSongFromFile(file);
+          await this.api.addSong(playlistId, song, index);
           if (index !== undefined) index += 1;
         }
         return this.api.getPlaylist(playlistId);

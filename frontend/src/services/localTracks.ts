@@ -1,10 +1,8 @@
-/** Turning picked files into local tracks.
-
- * Metadata reading (ID3 tags, duration) lands in F5 (`LOCAL-003`); until then
- * the filename is the best title we have and the duration stays unknown (0).
- */
+/** Turning picked files into local tracks with metadata and object URLs (`LOCAL-003`). */
 
 import type { SongInput } from "../domain/types";
+import { localFileUrls } from "./localFileUrls";
+import { extractMetadata, artworkToObjectUrl } from "./metadata";
 
 function uuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -13,15 +11,36 @@ function uuid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Build the payload posted for one picked audio file. */
-export function localSongFromFile(file: File): SongInput {
-  const title = file.name.replace(/\.[^.]+$/, "").trim() || "Track";
+/** Build the payload posted for one picked audio file, extracting metadata. */
+export async function localSongFromFile(file: File): Promise<SongInput> {
+  const metadata = await extractMetadata(file);
+  const trackId = `local:${uuid()}`;
+
+  // Create object URL for immediate playback
+  const objectUrl = URL.createObjectURL(file);
+  localFileUrls.set(trackId, objectUrl);
+
   return {
-    id: `local:${uuid()}`,
-    title,
-    artist: "",
+    id: trackId,
+    title: metadata.title,
+    artist: metadata.artist,
     source: "local",
-    duration: 0,
+    duration: Math.floor(metadata.duration) || 0,
+    album: metadata.album ?? null,
+    artwork_url: metadata.picture ? artworkToObjectUrl(metadata.picture) : null,
+    external_url: null,
     available: true,
   };
+}
+
+/** Revoke all object URLs for a list of files (cleanup on error). */
+export function revokeObjectUrlsForFiles(files: File[]): void {
+  for (const file of files) {
+    const trackId = Array.from(localFileUrls.entries()).find(
+      ([, url]) => url === URL.createObjectURL(file),
+    )?.[0];
+    if (trackId) {
+      localFileUrls.delete(trackId);
+    }
+  }
 }

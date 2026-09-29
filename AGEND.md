@@ -1568,6 +1568,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F4-RESPONSIVE | Mobile-first con breakpoints 640 / 1024 / 1440 | FRONT-006 con VIS-012 (reproductor central + lista debajo) |
 | 2026-09-28 | F4-ANIM | Microinteracciones en CSS puro, sin libreria de animaciones | VIS-009/010/011 + FRONT-003/004; VIS-006 (sutiles) y reduced-motion |
 | 2026-09-28 | F4-GATE | Layout, tokens, componentes, API client y controladores completos | FRONT-005/006, VIS-001/002/003/004/006/012, UX-001/002/003/004; build OK, typecheck OK, lint OK |
+| 2026-09-28 | F5-GATE | AudioPlayer + LocalAudioPlayer + metadata + IndexedDB | LOCAL-001/002/003/003a/004; build OK, typecheck OK, lint OK, tests OK |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1583,6 +1584,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] Reproductor funcional
 - [x] Adelantar segundos
 - [x] F4: Layout, design tokens, componentes, API client, controladores
+- [x] F5: AudioPlayer, LocalAudioPlayer, metadata ID3, IndexedDB, persistencia local
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

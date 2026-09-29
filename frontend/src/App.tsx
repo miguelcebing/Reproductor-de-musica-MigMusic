@@ -76,6 +76,12 @@ export function App(): React.JSX.Element {
     void controllers.playback.refresh();
   }, [controllers]);
 
+  // Wire audio player when the active track changes (F5)
+  useEffect(() => {
+    const song = playback?.song ?? null;
+    void controllers.playback.onTrackChange(song);
+  }, [controllers, playback?.song?.id]);
+
   // Derived state
   const activePlaylist = playlists.find((p) => p.id === activeId) ?? null;
   const currentIndex =
