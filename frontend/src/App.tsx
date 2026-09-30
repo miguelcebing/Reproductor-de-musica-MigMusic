@@ -370,6 +370,7 @@ export function App(): React.JSX.Element {
           onFavorite={handleFavoriteTrack}
           onReorder={handleReorderTrack}
           onFind={handleFindTrack}
+          onAddMusic={handleOpenAddDialog}
         />
         {nodesVisible && <LinkedListView songs={songs} currentIndex={currentIndex} />}
       </section>

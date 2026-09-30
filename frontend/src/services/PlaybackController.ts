@@ -40,6 +40,7 @@ export class PlaybackController {
   private attachSeq = 0;
   private unsubscribeEnded: (() => void) | null = null;
   private unsubscribeTimeUpdate: (() => void) | null = null;
+  private unsubscribeError: (() => void) | null = null;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(api: ApiClient, options: PlaybackControllerOptions) {
@@ -237,6 +238,17 @@ export class PlaybackController {
       });
       this.scheduleReport(pos);
     });
+    this.unsubscribeError = player.on("error", ({ payload }) => {
+      const message = (payload as { error?: unknown; message?: string }).error
+        ?? (payload as { message?: string }).message
+        ?? "Unknown error";
+      const msg = String(message);
+      if (msg.includes("account_error") || msg.includes("Premium") || msg.includes("premium")) {
+        this.toast("error", "spotify.premiumRequired");
+      } else {
+        this.fail(message);
+      }
+    });
 
     try {
       const startTime = this.resumePosition();
@@ -301,6 +313,10 @@ export class PlaybackController {
       this.unsubscribeTimeUpdate();
       this.unsubscribeTimeUpdate = null;
     }
+    if (this.unsubscribeError) {
+      this.unsubscribeError();
+      this.unsubscribeError = null;
+    }
     if (this.reportTimer !== null) {
       clearTimeout(this.reportTimer);
       this.reportTimer = null;
@@ -330,6 +346,10 @@ export class PlaybackController {
       this.fail(cause);
       return null;
     }
+  }
+
+  private toast(kind: "info" | "success" | "error", key: MessageKey, params?: Record<string, string | number>): void {
+    useToastStore.getState().push(kind, translate(this.language(), key, params));
   }
 
   private fail(cause: unknown): void {

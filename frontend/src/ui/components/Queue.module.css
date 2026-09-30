@@ -372,3 +372,46 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
 }
+
+/* --- Spotify disconnected state --------------------------------------------- */
+
+.spotifyDisconnected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+  gap: var(--space-3);
+}
+
+.spotifyDisconnectedIcon {
+  color: var(--color-primary);
+  opacity: 0.7;
+}
+
+.spotifyDisconnectedTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.spotifyDisconnectedDesc {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.spotifyConnectBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  font-weight: 600;
+}
+
+.spotifyDisconnectedNote {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}

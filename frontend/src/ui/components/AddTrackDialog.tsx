@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Song, TrackPosition } from "../../domain/types";
 import { useT } from "../../i18n/useT";
 import styles from "./Queue.module.css";
-import { CloseIcon } from "./icons";
+import { CloseIcon, SpotifyIcon } from "./icons";
 
 export type { TrackPosition };
 
@@ -295,20 +295,30 @@ export function AddTrackDialog({
             </button>
           </>
         ) : (
-          <>
-            <p className={styles.hint} data-testid="spotify-missing">
+          <div className={styles.spotifyDisconnected} data-testid="spotify-disconnected">
+            <div className={styles.spotifyDisconnectedIcon}>
+              <SpotifyIcon width={48} height={48} />
+            </div>
+            <h3 className={styles.spotifyDisconnectedTitle}>
               {t("dialog.spotifyMissing")}
+            </h3>
+            <p className={styles.spotifyDisconnectedDesc}>
+              {t("dialog.spotifyMissingDesc")}
             </p>
             <button
               type="button"
-              className={`${styles.button} ${styles.buttonPrimary}`}
+              className={`${styles.button} ${styles.buttonPrimary} ${styles.spotifyConnectBtn}`}
               onClick={onSpotifyConnect}
               data-testid="spotify-connect"
             >
+              <SpotifyIcon width={18} height={18} />
               {t("spotify.connect")}
             </button>
-          </>
-        )}
+            <p className={styles.spotifyDisconnectedNote}>
+              {t("dialog.spotifyPremiumNote")}
+            </p>
+          </div>
+        )} : spotifyConnected ? (
 
         {showPositionPicker && (
           <fieldset className={styles.field}>

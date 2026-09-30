@@ -11,7 +11,7 @@ import { useT } from "../../i18n/useT";
 import { EmptyState } from "./EmptyState";
 import { TrackItem } from "./TrackItem";
 import styles from "./Queue.module.css";
-import { HeartIcon } from "./icons";
+import { HeartIcon, PlusIcon } from "./icons";
 
 export interface TrackListProps {
   readonly songs: readonly Song[];
@@ -24,6 +24,8 @@ export interface TrackListProps {
   readonly onReorder: (fromIndex: number, toIndex: number) => void;
   /** Resolves the first match for `text`, or `null` when nothing matches. */
   readonly onFind: (text: string) => Promise<number | null>;
+  /** Called when the user wants to add music from the empty state. */
+  readonly onAddMusic?: () => void;
 }
 
 export function TrackList({
@@ -36,6 +38,7 @@ export function TrackList({
   onFavorite,
   onReorder,
   onFind,
+  onAddMusic,
 }: TrackListProps): React.JSX.Element {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -63,7 +66,21 @@ export function TrackList({
   }
 
   if (songs.length === 0) {
-    return <EmptyState title={t("list.emptyTitle")} body={t("list.emptyBody")} />;
+    return (
+      <EmptyState
+        title={t("list.emptyTitle")}
+        body={t("list.emptyBody")}
+        {...(onAddMusic
+          ? {
+              action: {
+                label: t("dialog.addTitle"),
+                onClick: onAddMusic,
+                icon: <PlusIcon width={14} height={14} />,
+              },
+            }
+          : {})}
+      />
+    );
   }
 
   const handleSearchChange = (value: string): void => {
