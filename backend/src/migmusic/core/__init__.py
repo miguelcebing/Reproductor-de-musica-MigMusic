@@ -1,6 +1,6 @@
 """Cross-cutting concerns: configuration, logging and base exceptions."""
 
-from migmusic.core.config import Settings, clear_settings_cache, get_settings
+from migmusic.core.config import Settings, SpotifyConfig, clear_settings_cache, get_settings
 from migmusic.core.exceptions import (
     ConfigurationError,
     DomainError,
@@ -18,6 +18,7 @@ __all__ = [
     "MigMusicError",
     "NotFoundError",
     "Settings",
+    "SpotifyConfig",
     "ValidationError",
     "clear_settings_cache",
     "configure_logging",

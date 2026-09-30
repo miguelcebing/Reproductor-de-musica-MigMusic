@@ -5,6 +5,9 @@
  */
 
 import type {
+  AccessToken,
+  AuthStatus,
+  CallbackResult,
   ErrorEnvelope,
   PlaybackState,
   Playlist,
@@ -12,6 +15,8 @@ import type {
   SkipDirection,
   Song,
   SongInput,
+  SpotifyPlaylist,
+  SpotifyPlayerState,
 } from "../domain/types";
 
 /** Development uses the Vite proxy; production goes through Vercel's /api rewrite. */
@@ -153,6 +158,93 @@ export class ApiClient {
 
   health(): Promise<{ status: string; service: string; environment: string }> {
     return this.send<{ status: string; service: string; environment: string }>("GET", "/health");
+  }
+
+  // --- Spotify auth (`F6`) --------------------------------------------------
+
+  /** Absolute URL the browser navigates to in order to start the OAuth flow. */
+  spotifyLoginUrl(): string {
+    return apiUrl(this.base, "/auth/spotify/login");
+  }
+
+  spotifyStatus(): Promise<AuthStatus> {
+    return this.send<AuthStatus>("GET", "/auth/spotify/status");
+  }
+
+  spotifyToken(): Promise<AccessToken> {
+    return this.send<AccessToken>("GET", "/auth/spotify/token");
+  }
+
+  spotifyCallback(code: string, state: string): Promise<CallbackResult> {
+    return this.send<CallbackResult>("POST", "/auth/spotify/callback", { code, state });
+  }
+
+  spotifyLogout(): Promise<void> {
+    return this.send<void>("POST", "/auth/spotify/logout");
+  }
+
+  // --- Spotify catalog (`F6`) -----------------------------------------------
+
+  searchSpotify(query: string, limit = 20): Promise<Song[]> {
+    const params = `?q=${encodeURIComponent(query)}&limit=${limit}`;
+    return this.send<Song[]>("GET", `/spotify/search${params}`);
+  }
+
+  savedSpotify(limit = 20): Promise<Song[]> {
+    return this.send<Song[]>("GET", `/spotify/saved?limit=${limit}`);
+  }
+
+  listSpotifyPlaylists(limit = 20): Promise<SpotifyPlaylist[]> {
+    return this.send<SpotifyPlaylist[]>("GET", `/spotify/playlists?limit=${limit}`);
+  }
+
+  spotifyPlaylistTracks(playlistId: string, limit = 50): Promise<Song[]> {
+    return this.send<Song[]>(
+      "GET",
+      `/spotify/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${limit}`,
+    );
+  }
+
+  // --- Spotify player proxy (`F6`) ------------------------------------------
+
+  spotifyPlay(params: {
+    uris?: readonly string[];
+    device_id?: string;
+    position_ms?: number;
+  }): Promise<void> {
+    return this.send<void>("PUT", "/spotify/player/play", params);
+  }
+
+  spotifyPause(deviceId?: string): Promise<void> {
+    return this.send<void>("PUT", "/spotify/player/pause", { device_id: deviceId });
+  }
+
+  spotifyNext(deviceId?: string): Promise<void> {
+    return this.send<void>("POST", "/spotify/player/next", { device_id: deviceId });
+  }
+
+  spotifyPrevious(deviceId?: string): Promise<void> {
+    return this.send<void>("POST", "/spotify/player/previous", { device_id: deviceId });
+  }
+
+  spotifySeek(positionMs: number, deviceId?: string): Promise<void> {
+    return this.send<void>("PUT", "/spotify/player/seek", {
+      position_ms: Math.max(0, Math.round(positionMs)),
+      device_id: deviceId,
+    });
+  }
+
+  spotifySetVolume(volumePercent: number, deviceId?: string): Promise<void> {
+    const clamped = Math.min(100, Math.max(0, Math.round(volumePercent)));
+    return this.send<void>("PUT", "/spotify/player/volume", {
+      volume_percent: clamped,
+      device_id: deviceId,
+    });
+  }
+
+  /** Current state; a `404` means nothing is playing on Spotify. */
+  spotifyPlayerState(): Promise<SpotifyPlayerState> {
+    return this.send<SpotifyPlayerState>("GET", "/spotify/player/state");
   }
 
   // --- Plumbing ------------------------------------------------------------

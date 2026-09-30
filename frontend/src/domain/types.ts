@@ -71,3 +71,40 @@ export interface ErrorEnvelope {
 
 /** Where newly added tracks are inserted (`UX-003`). */
 export type TrackPosition = { kind: "start" } | { kind: "end" } | { kind: "index"; index: number };
+
+// --- Spotify (`F6`) ---------------------------------------------------------
+
+/** `GET /api/auth/spotify/status` — whether this session holds Spotify tokens. */
+export interface AuthStatus {
+  readonly authenticated: boolean;
+}
+
+/** `GET /api/auth/spotify/token` — short-lived token for the Web Playback SDK. */
+export interface AccessToken {
+  readonly access_token: string;
+  readonly expires_in: number;
+  readonly token_type: "Bearer";
+}
+
+/** `POST /api/auth/spotify/callback` — result of the code exchange. */
+export interface CallbackResult {
+  readonly authenticated: boolean;
+}
+
+/** Header of a Spotify playlist (`GET /api/spotify/playlists`). */
+export interface SpotifyPlaylist {
+  readonly id: string;
+  readonly name: string;
+  readonly track_count: number;
+  readonly artwork_url: string | null;
+}
+
+/** `GET /api/spotify/player/state` — simplified SDK-synced playback state. */
+export interface SpotifyPlayerState {
+  readonly playing: boolean;
+  readonly position_ms: number;
+  readonly duration_ms: number;
+  readonly track_uri: string | null;
+  readonly volume_percent: number | null;
+  readonly device_id: string | null;
+}

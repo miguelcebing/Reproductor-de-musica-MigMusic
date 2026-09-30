@@ -9,16 +9,24 @@ module in tests does not require a fully configured environment.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
-from migmusic.api.routers import health, playback, playlists
+from migmusic.api.routers import auth, health, playback, playlists, spotify
 from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
 from migmusic.infrastructure.persistence import InMemoryPlaylistRepository
+from migmusic.infrastructure.security.session_token_store import InMemoryTokenStore
+from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
+from migmusic.infrastructure.spotify.spotify_music_provider import SpotifyMusicProvider
+from migmusic.infrastructure.spotify.spotify_oauth import SpotifyOAuth
 
 logger = get_logger(__name__)
 
@@ -28,6 +36,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings if settings is not None else get_settings()
     configure_logging(config.log_level)
 
+    # One shared HTTP client for every outbound call (Spotify auth and Web API).
+    http_client = httpx.AsyncClient()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        await http_client.aclose()
+
     app = FastAPI(
         title="MigMusic API",
         version="0.1.0",
@@ -35,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None if config.is_production else "/docs",
         redoc_url=None if config.is_production else "/redoc",
         openapi_url=None if config.is_production else "/openapi.json",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -55,10 +72,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.playlist_service = PlaylistService(repository)
     app.state.playback_service = PlaybackService(repository, skip_seconds=config.skip_seconds)
 
+    # Spotify: a session-scoped token store and the catalog adapter
+    # (stateless: the access token travels per call).
+    app.state.http_client = http_client
+    token_store = InMemoryTokenStore()
+    app.state.spotify_oauth = SpotifyOAuth(config.spotify)
+    app.state.spotify_token_store = token_store
+    app.state.spotify_auth_service = SpotifyAuthService(
+        app.state.spotify_oauth, token_store, http_client
+    )
+    app.state.spotify_client = SpotifyApiClient(http_client)
+    app.state.music_provider = SpotifyMusicProvider(app.state.spotify_client)
+
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(playlists.router)
     app.include_router(playback.router)
+    app.include_router(auth.router)
+    app.include_router(spotify.router)
 
     logger.info(
         "application_started",

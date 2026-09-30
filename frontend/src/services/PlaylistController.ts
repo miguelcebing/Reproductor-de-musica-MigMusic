@@ -114,6 +114,30 @@ export class PlaylistController {
     );
   }
 
+  /** Add several catalog songs in one pass, honouring the position (`F6`). */
+  async addSongs(
+    playlistId: string,
+    songs: readonly SongInput[],
+    position: TrackPosition,
+  ): Promise<Playlist | null> {
+    if (songs.length === 0) return null;
+    return this.mutate(
+      async () => {
+        let index =
+          position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
+        for (const song of songs) {
+          await this.api.addSong(playlistId, song, index);
+          if (index !== undefined) index += 1;
+        }
+        return this.api.getPlaylist(playlistId);
+      },
+      (playlist) => {
+        usePlaylistStore.getState().upsertPlaylist(playlist);
+        this.toast("success", "toast.added");
+      },
+    );
+  }
+
   async removeSong(playlistId: string, index: number): Promise<Playlist | null> {
     return this.mutate(
       async () => {

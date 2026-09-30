@@ -1027,13 +1027,13 @@ SPOTIFY-006:
   DecidedOn: 2026-09-28
 
 SPOTIFY-007:
-  Status: PENDING
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [SPOTIFY-002]
   Question: "¿Cómo quieres manejar la sesión de Spotify (recordar al usuario, cerrar sesión, expiración) y qué debe pasar si el token expira mientras suena algo?"
   Guidance: "Propuesta: cookie HttpOnly + refresh automático en backend."
-  Answer: null
-  DecidedOn: null
+  Answer: "Cookie HttpOnly segura en backend + refresh automático de access token; si falla refresh, cerrar sesión y avisar al usuario"
+  DecidedOn: 2026-09-28
 
 SPOTIFY-008:
   Status: CONFIRMED
@@ -1569,6 +1569,9 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F4-ANIM | Microinteracciones en CSS puro, sin libreria de animaciones | VIS-009/010/011 + FRONT-003/004; VIS-006 (sutiles) y reduced-motion |
 | 2026-09-28 | F4-GATE | Layout, tokens, componentes, API client y controladores completos | FRONT-005/006, VIS-001/002/003/004/006/012, UX-001/002/003/004; build OK, typecheck OK, lint OK |
 | 2026-09-28 | F5-GATE | AudioPlayer + LocalAudioPlayer + metadata + IndexedDB | LOCAL-001/002/003/003a/004; build OK, typecheck OK, lint OK, tests OK |
+| 2026-09-28 | F6-GATE | OAuth PKCE + sesión HttpOnly + proxy Web API + SpotifyPlayer (Web Playback SDK) | SPOTIFY-001/002/003/005/006/007/008, F6-STATE, F6-SCOPES, ADR-005; backend: ruff/mypy/262 tests; frontend: typecheck/lint/40 tests/build OK |
+| 2026-09-28 | F6-STATE | Sesión Spotify con cookie HttpOnly + refresh automático en backend | SPOTIFY-007; token en backend, nunca en frontend |
+| 2026-09-28 | F6-SCOPES | Scopes: streaming, user-read-*, user-modify-playback-state, playlist-read-private, user-library-read | SPOTIFY-006 opción C; mínima privilegio |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1585,6 +1588,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] Adelantar segundos
 - [x] F4: Layout, design tokens, componentes, API client, controladores
 - [x] F5: AudioPlayer, LocalAudioPlayer, metadata ID3, IndexedDB, persistencia local
+- [x] F6: OAuth PKCE + sesión, catálogo Spotify (búsqueda/playlists/guardadas), SpotifyPlayer con Web Playback SDK, errores manejados
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

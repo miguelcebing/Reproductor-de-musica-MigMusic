@@ -113,6 +113,58 @@ One active playlist at a time. `PlaybackOut` — `playlist_id`, `song`,
 
 ---
 
+### Spotify auth (`F6`)
+
+OAuth **Authorization Code + PKCE**, executed entirely server-side
+(`spotify_oauth.py`). The browser only ever talks to these routes; tokens are
+stored backend-side under the session id (`SPOTIFY-007`, ADR-005).
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/auth/spotify/login` | `302` to `accounts.spotify.com/authorize`. Sets the short-lived `mig_oauth` cookie (state + PKCE verifier + session id). |
+| `GET` | `/api/auth/spotify/callback` | **Production** Redirect URI. Exchanges the code, sets `mig_session`, redirects to the SPA. `401` when the state cookie is missing/tampered with. |
+| `POST` | `/api/auth/spotify/callback` | **Development** variant: the SPA forwards the reply. Body: `{"code": "...", "state": "..."}` → `{"authenticated": true}`. |
+| `GET` | `/api/auth/spotify/status` | `{"authenticated": true \| false}` — cheap link check for the UI. |
+| `GET` | `/api/auth/spotify/token` | Fresh access token for the Web Playback SDK: `{"access_token": "...", "expires_in": 3600, "token_type": "Bearer"}`, `Cache-Control: no-store`. `401` when the session is missing or expired; **never** returns the refresh token. |
+| `POST` | `/api/auth/spotify/logout` | Drops the stored tokens and expires `mig_session`. `204`. |
+
+**Cookies** — `HttpOnly`, `SameSite=Lax`, `Secure` in production, `Path=/`:
+`mig_oauth` (10 min, deleted on callback) and `mig_session` (30 days).
+
+---
+
+### Spotify catalog and player (`F6`)
+
+All routes resolve a fresh access token per request (`SpotifyTokenDep`) and
+proxy Spotify's Web API; nothing here talks to Spotify directly from the
+browser. `SongOut` is the same shape as in *Playlists*, with
+`source: "spotify"` and `id` equal to the Spotify track id.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/spotify/search` | `?q=…&limit=1..50` → `SongOut[]`. |
+| `GET` | `/api/spotify/saved` | The user's saved tracks (`user-library-read`). |
+| `GET` | `/api/spotify/playlists` | Playlist headers: `id`, `name`, `track_count`, `artwork_url`. |
+| `GET` | `/api/spotify/playlists/{id}/tracks` | Tracks of one Spotify playlist (`?limit=1..100`). |
+| `PUT` | `/api/spotify/player/play` | Queue playback. Body: `{"uris": ["spotify:track:…"], "device_id": "…", "position_ms": 0}`. `204`. |
+| `PUT` | `/api/spotify/player/pause` | Pause (`device_id` optional). `204`. |
+| `POST` | `/api/spotify/player/next` | Next track. `204`. |
+| `POST` | `/api/spotify/player/previous` | Previous track. `204`. |
+| `PUT` | `/api/spotify/player/seek` | Body: `{"position_ms": 12345}`. `204`. |
+| `PUT` | `/api/spotify/player/volume` | Body: `{"volume_percent": 0..100}`. `204`. |
+| `GET` | `/api/spotify/player/state` | `{"playing", "position_ms", "duration_ms", "track_uri", "volume_percent", "device_id"}`. `404` upstream means nothing is playing. |
+
+**Notes**
+
+- Every route answers `401` (`code: "http_error"`) when the session holds no
+  Spotify tokens, so the frontend can re-run the login flow.
+- `429` from Spotify (rate limit **or** `reason: "QUOTA_EXCEEDED"`, see
+  ADR-005) propagates with `Retry-After` honoured once by the client.
+- `5xx` from Spotify surface as `502/503`; `404`/`409` keep their status so
+  "no active device" stays distinguishable.
+
+---
+
 ## Status codes
 
 | Code | Meaning |

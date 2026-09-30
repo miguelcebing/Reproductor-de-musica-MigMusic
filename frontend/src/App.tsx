@@ -5,11 +5,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiClient } from "./services/apiClient";
 import { PlaylistController } from "./services/PlaylistController";
 import { PlaybackController } from "./services/PlaybackController";
+import { AuthController } from "./services/AuthController";
+import { SpotifyController } from "./services/SpotifyController";
+import { readCallbackParams } from "./services/callbackParams";
 import { REPEAT_CYCLE } from "./ui/constants";
 import { useT } from "./i18n/useT";
 import { useSettingsStore, applyDocumentSettings } from "./state/settingsStore";
 import { usePlaylistStore } from "./state/playlistStore";
 import { usePlaybackStore } from "./state/playbackStore";
+import { useSpotifyStore } from "./state/spotifyStore";
+import { useAuthStore } from "./state/authStore";
 import { useToastStore } from "./state/toastStore";
 import { AppShell } from "./ui/layouts/AppShell";
 import { CoverArt } from "./ui/components/CoverArt";
@@ -21,7 +26,8 @@ import { TrackList } from "./ui/components/TrackList";
 import { PlaylistBar } from "./ui/components/PlaylistBar";
 import { AddTrackDialog } from "./ui/components/AddTrackDialog";
 import { LinkedListView } from "./ui/components/LinkedListView";
-import type { TrackPosition } from "./domain/types";
+import { SpotifyCallback } from "./ui/components/SpotifyCallback";
+import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
 import playerStyles from "./ui/components/Player.module.css";
 
@@ -47,6 +53,11 @@ export function App(): React.JSX.Element {
   // Playback
   const playback = usePlaybackStore((s) => s.playback);
 
+  // Spotify link + catalog (`F6`)
+  const spotifyStatus = useAuthStore((s) => s.status);
+  const spotifyResults = useSpotifyStore((s) => s.results);
+  const spotifyLoading = useSpotifyStore((s) => s.loading);
+
   // Toasts
   const toasts = useToastStore((s) => s.toasts);
   const dismissToast = useToastStore((s) => s.dismiss);
@@ -55,6 +66,12 @@ export function App(): React.JSX.Element {
   const [nodesVisible, setNodesVisible] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // OAuth landing page (`F6`): decided once, before the first paint
+  const callback = useMemo(
+    () => readCallbackParams(window.location.pathname, window.location.search),
+    [],
+  );
+
   // Controllers (memoised once)
   const controllers = useMemo(() => {
     const api = ApiClient.fromOrigin(window.location.origin);
@@ -62,6 +79,8 @@ export function App(): React.JSX.Element {
     return {
       playlists: new PlaylistController(api, { language: lang }),
       playback: new PlaybackController(api, { language: lang }),
+      auth: new AuthController(api, { language: lang }),
+      spotify: new SpotifyController(api, { language: lang }),
     };
   }, []);
 
@@ -74,6 +93,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     void controllers.playlists.refresh();
     void controllers.playback.refresh();
+    void controllers.auth.refresh();
   }, [controllers]);
 
   // Wire audio player when the active track changes (F5)
@@ -209,6 +229,40 @@ export function App(): React.JSX.Element {
     setMuted(!muted);
   }, [muted, setMuted]);
 
+  const handleSpotifyConnect = useCallback(() => {
+    controllers.auth.login();
+  }, [controllers]);
+
+  const handleSpotifyDisconnect = useCallback(() => {
+    void controllers.auth.logout();
+  }, [controllers]);
+
+  const handleSpotifySearch = useCallback(
+    (query: string) => {
+      void controllers.spotify.search(query);
+    },
+    [controllers],
+  );
+
+  const handleSubmitSpotify = useCallback(
+    (songs: readonly Song[], position: TrackPosition) => {
+      if (!activeId) return;
+      void controllers.playlists.addSongs(activeId, songs, position);
+    },
+    [activeId, controllers],
+  );
+
+  // OAuth callback: exchange the code and go back home (`F6`)
+  if (callback) {
+    return (
+      <SpotifyCallback
+        code={callback.code}
+        state={callback.state}
+        auth={controllers.auth}
+      />
+    );
+  }
+
   return (
     <AppShell
       theme={theme}
@@ -287,8 +341,15 @@ export function App(): React.JSX.Element {
       <AddTrackDialog
         open={dialogOpen}
         songsLength={songs.length}
+        spotifyConnected={spotifyStatus === "linked"}
+        spotifyLoading={spotifyLoading}
+        spotifyResults={spotifyResults}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleSubmitTracks}
+        onSubmitSpotify={handleSubmitSpotify}
+        onSpotifySearch={handleSpotifySearch}
+        onSpotifyConnect={handleSpotifyConnect}
+        onSpotifyDisconnect={handleSpotifyDisconnect}
       />
     </AppShell>
   );

@@ -110,13 +110,27 @@ export class PlaybackController {
     if (song.source !== "local" || !song.id.startsWith("local:")) {
       throw new Error("loadLocalTrack only supports local tracks");
     }
-    this.cleanupPlayer();
-    this.player = createPlayerForSource("local");
+    await this.attachPlayer(createPlayerForSource("local"), song, startTime);
+  }
 
-    this.unsubscribeEnded = this.player.on("ended", () => {
+  /** Drive the Web Playback SDK for a Spotify track (`F6`). */
+  async loadSpotifyTrack(song: Song, startTime?: number): Promise<void> {
+    await this.attachPlayer(createPlayerForSource("spotify", { api: this.api }), song, startTime);
+  }
+
+  /** Wire a fresh player instance to the stores and start playback. */
+  private async attachPlayer(
+    player: AudioPlayer,
+    song: Song,
+    startTime?: number,
+  ): Promise<void> {
+    this.cleanupPlayer();
+    this.player = player;
+
+    this.unsubscribeEnded = player.on("ended", () => {
       this.songFinished();
     });
-    this.unsubscribeTimeUpdate = this.player.on("timeupdate", ({ payload }) => {
+    this.unsubscribeTimeUpdate = player.on("timeupdate", ({ payload }) => {
       const pos = (payload as { currentTime: number }).currentTime;
       usePlaybackStore.setState((prev) => {
         if (!prev.playback) return prev;
@@ -127,9 +141,9 @@ export class PlaybackController {
 
     try {
       const loadOptions = startTime !== undefined ? { startTime } : {};
-      await this.player.load(song.id, loadOptions);
-      await this.player.setVolume(useSettingsStore.getState().volume);
-      this.player.setMuted(useSettingsStore.getState().muted);
+      await player.load(song.id, loadOptions);
+      await player.setVolume(useSettingsStore.getState().volume);
+      player.setMuted(useSettingsStore.getState().muted);
     } catch (cause) {
       this.cleanupPlayer();
       throw cause;
@@ -142,11 +156,15 @@ export class PlaybackController {
       this.cleanupPlayer();
       return;
     }
-    if (song.source === "local") {
-      await this.loadLocalTrack(song);
-    } else {
-      // Spotify: the Web Playback SDK handles loading in F6
+    try {
+      if (song.source === "local") {
+        await this.loadLocalTrack(song);
+      } else {
+        await this.loadSpotifyTrack(song);
+      }
+    } catch (cause) {
       this.cleanupPlayer();
+      this.fail(cause);
     }
   }
 

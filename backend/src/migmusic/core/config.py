@@ -7,6 +7,7 @@ never reach the frontend.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
@@ -14,6 +15,16 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EnvironmentName = Literal["development", "staging", "production"]
+
+
+@dataclass(frozen=True, slots=True)
+class SpotifyConfig:
+    """Spotify OAuth configuration extracted from Settings."""
+
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+    scopes: str
 
 
 class Settings(BaseSettings):
@@ -42,6 +53,12 @@ class Settings(BaseSettings):
     spotify_client_id: str = Field(alias="SPOTIFY_CLIENT_ID")
     spotify_client_secret: SecretStr = Field(alias="SPOTIFY_CLIENT_SECRET")
     spotify_redirect_uri: str = Field(alias="SPOTIFY_REDIRECT_URI")
+    spotify_scopes: str = Field(
+        default="streaming user-read-email user-read-private "
+        "user-read-playback-state user-modify-playback-state "
+        "playlist-read-private user-library-read user-follow-read",
+        alias="SPOTIFY_SCOPES",
+    )
 
     # --- Session ---
     session_secret_key: SecretStr = Field(alias="SESSION_SECRET_KEY")
@@ -74,6 +91,16 @@ class Settings(BaseSettings):
     def _redirect_uri_must_not_have_trailing_slash(cls, value: str) -> str:
         """Spotify matches redirect URIs exactly, so a trailing slash breaks login."""
         return value.rstrip("/")
+
+    @property
+    def spotify(self) -> SpotifyConfig:
+        """Extract Spotify config for the OAuth module."""
+        return SpotifyConfig(
+            client_id=self.spotify_client_id,
+            client_secret=self.spotify_client_secret.get_secret_value(),
+            redirect_uri=self.spotify_redirect_uri,
+            scopes=self.spotify_scopes,
+        )
 
     def __repr__(self) -> str:
         """Render settings without exposing secrets."""

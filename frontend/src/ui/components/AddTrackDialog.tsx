@@ -1,8 +1,13 @@
-/** Add-music modal with Local/Spotify tabs and a position picker (`UX-003`). */
+/** Add-music modal with Local/Spotify tabs and a position picker (`UX-003`).
+
+ * The Spotify tab searches the catalog (`SPOTIFY-006`) when the session is
+ * linked; otherwise it offers the OAuth login. Results are ticked and added
+ * in bulk to the active playlist.
+ */
 
 import { useEffect, useRef, useState } from "react";
 
-import type { TrackPosition } from "../../domain/types";
+import type { Song, TrackPosition } from "../../domain/types";
 import { useT } from "../../i18n/useT";
 import styles from "./Queue.module.css";
 import { CloseIcon } from "./icons";
@@ -12,15 +17,29 @@ export type { TrackPosition };
 export interface AddTrackDialogProps {
   readonly open: boolean;
   readonly songsLength: number;
+  readonly spotifyConnected: boolean;
+  readonly spotifyLoading: boolean;
+  readonly spotifyResults: readonly Song[];
   readonly onClose: () => void;
   readonly onSubmit: (files: File[], position: TrackPosition) => void;
+  readonly onSubmitSpotify: (songs: readonly Song[], position: TrackPosition) => void;
+  readonly onSpotifySearch: (query: string) => void;
+  readonly onSpotifyConnect: () => void;
+  readonly onSpotifyDisconnect: () => void;
 }
 
 export function AddTrackDialog({
   open,
   songsLength,
+  spotifyConnected,
+  spotifyLoading,
+  spotifyResults,
   onClose,
   onSubmit,
+  onSubmitSpotify,
+  onSpotifySearch,
+  onSpotifyConnect,
+  onSpotifyDisconnect,
 }: AddTrackDialogProps): React.JSX.Element | null {
   const t = useT();
   const [tab, setTab] = useState<"local" | "spotify">("local");
@@ -28,6 +47,9 @@ export function AddTrackDialog({
   const [positionKind, setPositionKind] = useState<"start" | "end" | "index">("end");
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [searched, setSearched] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,27 +62,80 @@ export function AddTrackDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // A fresh search invalidates the previous selection.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [spotifyResults]);
+
+  useEffect(() => {
+    if (open) return;
+    setQuery("");
+    setSearched(false);
+    setSelected(new Set());
+    setError(null);
+    setFiles([]);
+    setTab("local");
+  }, [open]);
+
   if (!open) return null;
 
   const maxIndex = Math.max(0, songsLength - 1);
   const boundedIndex = Math.min(index, maxIndex);
 
-  const submit = (): void => {
+  const position: TrackPosition =
+    positionKind === "start"
+      ? { kind: "start" }
+      : positionKind === "index"
+        ? { kind: "index", index: boundedIndex }
+        : { kind: "end" };
+
+  const submitLocal = (): void => {
     if (files.length === 0) {
       setError(t("dialog.noFiles"));
       return;
     }
-    const position: TrackPosition =
-      positionKind === "start"
-        ? { kind: "start" }
-        : positionKind === "index"
-          ? { kind: "index", index: boundedIndex }
-          : { kind: "end" };
     onSubmit([...files], position);
     setFiles([]);
     setError(null);
     onClose();
   };
+
+  const submitSpotify = (): void => {
+    const chosen = spotifyResults.filter((song) => selected.has(song.id));
+    if (chosen.length === 0) {
+      setError(t("spotify.selectOne"));
+      return;
+    }
+    onSubmitSpotify(chosen, position);
+    setError(null);
+    onClose();
+  };
+
+  const submit = (): void => {
+    if (tab === "spotify") {
+      if (spotifyConnected) submitSpotify();
+      else onSpotifyConnect();
+      return;
+    }
+    submitLocal();
+  };
+
+  const toggleSelected = (id: string): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const runSearch = (event: React.FormEvent): void => {
+    event.preventDefault();
+    setSearched(true);
+    onSpotifySearch(query);
+  };
+
+  const showPositionPicker = tab === "local" || spotifyConnected;
 
   return (
     <div
@@ -132,45 +207,119 @@ export function AddTrackDialog({
               />
             </label>
             <p className={styles.hint}>{t("dialog.filesHint")}</p>
-
-            <fieldset className={styles.field}>
-              <legend>{t("dialog.position")}</legend>
-              <div className={styles.positions}>
-                {(["start", "end", "index"] as const).map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    className={`${styles.position} ${
-                      positionKind === kind ? styles.positionActive : ""
-                    }`}
-                    aria-pressed={positionKind === kind}
-                    onClick={() => setPositionKind(kind)}
-                    data-testid={`position-${kind}`}
-                  >
-                    {kind === "start"
-                      ? t("dialog.positionStart")
-                      : kind === "end"
-                        ? t("dialog.positionEnd")
-                        : t("dialog.positionIndex")}
-                  </button>
+          </>
+        ) : spotifyConnected ? (
+          <>
+            <form className={styles.playlistBar} onSubmit={runSearch}>
+              <input
+                type="search"
+                className={styles.input}
+                value={query}
+                placeholder={t("spotify.searchPlaceholder")}
+                aria-label={t("spotify.search")}
+                data-testid="spotify-query"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <button
+                type="submit"
+                className={styles.button}
+                disabled={spotifyLoading}
+                data-testid="spotify-search"
+              >
+                {spotifyLoading ? t("spotify.searching") : t("spotify.search")}
+              </button>
+            </form>
+            <p className={styles.hint}>{t("spotify.selectHint")}</p>
+            {spotifyLoading ? (
+              <p className={styles.loading} data-testid="spotify-loading">
+                {t("spotify.searching")}
+              </p>
+            ) : spotifyResults.length === 0 ? (
+              <p className={styles.hint} data-testid="spotify-empty">
+                {searched ? t("spotify.noResults") : ""}
+              </p>
+            ) : (
+              <ul className={styles.list} data-testid="spotify-results">
+                {spotifyResults.map((song) => (
+                  <li key={song.id} className={styles.row}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(song.id)}
+                      aria-label={`${song.title} — ${song.artist}`}
+                      onChange={() => toggleSelected(song.id)}
+                      data-testid={`spotify-result-${song.id}`}
+                    />
+                    <div className={styles.rowMain}>
+                      <p className={styles.rowTitle}>{song.title}</p>
+                      <p className={styles.rowMeta}>{song.artist}</p>
+                    </div>
+                    <span className={styles.duration}>{song.duration_label}</span>
+                  </li>
                 ))}
-              </div>
-              {positionKind === "index" && (
-                <input
-                  type="number"
-                  min={0}
-                  max={maxIndex}
-                  value={boundedIndex}
-                  aria-label={t("dialog.positionIndex")}
-                  onChange={(event) => setIndex(Number(event.target.value))}
-                />
-              )}
-            </fieldset>
+              </ul>
+            )}
+            <p className={styles.count}>
+              {t("spotify.results", { count: spotifyResults.length })}
+            </p>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={onSpotifyDisconnect}
+              data-testid="spotify-disconnect"
+            >
+              {t("spotify.disconnect")}
+            </button>
           </>
         ) : (
-          <p className={styles.hint} data-testid="spotify-missing">
-            {t("dialog.spotifyMissing")}
-          </p>
+          <>
+            <p className={styles.hint} data-testid="spotify-missing">
+              {t("dialog.spotifyMissing")}
+            </p>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.buttonPrimary}`}
+              onClick={onSpotifyConnect}
+              data-testid="spotify-connect"
+            >
+              {t("spotify.connect")}
+            </button>
+          </>
+        )}
+
+        {showPositionPicker && (
+          <fieldset className={styles.field}>
+            <legend>{t("dialog.position")}</legend>
+            <div className={styles.positions}>
+              {(["start", "end", "index"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className={`${styles.position} ${
+                    positionKind === kind ? styles.positionActive : ""
+                  }`}
+                  aria-pressed={positionKind === kind}
+                  onClick={() => setPositionKind(kind)}
+                  data-testid={`position-${kind}`}
+                >
+                  {kind === "start"
+                    ? t("dialog.positionStart")
+                    : kind === "end"
+                      ? t("dialog.positionEnd")
+                      : t("dialog.positionIndex")}
+                </button>
+              ))}
+            </div>
+            {positionKind === "index" && (
+              <input
+                type="number"
+                min={0}
+                max={maxIndex}
+                value={boundedIndex}
+                aria-label={t("dialog.positionIndex")}
+                onChange={(event) => setIndex(Number(event.target.value))}
+              />
+            )}
+          </fieldset>
         )}
 
         {error && (
@@ -189,7 +338,7 @@ export function AddTrackDialog({
             onClick={submit}
             data-testid="dialog-submit"
           >
-            {t("dialog.submit")}
+            {tab === "spotify" && !spotifyConnected ? t("spotify.connect") : t("dialog.submit")}
           </button>
         </div>
       </div>
