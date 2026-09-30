@@ -23,7 +23,7 @@ services:
       - key: ALLOWED_ORIGINS
         value: https://migmusic.vercel.app
       - key: SPOTIFY_REDIRECT_URI
-        value: https://migmusic.vercel.app/api/auth/callback
+        value: https://migmusic.vercel.app/api/auth/spotify/callback
       - key: RENDER_BACKEND_URL
         value: https://migmusic-api.onrender.com
       # Generated once by Render and kept out of the repository (DEPLOY-005).

@@ -71,6 +71,25 @@ async def callback_get(
     return response
 
 
+@router.get("/callback-legacy", summary="OAuth callback (legacy redirect URI without /spotify/)")
+async def callback_get_legacy(
+    request: Request,
+    code: str,
+    state: str,
+    service: SpotifyAuthServiceDep,
+) -> RedirectResponse:
+    """Handle the callback for legacy redirect URI (/api/auth/callback)."""
+    pending = await _exchange(request, service, code, state)
+
+    response = RedirectResponse(
+        url=request.app.state.settings.frontend_origin,
+        status_code=status.HTTP_302_FOUND,
+    )
+    write_session_cookie(response, request, pending.session_id, max_age=SESSION_MAX_AGE)
+    clear_oauth_cookie(response, request)
+    return response
+
+
 @router.post("/callback", summary="OAuth callback (development redirect URI)")
 async def callback_post(
     request: Request,
