@@ -154,8 +154,10 @@ el backend en Render.
 | BD (Neon, proyecto `MigMusic`) | schema auto-creado en el arranque | ✅ conectada |
 
 Pendiente (acciones del usuario): `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder),
-registrar la Redirect URI en Spotify Dashboard, conectar GitHub en Vercel
-(*Settings → Git*) para auto-deploy, y UptimeRobot.
+registrar la Redirect URI en Spotify Dashboard, y UptimeRobot.
+El auto-deploy de Vercel está activo (proyecto con *Root Directory* `frontend`); el de
+Render se dispara con `render deploys create` mientras no llegue el webhook de la App de
+GitHub.
 
 ### 1. Backend en Render
 

@@ -96,7 +96,8 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
 6. **Despliegue ejecutado, configuración parcial de Spotify pendiente**: el despliegue real se hizo
-   el 2026-09-30 (Vercel `migmusic`, Render `migmusic-api`, Neon `MigMusic`; health, proxy
-   y CORS verificados). Quedan acciones del usuario: `SPOTIFY_CLIENT_SECRET` real en Render
-   (hoy placeholder), registrar la Redirect URI en Spotify Dashboard y conectar GitHub en
-   Vercel para auto-deploy; hasta entonces OAuth no es utilizable en producción.
+   el 2026-09-30 (Vercel `migmusic` con Root Directory `frontend`, Render `migmusic-api`,
+   Neon `MigMusic`; health, proxy y CORS verificados; auto-deploy de Vercel activo).
+   Quedan acciones del usuario: `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder),
+   registrar la Redirect URI en Spotify Dashboard y el webhook de Render en GitHub;
+   hasta entonces OAuth no es utilizable en producción.
