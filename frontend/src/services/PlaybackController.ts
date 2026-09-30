@@ -144,6 +144,17 @@ export class PlaybackController {
     return this.send(() => this.api.setModes({ shuffle: !current.shuffle }));
   }
 
+  /** Stop playback and clear the playback state (e.g., when playlist is deleted). */
+  async stop(): Promise<void> {
+    this.detachPlayer();
+    usePlaybackStore.getState().setPlayback(null);
+    try {
+      await this.api.report(undefined, false);
+    } catch {
+      // Ignore reporting errors when stopping
+    }
+  }
+
   /** Load the actual audio file for a local track. */
   async loadLocalTrack(song: Song): Promise<void> {
     if (song.source !== "local" || !song.id.startsWith("local:")) {

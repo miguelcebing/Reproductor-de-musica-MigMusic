@@ -14,15 +14,19 @@ import { translate, type Language, type MessageKey } from "../i18n/messages";
 export interface PlaylistControllerOptions {
   /** Messages are rendered in the active language (`CONS-006`). */
   readonly language: () => Language;
+  /** Optional playback controller to stop playback when playlist is deleted. */
+  readonly playbackController?: { stop(): Promise<void> } | undefined;
 }
 
 export class PlaylistController {
   private readonly api: ApiClient;
   private readonly language: () => Language;
+  private readonly playbackController: { stop(): Promise<void> } | undefined;
 
   constructor(api: ApiClient, options: PlaylistControllerOptions) {
     this.api = api;
     this.language = options.language;
+    this.playbackController = options.playbackController;
   }
 
   async refresh(): Promise<readonly Playlist[] | null> {
@@ -69,9 +73,14 @@ export class PlaylistController {
 
   async remove(id: string): Promise<boolean> {
     try {
+      const activeId = usePlaylistStore.getState().activeId;
+      const wasActive = activeId === id;
       await this.api.deletePlaylist(id);
       usePlaylistStore.getState().dropPlaylist(id);
       this.toast("success", "toast.deleted");
+      if (wasActive && this.playbackController) {
+        await this.playbackController.stop();
+      }
       return true;
     } catch (cause) {
       this.fail(cause, "toast.error");

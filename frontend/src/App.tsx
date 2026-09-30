@@ -76,9 +76,10 @@ export function App(): React.JSX.Element {
   const controllers = useMemo(() => {
     const api = ApiClient.fromOrigin(window.location.origin);
     const lang = () => useSettingsStore.getState().language;
+    const playback = new PlaybackController(api, { language: lang });
     return {
-      playlists: new PlaylistController(api, { language: lang }),
-      playback: new PlaybackController(api, { language: lang }),
+      playlists: new PlaylistController(api, { language: lang, playbackController: playback }),
+      playback,
       auth: new AuthController(api, { language: lang }),
       spotify: new SpotifyController(api, { language: lang }),
     };
