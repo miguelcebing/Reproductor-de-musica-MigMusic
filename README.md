@@ -183,7 +183,18 @@ detecta `render.yaml` en la raíz y crea el servicio con las variables no secret
    Dashboard **y** las variables de entorno del proyecto.
 4. Despliega. Verifica que `/api/health` responde desde `https://migmusic.vercel.app/api/health`.
 
-### 3. Cold start
+### 3. Verificación desde CLI
+
+```bash
+# Últimos deploys de Render (estado live / build_failed)
+render deploys list srv-dau8psugekts73del56g
+
+# Salud del backend y del proxy de un solo origen
+curl https://migmusic-api.onrender.com/api/health
+curl https://migmusic.vercel.app/api/health
+```
+
+### 4. Cold start
 
 Render apaga el servicio en planes gratuitos. Un *ping* de
 [UptimeRobot](https://uptimerobot.com/) cada 5 minutos a `/api/health` evita la primera
