@@ -40,7 +40,7 @@ export function PlayerControls({
   const t = useT();
 
   return (
-    <div className={styles.controls} role="group" aria-label={t("player.play")}>
+    <div className={styles.controls} role="group" aria-label={t("player.controls")}>
       <IconButton
         label={t("player.shuffle")}
         onClick={onToggleShuffle}

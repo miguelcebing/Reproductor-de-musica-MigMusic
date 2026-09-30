@@ -1574,6 +1574,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F6-SCOPES | Scopes: streaming, user-read-*, user-modify-playback-state, playlist-read-private, user-library-read | SPOTIFY-006 opción C; mínima privilegio |
 | 2026-09-28 | F7-GATE | PlaybackController reescrito: seek/skip audibles, fin de pista con repeat, cambio local<->Spotify sin doble audio, volumen en vivo y vista didáctica animada | RF-12, PLAYER-001..004/007/011, UX-002; backend: ruff/mypy/262 tests/97%; frontend: lint/typecheck/58 tests/build OK |
 | 2026-09-29 | F8-GATE | Favoritos (flag en Song + endpoint idempotente), búsqueda con find en la lista (Enter resalta el primer match), repeat verificado y reordenar con drag & drop | FEAT-001-b/c/d/e, PLAYLIST-005/008; backend: ruff/mypy/284 tests/97%; frontend: lint/typecheck/69 tests/build OK |
+| 2026-09-29 | F9-GATE | Pulido: contraste AA con tokens *-text por tema, focus trap + aria-current + group label, tema inicial prefers-color-scheme, code-splitting de music-metadata (main 406→288 kB), cursor grab, touch targets 44px | RNF-06, RNF-10, VIS-006/012, F4-RESPONSIVE, SKILL5; frontend: lint/typecheck/69 tests/build OK |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1593,6 +1594,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] F6: OAuth PKCE + sesión, catálogo Spotify (búsqueda/playlists/guardadas), SpotifyPlayer con Web Playback SDK, errores manejados
 - [x] F7: Integración - seek/skip/cambio de fuente/fin de pista sincronizados entre backend, players y UI; lista didáctica animada
 - [x] F8: Favoritos con corazón, búsqueda en la lista con find (Enter resalta el primer match), filtro de solo favoritas, repeat verificado y reordenar con drag & drop
+- [x] F9: Pulido - contraste AA (tokens de texto por tema), accesibilidad (focus trap en diálogo, aria-current, group label, 44px), prefers-color-scheme, reduced-motion, responsive 4 breakpoints y code-splitting de metadata
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

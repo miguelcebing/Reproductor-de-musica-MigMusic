@@ -65,8 +65,8 @@
 
 .toastClose {
   margin-left: auto;
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;

@@ -169,7 +169,7 @@
 }
 
 .iconButtonActive {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   border-color: var(--color-primary);
   background: var(--color-surface-raised);
 }

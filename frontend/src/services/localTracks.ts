@@ -2,7 +2,6 @@
 
 import type { SongInput } from "../domain/types";
 import { localFileUrls } from "./localFileUrls";
-import { extractMetadata, artworkToObjectUrl } from "./metadata";
 
 function uuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -13,6 +12,9 @@ function uuid(): string {
 
 /** Build the payload posted for one picked audio file, extracting metadata. */
 export async function localSongFromFile(file: File): Promise<SongInput> {
+  // `music-metadata` is heavy and only needed after the user picks files:
+  // load it on demand so it stays out of the initial bundle (F9 perf).
+  const { extractMetadata, artworkToObjectUrl } = await import("./metadata");
   const metadata = await extractMetadata(file);
   const trackId = `local:${uuid()}`;
 

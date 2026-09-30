@@ -46,6 +46,18 @@ function writeStored(settings: StoredSettings): void {
 
 const stored = readStored();
 
+/** First visit: follow the OS preference; stored choice always wins (VIS-002). */
+function detectTheme(): Theme {
+  try {
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+  } catch {
+    // MatchMedia unavailable: fall through to the dark default.
+  }
+  return "dark";
+}
+
 /** Mirror the preferences onto `<html>` so CSS variables can react. */
 export function applyDocumentSettings(theme: Theme, language: Language): void {
   if (typeof document === "undefined") return;
@@ -54,7 +66,8 @@ export function applyDocumentSettings(theme: Theme, language: Language): void {
 }
 
 export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
-  theme: stored.theme === "light" ? "light" : "dark",
+  theme:
+    stored.theme === "light" || stored.theme === "dark" ? stored.theme : detectTheme(),
   language: stored.language === "en" ? "en" : "es",
   volume: typeof stored.volume === "number" ? clamp(stored.volume) : 0.8,
   muted: stored.muted === true,

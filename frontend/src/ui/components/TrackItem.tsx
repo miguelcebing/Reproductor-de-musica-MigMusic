@@ -64,6 +64,7 @@ export function TrackItem({
       data-index={index}
       data-active={isActive}
       data-match={isMatch}
+      aria-current={isActive ? "true" : undefined}
       draggable
       onDragStart={drag.onDragStart}
       onDragOver={drag.onDragOver}

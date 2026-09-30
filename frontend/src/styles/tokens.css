@@ -20,6 +20,10 @@
   --color-warning: #f5b544;
   --color-danger: #ef5f6b;
 
+  /* Text companions (F9): same hues, AA contrast when used as foreground. */
+  --color-primary-text: #5b93ff;
+  --color-danger-text: #ef5f6b;
+
   /* Typography */
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
@@ -71,6 +75,9 @@
 
   --color-text: #131a2c;
   --color-text-muted: #5a6684;
+
+  --color-primary-text: #3730a3;
+  --color-danger-text: #c0273a;
 
   --shadow-sm: 0 1px 2px rgb(19 26 44 / 10%);
   --shadow-md: 0 6px 20px rgb(19 26 44 / 14%);
