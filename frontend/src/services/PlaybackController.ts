@@ -40,7 +40,7 @@ export class PlaybackController {
   private attachSeq = 0;
   private unsubscribeEnded: (() => void) | null = null;
   private unsubscribeTimeUpdate: (() => void) | null = null;
-  private reportTimer: number | null = null;
+  private reportTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(api: ApiClient, options: PlaybackControllerOptions) {
     this.api = api;

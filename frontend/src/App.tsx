@@ -119,7 +119,7 @@ export function App(): React.JSX.Element {
       : null;
   const songs = activePlaylist?.songs ?? [];
   const skipSeconds = playback?.skip_seconds ?? 5;
-  const hasTrack = playback?.song !== null;
+  const hasTrack = playback?.song != null;
   const duration = playback?.song?.duration ?? 0;
   const progressLabel = t("player.time", {
     current: Math.round(playback?.position ?? 0),

@@ -126,7 +126,8 @@ migmusic/
 ├── docs/
 │   ├── architecture.md               # diagramas y decisiones (ADR)
 │   ├── adr/                          # Architecture Decision Records (uno por decisión)
-│   └── api.md
+│   ├── api.md
+│   └── testing.md                    # estrategia de pruebas + reporte criterio → evidencia (F11)
 ├── skills/                           # skills para el agente (entregadas junto a este archivo)
 ├── backend/                          # 100 % Python
 │   ├── pyproject.toml
@@ -1429,31 +1430,31 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] La playlist activa usa la lista (no un array) y el agente puede explicar cómo.
 
 **Reproductor**
-- [ ] Play, Pause, Next, Previous, Seek, Volume, Mute funcionan con audio real.
-- [ ] Skip forward y skip backward mueven exactamente N segundos configurados (`PLAYER-001/002`) sin salirse de los límites de la pista.
-- [ ] Agregar (inicio/final/posición), eliminar y seleccionar canción funcionan desde la UI.
+- [x] Play, Pause, Next, Previous, Seek, Volume, Mute funcionan con audio real. (E2E `master-flow`, desktop + móvil, con WAV real)
+- [x] Skip forward y skip backward mueven exactamente N segundos configurados (`PLAYER-001/002`) sin salirse de los límites de la pista. (E2E + unit tests de `PlaybackService`/clamp)
+- [x] Agregar (inicio/final/posición), eliminar y seleccionar canción funcionan desde la UI. (E2E: 3 pistas, insert en índice 1, quitar la activa)
 
 **Fuentes**
-- [ ] Música local: File Picker, reproducir/pausar/seek/cambiar/eliminar.
-- [ ] Spotify: login OAuth completo, refresh de token, reproducción con Web Playback SDK (con cuenta Premium), errores manejados.
-- [ ] Spotify y local se tratan como fuentes separadas y polimórficas.
+- [x] Música local: File Picker, reproducir/pausar/seek/cambiar/eliminar. (E2E con `setInputFiles`)
+- [ ] Spotify: login OAuth completo, refresh de token, reproducción con Web Playback SDK (con cuenta Premium), errores manejados. *(pendiente de cuenta Premium + demo manual; código y dobles probados)*
+- [x] Spotify y local se tratan como fuentes separadas y polimórficas. (`AudioSource` en F5, unit tests de `SpotifyPlayer`/`LocalAudioPlayer`)
 
 **Arquitectura y código**
-- [ ] Estructura por capas visible y respetada (sin lógica en rutas/componentes).
-- [ ] POO: abstracciones (ABC/interfaces), polimorfismo, inyección de dependencias, SOLID justificable.
-- [ ] Backend 100 % Python. Código en inglés.
+- [x] Estructura por capas visible y respetada (sin lógica en rutas/componentes).
+- [x] POO: abstracciones (ABC/interfaces), polimorfismo, inyección de dependencias, SOLID justificable. (`create_app` + repositorios/polimorfismo de reproducción, ADR-001/005)
+- [x] Backend 100 % Python. Código en inglés.
 - [x] Sin secretos en repositorio ni en frontend; `.env.example` presente.
 
 **Interfaz**
-- [ ] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado.
-- [ ] Responsive verificado en mobile, tablet, laptop y desktop.
-- [ ] Accesibilidad básica cumplida (teclado, foco, ARIA, contraste).
+- [x] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado. (`tokens.css`, F9-GATE)
+- [x] Responsive verificado en mobile, tablet, laptop y desktop. (breakpoints 640/1024/1440 + E2E en Pixel 7)
+- [x] Accesibilidad básica cumplida (teclado, foco, ARIA, contraste). (axe WCAG 2.1 A/AA sin violaciones + focus-trap en E2E)
 
 **Calidad y despliegue**
-- [ ] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`.
-- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción.
-- [ ] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas.
-- [ ] Documentación (README, docs/architecture, ADRs) actualizada.
+- [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (292 pytest/96.96 %/dominio 100 %, 69 Vitest, 7 E2E; ver `docs/testing.md`)
+- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(lo ejecuta el usuario con la checklist de F10)*
+- [x] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas. (`FEAT-001-b/c/d/e`: favoritos, búsqueda, repeat, drag & drop)
+- [x] Documentación (README, docs/architecture, ADRs) actualizada.
 
 ---
 
@@ -1577,6 +1578,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-29 | F8-GATE | Favoritos (flag en Song + endpoint idempotente), búsqueda con find en la lista (Enter resalta el primer match), repeat verificado y reordenar con drag & drop | FEAT-001-b/c/d/e, PLAYLIST-005/008; backend: ruff/mypy/284 tests/97%; frontend: lint/typecheck/69 tests/build OK |
 | 2026-09-29 | F9-GATE | Pulido: contraste AA con tokens *-text por tema, focus trap + aria-current + group label, tema inicial prefers-color-scheme, code-splitting de music-metadata (main 406→288 kB), cursor grab, touch targets 44px | RNF-06, RNF-10, VIS-006/012, F4-RESPONSIVE, SKILL5; frontend: lint/typecheck/69 tests/build OK |
 | 2026-09-29 | F10-GATE | Despliegue: SqlPlaylistRepository (psycopg, upsert+rewrite en transacción, prev_id/next_id + position), render.yaml (blueprint), vercel.json (rewrite /api/* + x-vercel-enable-rewrite-caching: 0), ADR-006 verificación de plataforma | DB-001/002/003/004, DEPLOY-001..005, ADR-003/004/006; backend: ruff/mypy/292 tests/96.96%/dominio 100% |
+| 2026-09-29 | F11-GATE | Cierre: suite E2E Playwright (smoke, flujo maestro en desktop + móvil, accesibilidad axe WCAG 2.1 A/AA), fix del crash de arranque detectado por E2E (`hasTrack` con `playback: null`), job `e2e` en CI, `docs/testing.md` (reporte criterio → evidencia → estado) | TEST-001/002/003/004 y SKILL6; backend: 292 tests/96.96%/dominio 100%; frontend: lint/tsc/69 tests/7 E2E/build; axe: 0 violaciones |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1598,6 +1600,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] F8: Favoritos con corazón, búsqueda en la lista con find (Enter resalta el primer match), filtro de solo favoritas, repeat verificado y reordenar con drag & drop
 - [x] F9: Pulido - contraste AA (tokens de texto por tema), accesibilidad (focus trap en diálogo, aria-current, group label, 44px), prefers-color-scheme, reduced-motion, responsive 4 breakpoints y code-splitting de metadata
 - [x] F10: Adaptador SQL (Neon) + tests de contrato, render.yaml (blueprint), vercel.json (proxy de un solo origen), ADR-006 (plataformas verificadas) y docs de despliegue actualizadas — el despliegue real en las cuentas (Vercel/Render/Neon/Spotify) lo ejecuta el usuario con la checklist entregada
+- [x] F11: Suite E2E Playwright (flujo maestro desktop + móvil, smoke y accesibilidad axe A/AA), fix del bug de arranque que encontró el E2E, job `e2e` en CI, criterios de aceptación actualizados con evidencia y reporte final en `docs/testing.md` — quedan como acción manual del usuario el despliegue en la nube y la demo con cuenta Spotify Premium
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

@@ -124,8 +124,13 @@ uv run pytest          # incluye los tests SQL (PostgreSQL embebido vía pgserve
 cd frontend
 npm run lint
 npm run test
-npx playwright test
+npm run test:e2e       # Playwright (desktop + móvil + axe); arranca vite y uvicorn solo
 ```
+
+> La suite E2E necesita el navegador una sola vez: `npx playwright install chromium`.
+> No requiere `.env`: el backend de pruebas arranca con valores herméticos y repositorio
+> in-memory (nunca toca la base de datos real).
+> Estrategia, umbrales y reporte criterio → evidencia: [`docs/testing.md`](docs/testing.md).
 
 > Los tests del adaptador SQL (`tests/integration/test_sql_playlist_repository.py`)
 > arrancan un PostgreSQL embebido con `pgserver` (dev dependency, sin Docker). Define
@@ -191,7 +196,8 @@ migmusic/
 ├── docs/
 │   ├── architecture.md # capas + diagramas Mermaid (clases, secuencia, ER)
 │   ├── adr/            # Architecture Decision Records
-│   └── api.md
+│   ├── api.md
+│   └── testing.md      # estrategia de pruebas + reporte criterio → evidencia
 ├── backend/            # 100 % Python
 │   ├── pyproject.toml  # uv · ruff · mypy estricto · pytest
 │   ├── src/migmusic/
@@ -199,6 +205,7 @@ migmusic/
 ├── frontend/           # React + Vite + TypeScript
 │   ├── package.json
 │   ├── vercel.json     # rewrite /api/* → Render (un solo origen)
+│   ├── e2e/            # Playwright: smoke, flujo maestro, accesibilidad (axe)
 │   └── src/
 └── render.yaml         # blueprint de Render: Web Service + variables
 ```

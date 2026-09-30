@@ -39,3 +39,7 @@ temp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Playwright (E2E) ---
+test-results/
+playwright-report/
