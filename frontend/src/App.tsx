@@ -96,11 +96,20 @@ export function App(): React.JSX.Element {
     void controllers.auth.refresh();
   }, [controllers]);
 
-  // Wire audio player when the active track changes (F5)
+  // Wire the player when the active track moves (F5/F7). Position ticks only
+  // change `position`, so they re-render but never reload the audio; the song
+  // identity (playlist + index + id) is what decides a reload.
+  const songId = playback?.song?.id ?? null;
+  const songIndex = playback?.index ?? null;
+  const playlistId = playback?.playlist_id ?? null;
   useEffect(() => {
-    const song = playback?.song ?? null;
-    void controllers.playback.onTrackChange(song);
-  }, [controllers, playback?.song?.id]);
+    const current = usePlaybackStore.getState().playback;
+    const unchanged =
+      (current?.song?.id ?? null) === songId &&
+      (current?.index ?? null) === songIndex &&
+      (current?.playlist_id ?? null) === playlistId;
+    if (unchanged) void controllers.playback.onTrackChange(current?.song ?? null);
+  }, [controllers, songId, songIndex, playlistId]);
 
   // Derived state
   const activePlaylist = playlists.find((p) => p.id === activeId) ?? null;

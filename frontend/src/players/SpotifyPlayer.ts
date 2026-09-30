@@ -22,6 +22,8 @@ export interface SpotifyPlayerOptions {
 const START_TIMEOUT_MS = 5_000;
 const POLL_INTERVAL_MS = 1_000;
 const START_POLL_MS = 250;
+/** A track is "finished" when it sits paused this close to its duration. */
+const END_EPSILON_SECONDS = 0.5;
 
 /** Normalise a raw Spotify id or a URI onto the `spotify:track:` form. */
 function toTrackUri(source: string): string {
@@ -41,6 +43,8 @@ export class SpotifyPlayer implements AudioPlayer {
   private _volume = 1;
   private _muted = false;
   private destroyed = false;
+  private pendingPause: Promise<void> | null = null;
+  private endedEmitted = false;
 
   constructor(options: SpotifyPlayerOptions) {
     this.control = options.control;
@@ -83,6 +87,7 @@ export class SpotifyPlayer implements AudioPlayer {
    */
   async load(source: string, options?: { startTime?: number }): Promise<void> {
     this.destroyed = false;
+    this.endedEmitted = false;
     this._source = toTrackUri(source);
     await this.session.ensureConnected();
     this.subscribe();
@@ -93,11 +98,17 @@ export class SpotifyPlayer implements AudioPlayer {
   }
 
   async play(): Promise<void> {
+    // A pause may still be in flight (fire-and-forget in `pause()`); resume
+    // only after it lands so the last command wins.
+    if (this.pendingPause) {
+      await this.pendingPause;
+      this.pendingPause = null;
+    }
     await this.session.resume();
   }
 
   pause(): void {
-    void this.session.pause().catch((cause: unknown) => this.notifyError(cause));
+    this.pendingPause = this.session.pause().catch((cause: unknown) => this.notifyError(cause));
   }
 
   async seek(time: number): Promise<void> {
@@ -195,16 +206,38 @@ export class SpotifyPlayer implements AudioPlayer {
     this.stateSeenAt = Date.now();
 
     if (previous && state && previous.uri !== state.uri && previous.uri === this._source) {
-      this.emit("ended");
+      this.emitEnded();
     } else if (previous && !state && previous.uri === this._source) {
-      this.emit("ended");
+      this.emitEnded();
+    } else if (state && this.reachedEnd(state)) {
+      // The SDK reports a finished track as "paused at the end"; without this
+      // branch the queue would never advance (`PLAYER-003`).
+      this.emitEnded();
     } else if (previous && state && previous.paused !== state.paused) {
       this.emit(state.paused ? "pause" : "play");
     }
 
-    if (state && state.uri === this._source) {
+    // Only emit while actually playing: a paused ticker would keep telling the
+    // controller `playing: true` and un-pause the UI every second.
+    if (state && state.uri === this._source && !state.paused) {
       this.emit("timeupdate", { currentTime: this.currentTime });
     }
+  }
+
+  private reachedEnd(state: SpotifySdkState): boolean {
+    return (
+      state.uri === this._source &&
+      state.paused &&
+      state.duration > 0 &&
+      state.position >= state.duration - END_EPSILON_SECONDS
+    );
+  }
+
+  /** Fire `ended` at most once per loaded track (polls would repeat it). */
+  private emitEnded(): void {
+    if (this.endedEmitted) return;
+    this.endedEmitted = true;
+    this.emit("ended");
   }
 
   private notifyError(cause: unknown): void {

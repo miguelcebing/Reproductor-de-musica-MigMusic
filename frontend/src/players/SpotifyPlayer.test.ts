@@ -204,6 +204,67 @@ describe("SpotifyPlayer", () => {
     expect(ended).toBe(0);
   });
 
+  it("emits ended exactly once when the SDK parks the track at its end", async () => {
+    const { player, session } = makePlayer();
+    let ended = 0;
+    player.on("ended", () => {
+      ended += 1;
+    });
+    await player.load("spotify:track:a");
+
+    session.push(playingState("spotify:track:a", { paused: true, position: 199.8 }));
+    expect(ended).toBe(1);
+    expect(player.isPlaying).toBe(false);
+
+    // Later polls at the tail must not re-fire (the queue already advanced).
+    session.push(playingState("spotify:track:a", { paused: true, position: 200 }));
+    expect(ended).toBe(1);
+    player.destroy();
+  });
+
+  it("stops emitting timeupdate while the track is paused", async () => {
+    const { player, session } = makePlayer();
+    let updates = 0;
+    player.on("timeupdate", () => {
+      updates += 1;
+    });
+    await player.load("spotify:track:a");
+    const afterLoad = updates;
+    expect(afterLoad).toBeGreaterThan(0);
+
+    session.push(playingState("spotify:track:a", { paused: true, position: 50 }));
+    expect(updates).toBe(afterLoad); // a paused ticker would fake the UI into "playing"
+
+    session.push(playingState("spotify:track:a", { paused: false, position: 51 }));
+    expect(updates).toBe(afterLoad + 1);
+    player.destroy();
+  });
+
+  it("waits for an in-flight pause before resuming", async () => {
+    const { player, session } = makePlayer();
+    await player.load("spotify:track:a");
+
+    let resumePause: (() => void) | undefined;
+    const pauseGate = new Promise<void>((resolve) => {
+      resumePause = resolve;
+    });
+    session.pause = (): Promise<void> =>
+      pauseGate.then(() => {
+        session.push({ ...session.state!, paused: true });
+      });
+
+    player.pause();
+    const playing = player.play();
+    await Promise.resolve();
+    expect(session.resumed).toBe(0); // resume is queued behind the pause
+
+    resumePause!();
+    await playing;
+    expect(session.resumed).toBe(1);
+    expect(session.state?.paused).toBe(false); // pause then resume: last command wins
+    player.destroy();
+  });
+
   it("gives up when the SDK never reports the track", async () => {
     vi.useFakeTimers({
       toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "Date"],

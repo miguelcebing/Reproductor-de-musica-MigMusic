@@ -1572,6 +1572,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F6-GATE | OAuth PKCE + sesión HttpOnly + proxy Web API + SpotifyPlayer (Web Playback SDK) | SPOTIFY-001/002/003/005/006/007/008, F6-STATE, F6-SCOPES, ADR-005; backend: ruff/mypy/262 tests; frontend: typecheck/lint/40 tests/build OK |
 | 2026-09-28 | F6-STATE | Sesión Spotify con cookie HttpOnly + refresh automático en backend | SPOTIFY-007; token en backend, nunca en frontend |
 | 2026-09-28 | F6-SCOPES | Scopes: streaming, user-read-*, user-modify-playback-state, playlist-read-private, user-library-read | SPOTIFY-006 opción C; mínima privilegio |
+| 2026-09-28 | F7-GATE | PlaybackController reescrito: seek/skip audibles, fin de pista con repeat, cambio local<->Spotify sin doble audio, volumen en vivo y vista didáctica animada | RF-12, PLAYER-001..004/007/011, UX-002; backend: ruff/mypy/262 tests/97%; frontend: lint/typecheck/58 tests/build OK |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1589,6 +1590,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] F4: Layout, design tokens, componentes, API client, controladores
 - [x] F5: AudioPlayer, LocalAudioPlayer, metadata ID3, IndexedDB, persistencia local
 - [x] F6: OAuth PKCE + sesión, catálogo Spotify (búsqueda/playlists/guardadas), SpotifyPlayer con Web Playback SDK, errores manejados
+- [x] F7: Integración - seek/skip/cambio de fuente/fin de pista sincronizados entre backend, players y UI; lista didáctica animada
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

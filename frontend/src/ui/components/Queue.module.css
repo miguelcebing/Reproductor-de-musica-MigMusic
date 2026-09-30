@@ -290,6 +290,9 @@
   font-size: var(--font-size-xs);
   background: var(--color-surface-raised);
   animation: mm-fade-in var(--motion-base) var(--ease-out);
+  transition:
+    border-color var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out);
 }
 
 .nodeCurrent {
@@ -300,6 +303,9 @@
 .nodeArrow {
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+  /* Nodes are keyed by id+index, so a re-link (insert/remove) remounts the
+     pair and replays the entrance: the arrows visibly relink (`UX-002`). */
+  animation: mm-fade-in var(--motion-fast) var(--ease-out);
 }
 
 .nodeHead,
