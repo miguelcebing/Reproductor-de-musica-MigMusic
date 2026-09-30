@@ -198,7 +198,8 @@ curl https://migmusic.vercel.app/api/health
 
 Render apaga el servicio en planes gratuitos. Un *ping* de
 [UptimeRobot](https://uptimerobot.com/) cada 5 minutos a `/api/health` evita la primera
-petición lenta.
+petición lenta. Configuración usada: monitor **HTTP(s)**, nombre `MigMusic API`,
+URL `https://migmusic-api.onrender.com/api/health`, intervalo **5 min**.
 
 ### Rollback
 
