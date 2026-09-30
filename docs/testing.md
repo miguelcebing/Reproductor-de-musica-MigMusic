@@ -68,7 +68,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 | Responsive mobile/tablet/laptop/desktop | Breakpoints 640/1024/1440 (F4) + E2E en Pixel 7 | ✅ |
 | Accesibilidad (teclado, foco, ARIA, contraste) | E2E `a11y.spec.ts`: axe sin violaciones + focus-trap verificado (25 Tab) | ✅ |
 | Pruebas pasando con cobertura `TEST-002` | Tabla §3 | ✅ |
-| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | Checklist F10; ejecución en cuentas del usuario | ⏳ |
+| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-09-30: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200, proxy `/api/health` 200, CORS preflight 200 con ACAO correcto, Neon conectado, auto-deploy Render `trigger=commit`). Falta acción del usuario: secret real de Spotify + redirect URI en Spotify Dashboard | ⚠️ |
 | ≥2 funcionalidades adicionales aprobadas e implementadas | `FEAT-001-b/c/d/e` (favoritos, búsqueda, repeat, drag & drop) — 4 de 2 | ✅ |
 | Documentación actualizada | README, `docs/architecture.md`, `docs/api.md`, ADR-001..006, este documento | ✅ |
 
@@ -95,5 +95,8 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
-6. **Despliegue real pendiente**: el criterio "Desplegado en la nube" sigue abierto hasta
-   que el usuario ejecute la checklist de F10 (Vercel/Render/Neon/Spotify).
+6. **Despliegue ejecutado, configuración parcial de Spotify pendiente**: el despliegue real se hizo
+   el 2026-09-30 (Vercel `migmusic`, Render `migmusic-api`, Neon `MigMusic`; health, proxy
+   y CORS verificados). Quedan acciones del usuario: `SPOTIFY_CLIENT_SECRET` real en Render
+   (hoy placeholder), registrar la Redirect URI en Spotify Dashboard y conectar GitHub en
+   Vercel para auto-deploy; hasta entonces OAuth no es utilizable en producción.

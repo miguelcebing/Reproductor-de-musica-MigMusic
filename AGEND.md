@@ -1452,7 +1452,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 
 **Calidad y despliegue**
 - [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (292 pytest/96.96 %/dominio 100 %, 69 Vitest, 7 E2E; ver `docs/testing.md`)
-- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(lo ejecuta el usuario con la checklist de F10)*
+- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(desplegado 2026-09-30: `https://migmusic.vercel.app` → proxy `/api/*` → `https://migmusic-api.onrender.com` (health 200, CORS preflight 200 con ACAO `https://migmusic.vercel.app`, Neon conectado, auto-deploy Render por commit). Queda: `SPOTIFY_CLIENT_SECRET` real en Render (placeholder), Redirect URI en Spotify Dashboard y conexión GitHub en Vercel)*
 - [x] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas. (`FEAT-001-b/c/d/e`: favoritos, búsqueda, repeat, drag & drop)
 - [x] Documentación (README, docs/architecture, ADRs) actualizada.
 

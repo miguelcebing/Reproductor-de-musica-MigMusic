@@ -43,3 +43,9 @@ desktop.ini
 # --- Playwright (E2E) ---
 test-results/
 playwright-report/
+
+# Local deployment credentials (never commit)
+deploy/
+
+# neonctl local context (may hold session tokens)
+.neon/
