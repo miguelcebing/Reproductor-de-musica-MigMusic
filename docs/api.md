@@ -24,8 +24,10 @@
 - `request_id` is echoed from the `X-Request-ID` header when present, so logs
   on Render can be correlated with a browser request.
 - Routers never `try/except`: domain exceptions are mapped once, centrally.
-- State lives in memory for now (`InMemoryPlaylistRepository`); the SQL adapter
-  arrives in F10 behind the same `PlaylistRepository` port.
+- State is persisted by whichever adapter `DATABASE_URL` selects:
+  `SqlPlaylistRepository` (PostgreSQL, `DB-002`) in production, or
+  `InMemoryPlaylistRepository` in development and tests — both behind the same
+  `PlaylistRepository` port.
 
 ## Endpoints
 

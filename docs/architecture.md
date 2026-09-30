@@ -194,24 +194,37 @@ sequenceDiagram
 ## 5. Persistence model
 
 `DB-003 = B`: the linked order is stored as neighbour pointers, and the list is
-reconstructed on load.
+reconstructed on load. `SqlPlaylistRepository` (infrastructure, no ORM) writes
+and reads the shape below; `DATABASE_URL` selects it over the in-memory
+adapter at composition time (`main.py`).
 
 ```mermaid
 erDiagram
     PLAYLIST ||--o{ TRACK : contains
+    PLAYLIST {
+        text id PK "uuid"
+        text name
+        bigserial created_seq "insertion order for list_all"
+    }
     TRACK {
-        uuid id PK
-        uuid playlist_id FK
-        uuid prev_id FK "nullable - head"
-        uuid next_id FK "nullable - tail"
-        string song_id
-        int position "rebuild fallback / ordering"
+        text playlist_id FK
+        int position PK "1..n dense ordering (rebuild fallback)"
+        text song_id "domain id: local:<uuid> or spotify track id"
+        text prev_id "nullable - head"
+        text next_id "nullable - tail"
+        text title
+        text artist
+        text source "local | spotify"
+        float duration
+        bool favorite
     }
 ```
 
 `prev_id`/`next_id` are **nullable**: the head has `prev_id = NULL` and the tail
 has `next_id = NULL`, which is exactly the stop-at-the-edges behaviour required
-by `PLAYLIST-009 = A` (no circular list).
+by `PLAYLIST-009 = A` (no circular list). On load the rows are read ordered by
+`position` and the `DoublyLinkedList` links are re-created by the `Playlist`
+constructor; the cursor resets to the head (`ADR-004`).
 
 ## 6. Key decisions
 
@@ -221,6 +234,8 @@ by `PLAYLIST-009 = A` (no circular list).
 | Hexagonal layers + dependency injection | [ADR-002](adr/ADR-002-hexagonal-layered-architecture.md) |
 | Single origin through a Vercel rewrite proxy | [ADR-003](adr/ADR-003-single-origin-deployment.md) |
 | Playlist order persisted as `prev_id`/`next_id` | [ADR-004](adr/ADR-004-playlist-persistence.md) |
+| Spotify OAuth: PKCE + HttpOnly session | [ADR-005](adr/ADR-005-spotify-oauth-playback.md) |
+| Free-tier platforms verified (Vercel · Render · Neon) | [ADR-006](adr/ADR-006-free-tier-platform-verification.md) |
 
 ## 7. Design patterns in use
 

@@ -22,7 +22,11 @@ from migmusic.api.routers import auth, health, playback, playlists, spotify
 from migmusic.application.services import PlaybackService, PlaylistService
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
-from migmusic.infrastructure.persistence import InMemoryPlaylistRepository
+from migmusic.domain.ports.playlist_repository import PlaylistRepository
+from migmusic.infrastructure.persistence import (
+    InMemoryPlaylistRepository,
+    SqlPlaylistRepository,
+)
 from migmusic.infrastructure.security.session_token_store import InMemoryTokenStore
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
 from migmusic.infrastructure.spotify.spotify_music_provider import SpotifyMusicProvider
@@ -67,7 +71,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.logger = logger
 
     # Composition root: the only place where adapters are instantiated.
-    repository = InMemoryPlaylistRepository()
+    # `DATABASE_URL` picks PostgreSQL (`DB-002`); without it the app keeps the
+    # in-memory adapter used by development and tests.
+    repository: PlaylistRepository
+    if config.database_url:
+        repository = SqlPlaylistRepository(config.database_url)
+        repository_adapter = "sql"
+    else:
+        repository = InMemoryPlaylistRepository()
+        repository_adapter = "in_memory"
     app.state.playlist_repository = repository
     app.state.playlist_service = PlaylistService(repository)
     app.state.playback_service = PlaybackService(repository, skip_seconds=config.skip_seconds)
@@ -93,7 +105,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     logger.info(
         "application_started",
-        extra={"app_env": config.app_env, "cors_origins": config.cors_origins},
+        extra={
+            "app_env": config.app_env,
+            "cors_origins": config.cors_origins,
+            "playlist_repository": repository_adapter,
+        },
     )
     return app
 

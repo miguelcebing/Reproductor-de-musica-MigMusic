@@ -176,6 +176,7 @@ migmusic/
 │       └── conftest.py
 ├── frontend/                         # tecnología según FRONT-001
 │   ├── package.json
+│   ├── vercel.json                   # rewrite /api/* → Render (DEPLOY-002, un solo origen)
 │   └── src/
 │       ├── domain/                   # DoublyLinkedList (espejo, si se aprueba ARCH-001), Song, tipos
 │       ├── players/                  # POO: AudioPlayer (abstracto), LocalAudioPlayer, SpotifyPlayer
@@ -187,7 +188,7 @@ migmusic/
 │       │   └── animations/
 │       ├── styles/                   # design tokens (colores, espaciado, motion)
 │       └── main.*
-└── deploy/                           # IaC / config por plataforma (según DEPLOY-001)
+└── render.yaml                       # IaC: blueprint de Render (DEPLOY-001)
 ```
 
 ### 8.3 Clases centrales (nombres de referencia)
@@ -1575,6 +1576,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-28 | F7-GATE | PlaybackController reescrito: seek/skip audibles, fin de pista con repeat, cambio local<->Spotify sin doble audio, volumen en vivo y vista didáctica animada | RF-12, PLAYER-001..004/007/011, UX-002; backend: ruff/mypy/262 tests/97%; frontend: lint/typecheck/58 tests/build OK |
 | 2026-09-29 | F8-GATE | Favoritos (flag en Song + endpoint idempotente), búsqueda con find en la lista (Enter resalta el primer match), repeat verificado y reordenar con drag & drop | FEAT-001-b/c/d/e, PLAYLIST-005/008; backend: ruff/mypy/284 tests/97%; frontend: lint/typecheck/69 tests/build OK |
 | 2026-09-29 | F9-GATE | Pulido: contraste AA con tokens *-text por tema, focus trap + aria-current + group label, tema inicial prefers-color-scheme, code-splitting de music-metadata (main 406→288 kB), cursor grab, touch targets 44px | RNF-06, RNF-10, VIS-006/012, F4-RESPONSIVE, SKILL5; frontend: lint/typecheck/69 tests/build OK |
+| 2026-09-29 | F10-GATE | Despliegue: SqlPlaylistRepository (psycopg, upsert+rewrite en transacción, prev_id/next_id + position), render.yaml (blueprint), vercel.json (rewrite /api/* + x-vercel-enable-rewrite-caching: 0), ADR-006 verificación de plataforma | DB-001/002/003/004, DEPLOY-001..005, ADR-003/004/006; backend: ruff/mypy/292 tests/96.96%/dominio 100% |
 
 ## Validación de entrega de este AGEND.md
 
@@ -1595,6 +1597,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] F7: Integración - seek/skip/cambio de fuente/fin de pista sincronizados entre backend, players y UI; lista didáctica animada
 - [x] F8: Favoritos con corazón, búsqueda en la lista con find (Enter resalta el primer match), filtro de solo favoritas, repeat verificado y reordenar con drag & drop
 - [x] F9: Pulido - contraste AA (tokens de texto por tema), accesibilidad (focus trap en diálogo, aria-current, group label, 44px), prefers-color-scheme, reduced-motion, responsive 4 breakpoints y code-splitting de metadata
+- [x] F10: Adaptador SQL (Neon) + tests de contrato, render.yaml (blueprint), vercel.json (proxy de un solo origen), ADR-006 (plataformas verificadas) y docs de despliegue actualizadas — el despliegue real en las cuentas (Vercel/Render/Neon/Spotify) lo ejecuta el usuario con la checklist entregada
 - [x] Retroceder segundos
 - [x] Diseño animado
 - [x] Responsive

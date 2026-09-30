@@ -119,13 +119,17 @@ npm run dev          # http://127.0.0.1:5173
 cd backend
 uv run ruff check .
 uv run mypy src
-uv run pytest
+uv run pytest          # incluye los tests SQL (PostgreSQL embebido vía pgserver)
 
 cd frontend
 npm run lint
 npm run test
 npx playwright test
 ```
+
+> Los tests del adaptador SQL (`tests/integration/test_sql_playlist_repository.py`)
+> arrancan un PostgreSQL embebido con `pgserver` (dev dependency, sin Docker). Define
+> `TEST_DATABASE_URL` para ejecutarlos contra tu propio servidor (p. ej. Neon).
 
 ---
 
@@ -136,16 +140,24 @@ el backend en Render.
 
 ### 1. Backend en Render
 
+**Opción A — Blueprint (recomendada):** Render → *Blueprints* → conecta el repo;
+detecta `render.yaml` en la raíz y crea el servicio con las variables no secretas.
+
+**Opción B — manual:**
+
 1. Conecta el repo de GitHub y crea un **Web Service** con root directory `backend`.
 2. Build: `uv sync --frozen` · Start: `uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT`
-3. Añade todas las variables del panel (incluido `SPOTIFY_CLIENT_SECRET`).
-4. Copia la URL generada (`https://<servicio>.onrender.com`) a `RENDER_BACKEND_URL`.
+3. Añade todas las variables del panel (incluido `SPOTIFY_CLIENT_SECRET` y `DATABASE_URL` de Neon).
+4. Copia la URL generada (`https://<servicio>.onrender.com`) a `RENDER_BACKEND_URL` **y** al
+   destino del rewrite en `frontend/vercel.json`.
 
 ### 2. Frontend en Vercel
 
 1. Importa el repo con root directory `frontend` y framework **Vite**.
-2. Añade `vercel.json` con el rewrite de `/api/*` y la cabecera
-   **`x-vercel-enable-rewrite-caching: 0`**.
+2. `frontend/vercel.json` ya trae el rewrite de `/api/*` hacia
+   `https://migmusic-api.onrender.com` con la cabecera
+   **`x-vercel-enable-rewrite-caching: 0`** (ajusta el destino si llamaste al
+   servicio de Render de otra forma).
    > Desde el 06/04/2026 Vercel cachea los *rewrites* por defecto: sin esta cabecera el
    > tráfico de `/api/*` puede quedar cacheado en el borde y servir respuestas viejas.
 3. Añade `SPOTIFY_REDIRECT_URI=https://migmusic.vercel.app/api/auth/callback` al
@@ -186,8 +198,9 @@ migmusic/
 │   └── tests/          # unit / integration / conftest.py
 ├── frontend/           # React + Vite + TypeScript
 │   ├── package.json
+│   ├── vercel.json     # rewrite /api/* → Render (un solo origen)
 │   └── src/
-└── deploy/             # config por plataforma (vercel.json, render.yaml)
+└── render.yaml         # blueprint de Render: Web Service + variables
 ```
 
 ---

@@ -1,0 +1,38 @@
+# Render blueprint: creates the MigMusic API as a Free web service.
+# Dashboard → Blueprints → point at this repo (file auto-detected at the root),
+# or follow the manual steps in README.md "Despliegue".
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: migmusic-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: FRONTEND_ORIGIN
+        value: https://migmusic.vercel.app
+      - key: ALLOWED_ORIGINS
+        value: https://migmusic.vercel.app
+      - key: SPOTIFY_REDIRECT_URI
+        value: https://migmusic.vercel.app/api/auth/callback
+      - key: RENDER_BACKEND_URL
+        value: https://migmusic-api.onrender.com
+      # Generated once by Render and kept out of the repository (DEPLOY-005).
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      # Pasted in the dashboard after connecting the accounts (never in git).
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
