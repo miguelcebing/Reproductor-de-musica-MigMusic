@@ -44,13 +44,14 @@ def write_oauth_cookie(response: Response, request: Request, payload: OauthState
     """Attach the signed short-lived OAuth cookie to ``response``."""
     raw = f"{payload.state}|{payload.code_verifier}|{payload.session_id}"
     secret = request.app.state.settings.session_secret_key.get_secret_value()
+    is_prod = _is_production(request)
     response.set_cookie(
         OAUTH_COOKIE,
         sign(raw, secret),
         max_age=OAUTH_MAX_AGE,
         httponly=True,
-        secure=_is_production(request),
-        samesite="lax",
+        secure=is_prod,
+        samesite="none" if is_prod else "lax",
         path="/",
     )
 
@@ -84,22 +85,25 @@ def write_session_cookie(
 ) -> None:
     """Attach or refresh the signed session cookie."""
     secret = request.app.state.settings.session_secret_key.get_secret_value()
+    is_prod = _is_production(request)
     response.set_cookie(
         SESSION_COOKIE,
         sign(session_id, secret),
         max_age=max_age,
         httponly=True,
-        secure=_is_production(request),
-        samesite="lax",
+        secure=is_prod,
+        samesite="none" if is_prod else "lax",
         path="/",
     )
 
 
 def clear_oauth_cookie(response: Response, request: Request) -> None:
     """Expire the short-lived OAuth cookie."""
-    response.delete_cookie(OAUTH_COOKIE, path="/", samesite="lax", secure=_is_production(request))
+    is_prod = _is_production(request)
+    response.delete_cookie(OAUTH_COOKIE, path="/", samesite="none" if is_prod else "lax", secure=is_prod)
 
 
 def clear_session_cookie(response: Response, request: Request) -> None:
     """Expire the session cookie on logout."""
-    response.delete_cookie(SESSION_COOKIE, path="/", samesite="lax", secure=_is_production(request))
+    is_prod = _is_production(request)
+    response.delete_cookie(SESSION_COOKIE, path="/", samesite="none" if is_prod else "lax", secure=is_prod)

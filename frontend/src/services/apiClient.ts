@@ -269,7 +269,7 @@ export class ApiClient {
   // --- Plumbing ------------------------------------------------------------
 
   private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const init: RequestInit = { method, headers: { accept: "application/json" } };
+    const init: RequestInit = { method, headers: { accept: "application/json" }, credentials: "include" };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
       (init.headers as Record<string, string>)["content-type"] = "application/json";

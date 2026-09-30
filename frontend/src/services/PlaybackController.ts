@@ -237,8 +237,17 @@ export class PlaybackController {
 
     try {
       await this.player.seek(state.position);
-      if (state.playing) await this.player.play();
-      else this.player.pause();
+      if (state.playing) {
+        if (this.userGesture) {
+          await this.player.play();
+        } else {
+          // Autoplay policy: stay paused, wait for user gesture
+          this.player.pause();
+          this.toast("info", "autoplayBlocked");
+        }
+      } else {
+        this.player.pause();
+      }
     } catch (cause) {
       this.fail(cause);
     }
