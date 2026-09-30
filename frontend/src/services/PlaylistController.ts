@@ -6,7 +6,7 @@
 
 import { ApiError, ApiClient } from "./apiClient";
 import { localSongFromFile } from "./localTracks";
-import type { Playlist, SongInput, TrackPosition } from "../domain/types";
+import type { Playlist, Song, SongInput, TrackPosition } from "../domain/types";
 import { usePlaylistStore } from "../state/playlistStore";
 import { useToastStore } from "../state/toastStore";
 import { translate, type Language, type MessageKey } from "../i18n/messages";
@@ -172,6 +172,52 @@ export class PlaylistController {
         this.toast("success", "toast.moved");
       },
     );
+  }
+
+  /** First index matching `text` (`FEAT-001-c`); `null` means "no matches". */
+  async findFirst(playlistId: string, text: string): Promise<number | null> {
+    if (text.trim().length === 0) return null;
+    try {
+      const found = await this.api.findSong(playlistId, text);
+      return found.index;
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) return null;
+      this.fail(cause, "toast.error");
+      return null;
+    }
+  }
+
+  /** Optimistic heart (`FEAT-001-b`); the server answer corrects the row. */
+  async setFavorite(playlistId: string, index: number, favorite: boolean): Promise<Song | null> {
+    const previous = this.patchSong(playlistId, index, (song) => ({ ...song, favorite }));
+    if (!previous) return null;
+    try {
+      const updated = await this.api.setFavorite(playlistId, index, favorite);
+      this.patchSong(playlistId, index, () => updated);
+      return updated;
+    } catch (cause) {
+      this.patchSong(playlistId, index, () => previous);
+      this.fail(cause, "toast.error");
+      return null;
+    }
+  }
+
+  /** Replace one song of a stored playlist, keeping every other reference. */
+  private patchSong(
+    playlistId: string,
+    index: number,
+    change: (song: Song) => Song,
+  ): Song | null {
+    const current = usePlaylistStore
+      .getState()
+      .playlists.find((playlist) => playlist.id === playlistId);
+    if (!current) return null;
+    const previous = current.songs[index];
+    if (!previous) return null;
+    const songs = [...current.songs];
+    songs[index] = change(previous);
+    usePlaylistStore.getState().upsertPlaylist({ ...current, songs });
+    return previous;
   }
 
   private async mutate<T>(

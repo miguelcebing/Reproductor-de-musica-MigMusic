@@ -6,9 +6,14 @@ The service owns the *rules* (load, mutate, persist) so routers stay thin and
 
 from __future__ import annotations
 
+from migmusic.core import ValidationError
 from migmusic.domain.entities.playlist import Playlist
 from migmusic.domain.entities.song import Song
-from migmusic.domain.exceptions import InvalidPositionError, PlaylistNotFoundError
+from migmusic.domain.exceptions import (
+    InvalidPositionError,
+    ItemNotFoundError,
+    PlaylistNotFoundError,
+)
 from migmusic.domain.ports.playlist_repository import PlaylistRepository
 
 
@@ -83,6 +88,31 @@ class PlaylistService:
         playlist.insert_at(to_index, song)
         self._repository.save(playlist)
         return playlist
+
+    def set_favorite(self, playlist_id: str, index: int, favorite: bool) -> Song:
+        """Persist the heart flag of one song (``FEAT-001-b``)."""
+        playlist = self.get(playlist_id)
+        song = playlist.set_favorite(index, favorite)
+        self._repository.save(playlist)
+        return song
+
+    def find_song(self, playlist_id: str, text: str) -> tuple[int, Song]:
+        """First song whose title or artist contains ``text`` (``FEAT-001-c``).
+
+        Runs ``find_by`` over the doubly linked list — O(n), first match wins,
+        and the cursor is never moved (searching must not change playback).
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            raise ValidationError("search text must not be empty")
+        playlist = self.get(playlist_id)
+        needle = cleaned.casefold()
+        index = playlist.find_by(
+            lambda song: needle in song.title.casefold() or needle in song.artist.casefold()
+        )
+        if index is None:
+            raise ItemNotFoundError(f"no song matches {cleaned!r}")
+        return index, playlist.song_at(index)
 
     # ----------------------------------------------------------- internals
 

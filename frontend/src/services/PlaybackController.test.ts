@@ -28,6 +28,7 @@ function makeSong(id: string, source: AudioSource = "local"): Song {
     artwork_url: null,
     external_url: null,
     available: true,
+    favorite: false,
   };
 }
 

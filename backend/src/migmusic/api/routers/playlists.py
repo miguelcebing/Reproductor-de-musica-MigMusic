@@ -15,6 +15,8 @@ from migmusic.api.schemas import (
     PlaylistOut,
     PlaylistRename,
     SongCreate,
+    SongFavorite,
+    SongFound,
     SongMove,
     SongOut,
     song_out,
@@ -75,6 +77,21 @@ def add_song(playlist_id: str, body: SongCreate, service: PlaylistServiceDep) ->
 def remove_song(playlist_id: str, index: int, service: PlaylistServiceDep) -> SongOut:
     """Remove the song at ``index`` (``PLAYLIST-009b`` fixes the cursor)."""
     return song_out(service.remove_song(playlist_id, index))
+
+
+@router.get("/{playlist_id}/songs/find", summary="Find a song by text")
+def find_song(playlist_id: str, text: str, service: PlaylistServiceDep) -> SongFound:
+    """First title/artist match via the list's ``find_by`` (``FEAT-001-c``)."""
+    index, song = service.find_song(playlist_id, text)
+    return SongFound(index=index, song=song_out(song))
+
+
+@router.put("/{playlist_id}/songs/{index}/favorite", summary="Mark a song as favourite")
+def set_favorite(
+    playlist_id: str, index: int, body: SongFavorite, service: PlaylistServiceDep
+) -> SongOut:
+    """Set the heart flag of one song (``FEAT-001-b``)."""
+    return song_out(service.set_favorite(playlist_id, index, body.favorite))
 
 
 @router.put("/{playlist_id}/songs/order", summary="Reorder songs")

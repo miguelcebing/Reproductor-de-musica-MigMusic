@@ -45,6 +45,7 @@ class SongOut(BaseModel):
     artwork_url: str | None
     external_url: str | None
     available: bool
+    favorite: bool
     duration_label: str
 
 
@@ -95,6 +96,19 @@ class SongMove(BaseModel):
     to_index: int = Field(ge=0)
 
 
+class SongFavorite(BaseModel):
+    """Body of ``PUT /api/playlists/{id}/songs/{index}/favorite`` (``FEAT-001-b``)."""
+
+    favorite: bool
+
+
+class SongFound(BaseModel):
+    """Answer of ``GET /api/playlists/{id}/songs/find`` (``FEAT-001-c``)."""
+
+    index: int
+    song: SongOut
+
+
 def song_out(song: Song) -> SongOut:
     """Project one song onto the wire model."""
     return SongOut.model_validate(song)
@@ -105,6 +119,8 @@ __all__ = [
     "PlaylistOut",
     "PlaylistRename",
     "SongCreate",
+    "SongFavorite",
+    "SongFound",
     "SongIn",
     "SongMove",
     "SongOut",

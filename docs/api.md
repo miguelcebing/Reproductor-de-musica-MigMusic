@@ -47,7 +47,7 @@
 
 `PlaylistOut` — `id`, `name`, `size`, `current_index`, `songs[]`.
 `SongOut` — `id`, `title`, `artist`, `source`, `duration`, `duration_label`,
-`album`, `artwork_url`, `external_url`, `available`.
+`album`, `artwork_url`, `external_url`, `available`, `favorite`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -57,8 +57,10 @@
 | `PATCH` | `/api/playlists/{id}` | Rename (`PLAYLIST-003`). Body: `{"name": "New"}` |
 | `DELETE` | `/api/playlists/{id}` | Delete. `204`, empty body. |
 | `POST` | `/api/playlists/{id}/songs` | Append, or insert at `index` (`UX-003`). Returns the playlist. |
+| `GET` | `/api/playlists/{id}/songs/find?text=…` | First song matching `text` (case-insensitive title/artist) + its index (`FEAT-001-c`). `404` on miss, `422` on blank. |
 | `DELETE` | `/api/playlists/{id}/songs/{index}` | Remove a song; returns the removed song (`PLAYLIST-009b`). |
 | `PUT` | `/api/playlists/{id}/songs/order` | Move `from_index` → `to_index` (`FEAT-001-e`). |
+| `PUT` | `/api/playlists/{id}/songs/{index}/favorite` | Set `{"favorite": true}` / `{"favorite": false}`; returns the song (`FEAT-001-b`). |
 | `POST` | `/api/playlists/{id}/songs/{index}/select` | Activate the playlist, move the cursor, return the playback state. |
 
 **Append a song**

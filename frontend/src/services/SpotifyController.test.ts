@@ -18,6 +18,7 @@ function song(id: string): Song {
     artwork_url: null,
     external_url: null,
     available: true,
+    favorite: false,
   };
 }
 

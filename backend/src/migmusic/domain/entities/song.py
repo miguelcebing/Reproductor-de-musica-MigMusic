@@ -27,6 +27,8 @@ class Song:
         external_url: Public link (Spotify track page, ``None`` for local files).
         available: ``False`` when a local file is missing after a reload
             (``LOCAL-006``: metadata persists, the file must be re-selected).
+        favorite: Heart mark shown in the list (``FEAT-001-b``); a flag on the
+            value, so copies in other playlists keep their own mark.
     """
 
     id: str
@@ -38,6 +40,7 @@ class Song:
     artwork_url: str | None = None
     external_url: str | None = None
     available: bool = True
+    favorite: bool = False
 
     def __post_init__(self) -> None:
         """Validate invariants at construction time (the object is immutable)."""

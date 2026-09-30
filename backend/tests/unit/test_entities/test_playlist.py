@@ -158,6 +158,44 @@ def test_find_and_membership(playlist: Playlist) -> None:
     assert playlist.find_by(lambda song: song.title.startswith("Z")) is None
 
 
+def test_song_at_reads_without_selecting(playlist: Playlist) -> None:
+    """Reading by index never moves the playback cursor."""
+    playlist.move_to(2)
+
+    assert playlist.song_at(1).title == "B"
+    assert playlist.current_index == 2
+
+
+def test_set_favorite_marks_the_song_in_place(playlist: Playlist) -> None:
+    """``FEAT-001-b``: the heart flips without touching order or the cursor."""
+    playlist.move_to(1)
+
+    updated = playlist.set_favorite(1, True)
+
+    assert updated.favorite is True
+    assert playlist.song_at(1).favorite is True
+    assert playlist.song_at(0).favorite is False
+    assert titles(playlist) == ["A", "B", "C"]
+    assert playlist.size == 3
+    assert playlist.current_index == 1  # still the same node, even while playing
+
+
+def test_set_favorite_can_be_cleared(playlist: Playlist) -> None:
+    """Toggling twice returns to the default (``FEAT-001-b`` is a flag)."""
+    playlist.set_favorite(0, True)
+
+    cleared = playlist.set_favorite(0, False)
+
+    assert cleared.favorite is False
+    assert playlist.song_at(0).favorite is False
+
+
+def test_set_favorite_reports_invalid_positions(playlist: Playlist) -> None:
+    """Out-of-range hearts surface as the standard 422 validation error."""
+    with pytest.raises(InvalidPositionError):
+        playlist.set_favorite(99, True)
+
+
 def test_cursor_navigation_stops_at_the_edges(playlist: Playlist) -> None:
     """``PLAYLIST-009 = A`` is respected through the playlist facade."""
     assert playlist.current is not None and playlist.current.title == "A"

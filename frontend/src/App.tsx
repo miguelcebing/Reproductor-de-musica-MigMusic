@@ -191,6 +191,30 @@ export function App(): React.JSX.Element {
     [activeId, controllers],
   );
 
+  const handleFavoriteTrack = useCallback(
+    (index: number, favorite: boolean) => {
+      if (!activeId) return;
+      void controllers.playlists.setFavorite(activeId, index, favorite);
+    },
+    [activeId, controllers],
+  );
+
+  const handleReorderTrack = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (!activeId) return;
+      void controllers.playlists.moveSong(activeId, fromIndex, toIndex);
+    },
+    [activeId, controllers],
+  );
+
+  const handleFindTrack = useCallback(
+    (text: string): Promise<number | null> => {
+      if (!activeId) return Promise.resolve(null);
+      return controllers.playlists.findFirst(activeId, text);
+    },
+    [activeId, controllers],
+  );
+
   const handleSeek = useCallback(
     (position: number) => {
       void controllers.playback.seek(position);
@@ -343,6 +367,9 @@ export function App(): React.JSX.Element {
           onPlay={handlePlayTrack}
           onRemove={handleRemoveTrack}
           onMove={handleMoveTrack}
+          onFavorite={handleFavoriteTrack}
+          onReorder={handleReorderTrack}
+          onFind={handleFindTrack}
         />
         {nodesVisible && <LinkedListView songs={songs} currentIndex={currentIndex} />}
       </section>

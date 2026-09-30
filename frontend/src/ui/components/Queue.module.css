@@ -34,14 +34,51 @@
   color: var(--color-text-muted);
 }
 
-.search {
+.searchRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
   margin-top: var(--space-3);
-  width: 100%;
+}
+
+.search {
+  flex: 1 1 200px;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition-colors);
+}
+
+.filter:hover {
+  border-color: var(--color-primary);
+}
+
+.filterActive {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 .count {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.noMatch {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }
 
 /* --- Buttons -------------------------------------------------------------- */
@@ -81,6 +118,11 @@
   background: var(--color-primary-strong);
 }
 
+.buttonFavorite {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
 /* --- Track list ----------------------------------------------------------- */
 
 .list {
@@ -109,6 +151,20 @@
 .rowCurrent {
   background: var(--color-surface-raised);
   box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+/* Enter pressed the in-list search: the first match wears a visible outline. */
+.rowMatch {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.rowDragging {
+  opacity: 0.5;
+}
+
+.rowDropTarget {
+  box-shadow: inset 0 0 0 2px var(--color-primary);
 }
 
 .rowCover {

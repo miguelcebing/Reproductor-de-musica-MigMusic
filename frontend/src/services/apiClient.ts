@@ -14,6 +14,7 @@ import type {
   RepeatMode,
   SkipDirection,
   Song,
+  SongFound,
   SongInput,
   SpotifyPlaylist,
   SpotifyPlayerState,
@@ -112,6 +113,24 @@ export class ApiClient {
     return this.send<PlaybackState>(
       "POST",
       `/playlists/${encodeURIComponent(playlistId)}/songs/${index}/select`,
+    );
+  }
+
+  /** First song matching `text` (case-insensitive title/artist); `404` on a miss. */
+  findSong(playlistId: string, text: string): Promise<SongFound> {
+    const params = new URLSearchParams({ text });
+    return this.send<SongFound>(
+      "GET",
+      `/playlists/${encodeURIComponent(playlistId)}/songs/find?${params.toString()}`,
+    );
+  }
+
+  /** Idempotent heart (`FEAT-001-b`): returns the updated song. */
+  setFavorite(playlistId: string, index: number, favorite: boolean): Promise<Song> {
+    return this.send<Song>(
+      "PUT",
+      `/playlists/${encodeURIComponent(playlistId)}/songs/${index}/favorite`,
+      { favorite },
     );
   }
 

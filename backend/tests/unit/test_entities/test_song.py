@@ -94,3 +94,10 @@ def test_equal_songs_are_interchangeable() -> None:
     """Value semantics: search-by-value in the list relies on this."""
     assert make_song() == make_song()
     assert make_song() != make_song(title="Other")
+
+
+def test_favorite_is_off_until_the_user_marks_it() -> None:
+    """``FEAT-001-b``: the heart starts empty and is part of the value."""
+    assert make_song().favorite is False
+    assert make_song(favorite=True).favorite is True
+    assert make_song(favorite=True) != make_song()

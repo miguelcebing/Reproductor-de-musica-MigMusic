@@ -210,6 +210,26 @@ class DoublyLinkedList(Generic[T]):
                 return index
         return None
 
+    # ----------------------------------------------------------- replace
+
+    def get_at(self, position: int) -> T:
+        """Payload at ``position`` without moving the cursor — O(n)."""
+        self._check_position(position, upper=self._size - 1, allow_empty=False)
+        return self._node_at(position).song
+
+    def replace_at(self, position: int, song: T) -> T:
+        """Swap the payload at ``position`` and return the old one — O(n).
+
+        Only the payload changes: node identity (and therefore the cursor) is
+        untouched. Favourites flip a flag on an otherwise immutable ``Song``
+        (``FEAT-001-b``), which must never re-point the playing track.
+        """
+        self._check_position(position, upper=self._size - 1, allow_empty=False)
+        node = self._node_at(position)
+        previous = node.song
+        node.song = song
+        return previous
+
     # ------------------------------------------------------------- movement
 
     def move_next(self) -> bool:

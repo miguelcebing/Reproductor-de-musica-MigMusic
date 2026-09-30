@@ -21,6 +21,13 @@ export interface Song {
   readonly artwork_url: string | null;
   readonly external_url: string | null;
   readonly available: boolean;
+  readonly favorite: boolean;
+}
+
+/** `GET /api/playlists/{id}/songs/find` — the first match, with its index (`FEAT-001-c`). */
+export interface SongFound {
+  readonly index: number;
+  readonly song: Song;
 }
 
 /** Payload accepted by `POST /api/playlists/{id}/songs`. */

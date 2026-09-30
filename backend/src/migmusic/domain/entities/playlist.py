@@ -8,6 +8,7 @@ list stays the only place where links are manipulated.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import replace
 from uuid import uuid4
 
 from migmusic.core import ValidationError
@@ -113,6 +114,24 @@ class Playlist:
     def find_by(self, predicate: Callable[[Song], bool]) -> int | None:
         """Index of the first song matching ``predicate`` — O(n)."""
         return self._songs.find_by(predicate)
+
+    def song_at(self, index: int) -> Song:
+        """Song at ``index`` without moving the cursor — O(n).
+
+        Reading must never re-point playback: only ``move_to`` may touch the
+        cursor, which is why search reads through this accessor.
+        """
+        return self._songs.get_at(index)
+
+    def set_favorite(self, index: int, favorite: bool) -> Song:
+        """Replace the song at ``index`` with its favourite flag set — O(n).
+
+        The node stays in place (``FEAT-001-b``), so order, size and the
+        cursor are all preserved — toggling the playing song is safe.
+        """
+        updated = replace(self._songs.get_at(index), favorite=favorite)
+        self._songs.replace_at(index, updated)
+        return updated
 
     # --------------------------------------------------------------- display
 

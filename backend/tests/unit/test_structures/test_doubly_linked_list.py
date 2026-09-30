@@ -348,6 +348,48 @@ def test_membership_operator(three: DoublyLinkedList[Song]) -> None:
     assert _song("Z") not in three
 
 
+def test_get_at_reads_without_moving_the_cursor(three: DoublyLinkedList[Song]) -> None:
+    """Index reads are side-effect free (searching must never select)."""
+    three.move_to(2)
+
+    assert three.get_at(1).title == "B"
+    assert three.current_index == 2
+
+
+def test_replace_at_swaps_the_payload_and_keeps_the_node(
+    three: DoublyLinkedList[Song],
+) -> None:
+    """Favourites flip a value in place: links, order and cursor all survive."""
+    three.move_to(1)
+    replacement = _song("B2")
+
+    previous = three.replace_at(1, replacement)
+
+    assert previous.title == "B"
+    assert titles(three) == ["A", "B2", "C"]
+    assert three.current_index == 1
+    assert three.current is not None and three.current.song is replacement
+    check(three)
+
+
+def test_get_at_and_replace_at_reject_positions_outside_the_range(
+    three: DoublyLinkedList[Song],
+) -> None:
+    """Bounds behave like ``remove_at``: 422 through the error mapping."""
+    with pytest.raises(InvalidPositionError):
+        three.get_at(99)
+    with pytest.raises(InvalidPositionError):
+        three.replace_at(-1, _song("X"))
+
+
+def test_get_at_and_replace_at_refuse_an_empty_list(empty: DoublyLinkedList[Song]) -> None:
+    """An empty list has nothing to read or replace."""
+    with pytest.raises(EmptyPlaylistError):
+        empty.get_at(0)
+    with pytest.raises(EmptyPlaylistError):
+        empty.replace_at(0, _song("X"))
+
+
 # ------------------------------------------------------------------ movement
 
 

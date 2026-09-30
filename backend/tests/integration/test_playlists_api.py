@@ -248,3 +248,72 @@ def test_select_on_an_unknown_playlist_is_404(client: TestClient) -> None:
     response = client.post("/api/playlists/nope/songs/0/select")
 
     assert response.status_code == 404
+
+
+def test_find_song_returns_the_first_match(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """``FEAT-001-c``: GET .../songs/find answers index + song in one payload."""
+    payload = filled_playlist(count=3)
+
+    response = client.get(f"/api/playlists/{payload['id']}/songs/find", params={"text": "song 1"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["index"] == 1
+    assert body["song"]["title"] == "Song 1"
+
+
+def test_find_song_without_matches_is_404(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """A quiet miss: the uniform envelope, so the UI can show 'no results'."""
+    payload = filled_playlist(count=3)
+
+    response = client.get(f"/api/playlists/{payload['id']}/songs/find", params={"text": "zzz"})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+def test_find_song_rejects_blank_text(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """Empty queries never walk the list."""
+    payload = filled_playlist(count=3)
+
+    response = client.get(f"/api/playlists/{payload['id']}/songs/find", params={"text": "   "})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_favorite_round_trip(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """``FEAT-001-b``: mark, read back through the listing, then clear."""
+    payload = filled_playlist(count=2)
+    url = f"/api/playlists/{payload['id']}/songs/1/favorite"
+
+    marked = client.put(url, json={"favorite": True})
+
+    assert marked.status_code == 200
+    assert marked.json()["favorite"] is True
+
+    listed = client.get(f"/api/playlists/{payload['id']}")
+    songs = listed.json()["songs"]
+    assert songs[1]["favorite"] is True
+    assert songs[0]["favorite"] is False
+
+    cleared = client.put(url, json={"favorite": False})
+    assert cleared.status_code == 200
+    assert cleared.json()["favorite"] is False
+
+
+def test_favorite_on_a_missing_index_is_422(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """Index bounds keep the standard validation envelope."""
+    payload = filled_playlist(count=2)
+
+    response = client.put(
+        f"/api/playlists/{payload['id']}/songs/9/favorite", json={"favorite": True}
+    )
+
+    assert response.status_code == 422

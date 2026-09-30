@@ -11,6 +11,7 @@ from migmusic.core import ValidationError
 from migmusic.domain import (
     EmptyPlaylistError,
     InvalidPositionError,
+    ItemNotFoundError,
     Playlist,
     PlaylistNotFoundError,
     Song,
@@ -259,3 +260,97 @@ def test_move_song_with_an_invalid_target_raises(
         playlist_service.move_song(playlist.id, 0, 5)
 
     assert [song.id for song in playlist] == before
+
+
+def test_set_favorite_persists_the_flag(
+    playlist_service: PlaylistService,
+    repository: InMemoryPlaylistRepository,
+    seed_playlist: Callable[..., Playlist],
+) -> None:
+    """``FEAT-001-b``: the heart is stored, not just answered."""
+    playlist = seed_playlist(count=2)
+
+    song = playlist_service.set_favorite(playlist.id, 1, True)
+
+    assert song.favorite is True
+    stored = repository.find_by_id(playlist.id)
+    assert stored is not None
+    assert stored.song_at(1).favorite is True
+    assert stored.song_at(0).favorite is False
+
+
+def test_set_favorite_on_an_unknown_playlist_raises(
+    playlist_service: PlaylistService,
+) -> None:
+    """Same 404 envelope as every other missing playlist."""
+    with pytest.raises(PlaylistNotFoundError):
+        playlist_service.set_favorite("missing", 0, True)
+
+
+def test_set_favorite_out_of_range_raises(
+    playlist_service: PlaylistService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Bounds still belong to the list, not to the service."""
+    playlist = seed_playlist(count=3)
+
+    with pytest.raises(InvalidPositionError):
+        playlist_service.set_favorite(playlist.id, 9, True)
+
+
+def test_find_song_returns_the_first_match(
+    playlist_service: PlaylistService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """``FEAT-001-c``: ``find_by`` walks the list and stops at the first hit."""
+    playlist = seed_playlist(count=3)
+
+    index, song = playlist_service.find_song(playlist.id, "song 2")
+
+    assert index == 1
+    assert song.title == "Song 2"
+
+
+def test_find_song_is_case_insensitive_over_title_and_artist(
+    playlist_service: PlaylistService, make_song: Callable[..., Song]
+) -> None:
+    """Matching runs on both fields, folded so 'MIGMUSIC' finds the artist."""
+    playlist = playlist_service.create("Road trip")
+    playlist_service.add_song(playlist.id, make_song(title="Nocturne", artist="Chopin"))
+
+    index, song = playlist_service.find_song(playlist.id, "NOCTURNE")
+    assert index == 0 and song.title == "Nocturne"
+
+    index, song = playlist_service.find_song(playlist.id, "chop")
+    assert index == 0 and song.artist == "Chopin"
+
+
+def test_find_song_without_matches_raises_not_found(
+    playlist_service: PlaylistService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """A miss is a 404, so the UI can answer 'no matches' quietly."""
+    playlist = seed_playlist(count=3)
+
+    with pytest.raises(ItemNotFoundError):
+        playlist_service.find_song(playlist.id, "zzz")
+
+
+def test_find_song_rejects_blank_text(
+    playlist_service: PlaylistService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Empty queries never walk the list."""
+    playlist = seed_playlist(count=3)
+
+    with pytest.raises(ValidationError):
+        playlist_service.find_song(playlist.id, "   ")
+
+
+def test_find_song_never_moves_the_cursor(
+    playlist_service: PlaylistService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Searching must not change which song is playing."""
+    playlist = seed_playlist(count=3)
+    playlist.move_to(2)
+
+    index, _song = playlist_service.find_song(playlist.id, "song 1")
+
+    assert index == 0
+    assert playlist.current_index == 2

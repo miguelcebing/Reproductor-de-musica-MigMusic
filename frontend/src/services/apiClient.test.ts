@@ -170,3 +170,41 @@ describe("ApiClient Spotify catalog and player", () => {
     expect(calls[0]?.url).toBe(`${origin}/api/spotify/player/state`);
   });
 });
+
+describe("ApiClient in-list search and favourites", () => {
+  const origin = "https://migmusic.example";
+
+  it("URL-encodes the find text and the playlist id", async () => {
+    const { fetchImpl, calls } = recorder(200, { index: 1, song: {} });
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    await api.findSong("pl 1", "hello world & more");
+
+    expect(calls[0]?.init?.method).toBe("GET");
+    expect(calls[0]?.url).toBe(
+      `${origin}/api/playlists/pl%201/songs/find?text=hello+world+%26+more`,
+    );
+  });
+
+  it("surfaces a 404 miss as an ApiError with the envelope code", async () => {
+    const { fetchImpl } = recorder(404, {
+      error: { code: "not_found", message: "No song matches", request_id: "req-1" },
+    });
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    await expect(api.findSong("pl-1", "zzz")).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
+  });
+
+  it("PUTs the favourite flag as a boolean body", async () => {
+    const { fetchImpl, calls } = recorder(200, { id: "local-1", favorite: true });
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    await expect(api.setFavorite("pl-1", 2, true)).resolves.toMatchObject({ favorite: true });
+    expect(calls[0]?.init?.method).toBe("PUT");
+    expect(calls[0]?.url).toBe(`${origin}/api/playlists/pl-1/songs/2/favorite`);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ favorite: true });
+  });
+});
