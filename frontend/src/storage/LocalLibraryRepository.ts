@@ -6,11 +6,13 @@ export interface LocalTrackMetadata {
   readonly id: string;
   readonly fileName: string;
   readonly fileHandle?: FileSystemFileHandle;
+  readonly blob: Blob; // Stored blob for object URL recreation
   readonly title: string;
   readonly artist: string;
-  readonly album?: string;
+  readonly album?: string | null;
   readonly duration: number;
-  readonly artwork?: string;
+  readonly artwork_url?: string | null;
+  readonly external_url?: string | null;
   readonly lastModified: number;
   readonly size: number;
   readonly createdAt: number;
@@ -35,6 +37,11 @@ export class LocalLibraryRepository {
     return tracks.filter((t): t is LocalTrackMetadata => t !== undefined);
   }
 
+  async getBlob(id: string): Promise<Blob | undefined> {
+    const track = await get(key(id));
+    return track?.blob;
+  }
+
   async put(track: LocalTrackMetadata): Promise<void> {
     await set(key(track.id), { ...track, available: true });
   }
@@ -50,7 +57,7 @@ export class LocalLibraryRepository {
     await del(key(id));
   }
 
-  async clear(): Promise<void> {
+async clear(): Promise<void> {
     const allKeys = await keys();
     const trackKeys = allKeys.filter((k): k is string => typeof k === "string" && k.startsWith(STORE_PREFIX));
     await Promise.all(trackKeys.map((k) => del(k)));

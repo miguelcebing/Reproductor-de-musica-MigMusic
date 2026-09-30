@@ -47,7 +47,7 @@ export class LocalAudioPlayer implements AudioPlayer {
 
   async load(source: string, options?: { startTime?: number }): Promise<void> {
     this._source = source;
-    const objectUrl = getObjectUrlForTrack(source);
+    const objectUrl = await getObjectUrlForTrack(source);
     if (!objectUrl) {
       throw new Error(`No object URL found for local track ${source}`);
     }

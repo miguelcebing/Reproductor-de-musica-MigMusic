@@ -8,6 +8,7 @@ import { PlaybackController } from "./services/PlaybackController";
 import { AuthController } from "./services/AuthController";
 import { SpotifyController } from "./services/SpotifyController";
 import { readCallbackParams } from "./services/callbackParams";
+import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
 import { REPEAT_CYCLE } from "./ui/constants";
 import { useT } from "./i18n/useT";
 import { useSettingsStore, applyDocumentSettings } from "./state/settingsStore";
@@ -92,6 +93,7 @@ export function App(): React.JSX.Element {
 
   // Initial load
   useEffect(() => {
+    void restoreObjectUrlsFromIndexedDB();
     void controllers.playlists.refresh();
     void controllers.playback.refresh();
     void controllers.auth.refresh();

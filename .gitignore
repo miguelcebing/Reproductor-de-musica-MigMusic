@@ -49,3 +49,5 @@ deploy/
 
 # neonctl local context (may hold session tokens)
 .neon
+
+.vercel

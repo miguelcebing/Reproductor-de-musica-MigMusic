@@ -2,6 +2,7 @@
 
 import type { SongInput } from "../domain/types";
 import { localFileUrls } from "./localFileUrls";
+import { localLibrary } from "../storage/LocalLibraryRepository";
 
 function uuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -21,6 +22,24 @@ export async function localSongFromFile(file: File): Promise<SongInput> {
   // Create object URL for immediate playback
   const objectUrl = URL.createObjectURL(file);
   localFileUrls.set(trackId, objectUrl);
+
+  // Persist file blob in IndexedDB for recovery after reload
+  const now = Date.now();
+  await localLibrary.put({
+    id: trackId,
+    fileName: file.name,
+    blob: file,
+    title: metadata.title,
+    artist: metadata.artist,
+    album: metadata.album ?? null,
+    duration: Math.floor(metadata.duration) || 0,
+    artwork_url: metadata.picture ? artworkToObjectUrl(metadata.picture) : null,
+    external_url: null,
+    lastModified: file.lastModified,
+    size: file.size,
+    createdAt: now,
+    available: true,
+  });
 
   return {
     id: trackId,
@@ -43,6 +62,7 @@ export function revokeObjectUrlsForFiles(files: File[]): void {
     )?.[0];
     if (trackId) {
       localFileUrls.delete(trackId);
+      localLibrary.remove(trackId);
     }
   }
 }
