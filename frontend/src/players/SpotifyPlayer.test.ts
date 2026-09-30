@@ -103,7 +103,8 @@ describe("SpotifyPlayer", () => {
       positionMs: 30_000,
     });
     expect(player.source).toBe("spotify:track:4uLU6hMCjMI75M1A2tKUQC");
-    expect(player.isPlaying).toBe(true);
+    // Autoplay policy: track is loaded but paused, waiting for user gesture
+    expect(player.isPlaying).toBe(false);
     expect(player.duration).toBe(200);
     player.destroy();
   });
@@ -140,8 +141,11 @@ describe("SpotifyPlayer", () => {
     player.on("play", () => events.push("play"));
     await player.load("spotify:track:a");
 
-    player.pause();
+    // Initial pause after load (autoplay policy)
     expect(session.pauseCalls).toBe(1);
+
+    player.pause();
+    expect(session.pauseCalls).toBe(2);
     await player.play();
     expect(session.resumed).toBe(1);
     expect(events).toEqual(["pause", "play"]);

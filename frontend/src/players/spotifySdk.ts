@@ -14,6 +14,8 @@ export interface SpotifySdkState {
   readonly position: number;
   /** Track duration in seconds. */
   readonly duration: number;
+  /** Error message from SDK (account_error, authentication_error, etc.) */
+  readonly error?: string | null;
 }
 
 /** Everything `SpotifyPlayer` needs from the Web Playback SDK. */
@@ -141,6 +143,7 @@ function mapState(raw: RawPlayerState | null): SpotifySdkState | null {
     paused: raw.paused,
     position: Math.max(0, raw.position ?? 0) / 1000,
     duration: (current?.duration_ms ?? raw.duration ?? 0) / 1000,
+    error: (raw as any).error ?? null,
   };
 }
 

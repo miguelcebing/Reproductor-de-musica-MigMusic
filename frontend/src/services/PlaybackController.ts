@@ -42,6 +42,7 @@ export class PlaybackController {
   private unsubscribeTimeUpdate: (() => void) | null = null;
   private unsubscribeError: (() => void) | null = null;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
+  private userGesture = false;
 
   constructor(api: ApiClient, options: PlaybackControllerOptions) {
     this.api = api;
@@ -55,6 +56,19 @@ export class PlaybackController {
         this.player?.setMuted(state.muted);
       }
     });
+
+    // Track user gesture for autoplay policy
+    if (typeof window !== "undefined") {
+      const setGesture = () => { this.userGesture = true; };
+      window.addEventListener("click", setGesture, { once: true, passive: true });
+      window.addEventListener("touchstart", setGesture, { once: true, passive: true });
+      window.addEventListener("keydown", setGesture, { once: true, passive: true });
+    }
+  }
+
+  /** Check if user has interacted with the page (for autoplay policy). */
+  hasUserGesture(): boolean {
+    return this.userGesture;
   }
 
   /** Load the transport state from backend. */
@@ -122,6 +136,10 @@ export class PlaybackController {
     }
 
     if (willPlay) {
+      if (!this.userGesture) {
+        this.toast("error", "autoplayBlocked");
+        return null;
+      }
       try {
         await this.player?.play();
       } catch (cause) {

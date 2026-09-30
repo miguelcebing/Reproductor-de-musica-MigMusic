@@ -80,22 +80,25 @@ export class SpotifyPlayer implements AudioPlayer {
     return this._muted;
   }
 
-  /** Connect the SDK, queue `source` and wait for it to start playing.
+/** Connect the SDK, queue `source` and wait for it to be ready (paused).
 
-   * `source` may be a raw Spotify track id or a full `spotify:track:…` URI;
-   * the SDK always receives the URI form.
-   */
-  async load(source: string, options?: { startTime?: number }): Promise<void> {
-    this.destroyed = false;
-    this.endedEmitted = false;
-    this._source = toTrackUri(source);
-    await this.session.ensureConnected();
-    this.subscribe();
-    const positionMs = Math.max(0, Math.round((options?.startTime ?? 0) * 1000));
-    await this.control.play([this._source], this.session.deviceId, positionMs);
-    await this.awaitTrack(this._source);
-    this.startTicker();
-  }
+    * `source` may be a raw Spotify track id or a full `spotify:track:…` URI;
+    * the SDK always receives the URI form.
+    */
+   async load(source: string, options?: { startTime?: number }): Promise<void> {
+     this.destroyed = false;
+     this.endedEmitted = false;
+     this._source = toTrackUri(source);
+     await this.session.ensureConnected();
+     this.subscribe();
+     const positionMs = Math.max(0, Math.round((options?.startTime ?? 0) * 1000));
+     // Autoplay policy: queue track but stay paused, wait for user gesture
+     await this.control.play([this._source], this.session.deviceId, positionMs);
+     await this.awaitTrack(this._source);
+     // Pause immediately after track is loaded - autoplay policy
+     await this.pause();
+     this.startTicker();
+   }
 
   async play(): Promise<void> {
     // A pause may still be in flight (fire-and-forget in `pause()`); resume
@@ -215,6 +218,18 @@ export class SpotifyPlayer implements AudioPlayer {
       this.emitEnded();
     } else if (previous && state && previous.paused !== state.paused) {
       this.emit(state.paused ? "pause" : "play");
+    }
+
+    // Handle Spotify SDK errors (account_error, authentication_error, etc.)
+    if (state && state.uri === this._source && state.error) {
+      const errorMsg = String(state.error);
+      if (errorMsg.includes("account_error") || errorMsg.includes("Premium") || errorMsg.includes("premium")) {
+        this.emit("error", { error: "Tu cuenta Family es Premium. Intenta desconectar y volver a conectar Spotify." });
+      } else if (errorMsg.includes("authentication_error")) {
+        this.emit("error", { error: "Sesión de Spotify expirada. Intenta desconectar y volver a conectar." });
+      } else {
+        this.emit("error", { error: errorMsg });
+      }
     }
 
     // Only emit while actually playing: a paused ticker would keep telling the

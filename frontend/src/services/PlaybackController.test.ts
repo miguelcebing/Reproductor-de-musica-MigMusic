@@ -334,6 +334,9 @@ describe("PlaybackController (F7 integration)", () => {
     usePlaybackStore.getState().setPlayback(state);
     const { controller, api, factory } = makeController();
 
+    // Simulate user gesture for autoplay policy
+    (controller as any).userGesture = true;
+
     const result = await controller.togglePlaying();
 
     expect(factory.createPlayer).toHaveBeenCalledTimes(1);

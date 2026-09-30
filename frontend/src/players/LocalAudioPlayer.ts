@@ -72,6 +72,7 @@ export class LocalAudioPlayer implements AudioPlayer {
     if (options?.startTime !== undefined) {
       this.audio.currentTime = options.startTime;
     }
+    // Autoplay policy: stay paused, wait for user gesture
   }
 
   async play(): Promise<void> {
