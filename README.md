@@ -1,4 +1,4 @@
-# MigMusic 🎵
+# MigMusic 
 
 Reproductor de música web con **lista doblemente enlazada** como núcleo de la arquitectura.
 Proyecto académico + producto real — entrega **2026-10-02**.
