@@ -143,6 +143,20 @@ npm run test:e2e       # Playwright (desktop + móvil + axe); arranca vite y uvi
 Topología: **un solo origen**. Vercel sirve el frontend y hace *rewrite* de `/api/*` hacia
 el backend en Render.
 
+### Estado actual (2026-09-30)
+
+| Pieza | URL / recurso | Estado |
+| --- | --- | --- |
+| Frontend (Vercel, proyecto `migmusic`) | <https://migmusic.vercel.app> | ✅ desplegado |
+| Backend (Render `migmusic-api`, `srv-dau8psugekts73del56g`) | <https://migmusic-api.onrender.com> | ✅ `live`, health 200 |
+| Proxy `/api/*` | <https://migmusic.vercel.app/api/health> | ✅ 200 → Render |
+| CORS | preflight con ACAO `https://migmusic.vercel.app` | ✅ 200 |
+| BD (Neon, proyecto `MigMusic`) | schema auto-creado en el arranque | ✅ conectada |
+
+Pendiente (acciones del usuario): `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder),
+registrar la Redirect URI en Spotify Dashboard, conectar GitHub en Vercel
+(*Settings → Git*) para auto-deploy, y UptimeRobot.
+
 ### 1. Backend en Render
 
 **Opción A — Blueprint (recomendada):** Render → *Blueprints* → conecta el repo;
