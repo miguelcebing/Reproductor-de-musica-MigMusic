@@ -1,7 +1,7 @@
 /** Turning picked files into local tracks with metadata and object URLs (`LOCAL-003`). */
 
 import type { SongInput } from "../domain/types";
-import { localFileUrls } from "./localFileUrls";
+import { localArtworkUrls, localFileUrls } from "./localFileUrls";
 import { localLibrary } from "../storage/LocalLibraryRepository";
 
 function uuid(): string {
@@ -15,7 +15,7 @@ function uuid(): string {
 export async function localSongFromFile(file: File): Promise<SongInput> {
   // `music-metadata` is heavy and only needed after the user picks files:
   // load it on demand so it stays out of the initial bundle (F9 perf).
-  const { extractMetadata, artworkToObjectUrl } = await import("./metadata");
+  const { extractMetadata, artworkBlobOf } = await import("./metadata");
   const metadata = await extractMetadata(file);
   const trackId = `local:${uuid()}`;
 
@@ -23,17 +23,23 @@ export async function localSongFromFile(file: File): Promise<SongInput> {
   const objectUrl = URL.createObjectURL(file);
   localFileUrls.set(trackId, objectUrl);
 
+  // Artwork bytes are kept too: the object URL dies on reload, the Blob does not.
+  const artworkBlob = artworkBlobOf(metadata.picture);
+  const artworkUrl = artworkBlob ? URL.createObjectURL(artworkBlob) : null;
+  if (artworkUrl) localArtworkUrls.set(trackId, artworkUrl);
+
   // Persist file blob in IndexedDB for recovery after reload
   const now = Date.now();
   await localLibrary.put({
     id: trackId,
     fileName: file.name,
     blob: file,
+    artworkBlob,
     title: metadata.title,
     artist: metadata.artist,
     album: metadata.album ?? null,
     duration: Math.floor(metadata.duration) || 0,
-    artwork_url: metadata.picture ? artworkToObjectUrl(metadata.picture) : null,
+    artwork_url: artworkUrl,
     external_url: null,
     lastModified: file.lastModified,
     size: file.size,
@@ -48,21 +54,27 @@ export async function localSongFromFile(file: File): Promise<SongInput> {
     source: "local",
     duration: Math.floor(metadata.duration) || 0,
     album: metadata.album ?? null,
-    artwork_url: metadata.picture ? artworkToObjectUrl(metadata.picture) : null,
+    artwork_url: artworkUrl,
     external_url: null,
     available: true,
   };
 }
 
-/** Revoke all object URLs for a list of files (cleanup on error). */
-export function revokeObjectUrlsForFiles(files: File[]): void {
-  for (const file of files) {
-    const trackId = Array.from(localFileUrls.entries()).find(
-      ([, url]) => url === URL.createObjectURL(file),
-    )?.[0];
-    if (trackId) {
-      localFileUrls.delete(trackId);
-      localLibrary.remove(trackId);
-    }
-  }
+/**
+ * Re-attach the file of a track whose bytes are gone (cleared site data, or a
+ * record written before blob persistence). Keeps the track id, so the queue
+ * and its playlists stay untouched.
+ */
+export async function relinkLocalTrack(trackId: string, file: File): Promise<boolean> {
+  const updated = await localLibrary.relink(trackId, file);
+  if (!updated) return false;
+  revokeUrl(trackId);
+  localFileUrls.set(trackId, URL.createObjectURL(file));
+  return true;
+}
+
+function revokeUrl(trackId: string): void {
+  const stale = localFileUrls.get(trackId);
+  if (stale) URL.revokeObjectURL(stale);
+  localFileUrls.delete(trackId);
 }

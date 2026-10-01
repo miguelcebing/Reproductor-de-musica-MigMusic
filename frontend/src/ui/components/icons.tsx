@@ -142,6 +142,15 @@ export function HeartIcon(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Chain link: re-attach the file of a local track whose bytes are gone. */
+export function LinkIcon(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <path d="M10.6 13.4a4 4 0 0 1 0-5.7l3-3a4 4 0 0 1 5.7 5.7l-1.3 1.3-1.4-1.4 1.3-1.3a2 2 0 0 0-2.9-2.9l-3 3a2 2 0 0 0 0 2.9l-1.4 1.4zm2.8-2.8a4 4 0 0 1 0 5.7l-3 3a4 4 0 0 1-5.7-5.7l1.3-1.3 1.4 1.4-1.3 1.3a2 2 0 0 0 2.9 2.9l3-3a2 2 0 0 0 0-2.9l1.4-1.4z" />
+    </svg>
+  );
+}
+
 export function SpotifyIcon(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props)} viewBox="0 0 24 24">

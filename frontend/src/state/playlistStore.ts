@@ -3,6 +3,7 @@
 import { create } from "zustand";
 
 import type { Playlist } from "../domain/types";
+import { withLiveArtworkIn } from "../services/localFileUrls";
 
 export interface PlaylistStoreState {
   playlists: readonly Playlist[];
@@ -27,13 +28,14 @@ const initial = {
 
 export const usePlaylistStore = create<PlaylistStoreState>((set) => ({
   ...initial,
-  setPlaylists: (playlists) => set({ playlists }),
+  setPlaylists: (playlists) => set({ playlists: playlists.map(withLiveArtworkIn) }),
   upsertPlaylist: (playlist) =>
     set((state) => {
-      const exists = state.playlists.some((item) => item.id === playlist.id);
+      const hydrated = withLiveArtworkIn(playlist);
+      const exists = state.playlists.some((item) => item.id === hydrated.id);
       const playlists = exists
-        ? state.playlists.map((item) => (item.id === playlist.id ? playlist : item))
-        : [...state.playlists, playlist];
+        ? state.playlists.map((item) => (item.id === hydrated.id ? hydrated : item))
+        : [...state.playlists, hydrated];
       return { playlists };
     }),
   dropPlaylist: (id) =>

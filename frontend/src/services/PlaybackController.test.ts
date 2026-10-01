@@ -13,6 +13,7 @@ import type { AudioPlayer, PlayerEventType, PlayerEventListener } from "../playe
 import { usePlaybackStore } from "../state/playbackStore";
 import { useSettingsStore } from "../state/settingsStore";
 import { useToastStore } from "../state/toastStore";
+import { useLocalFileStore } from "../state/localFileStore";
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -65,10 +66,14 @@ class FakePlayer implements AudioPlayer {
   volumeCalls: number[] = [];
   private readonly listeners = new Map<PlayerEventType, Set<PlayerEventListener>>();
 
-  constructor(readonly kind: AudioSource, private readonly failLoad = false) {}
+  constructor(
+    readonly kind: AudioSource,
+    private readonly failLoad = false,
+    private readonly failMessage = "boom",
+  ) {}
 
   async load(source: string, options?: { startTime?: number }): Promise<void> {
-    if (this.failLoad) throw new Error("boom");
+    if (this.failLoad) throw new Error(this.failMessage);
     this.source = source;
     this.loadedWith =
       options?.startTime !== undefined ? { source, startTime: options.startTime } : { source };
@@ -114,10 +119,10 @@ class FakePlayer implements AudioPlayer {
   }
 }
 
-function makeFactory(options?: { failLoad?: boolean }) {
+function makeFactory(options?: { failLoad?: boolean; failMessage?: string }) {
   const players: FakePlayer[] = [];
   const createPlayer = vi.fn((source: AudioSource) => {
-    const player = new FakePlayer(source, options?.failLoad === true);
+    const player = new FakePlayer(source, options?.failLoad === true, options?.failMessage);
     players.push(player);
     return player;
   });
@@ -153,12 +158,14 @@ beforeEach(() => {
   usePlaybackStore.getState().reset();
   useToastStore.getState().reset();
   useSettingsStore.getState().reset();
+  useLocalFileStore.getState().reset();
 });
 
 afterEach(() => {
   usePlaybackStore.getState().reset();
   useToastStore.getState().reset();
   useSettingsStore.getState().reset();
+  useLocalFileStore.getState().reset();
 });
 
 // --- tests ------------------------------------------------------------------
@@ -335,7 +342,7 @@ describe("PlaybackController (F7 integration)", () => {
     const { controller, api, factory } = makeController();
 
     // Simulate user gesture for autoplay policy
-    (controller as any).userGesture = true;
+    controller.markUserGesture();
 
     const result = await controller.togglePlaying();
 
@@ -383,5 +390,25 @@ describe("PlaybackController (F7 integration)", () => {
     const toasts = useToastStore.getState().toasts;
     expect(toasts).toHaveLength(1);
     expect(toasts[0].kind).toBe("error");
+  });
+
+  it("offers to re-link a local track whose bytes are gone (F5)", async () => {
+    const state = makeState({ playing: true });
+    usePlaybackStore.getState().setPlayback(state);
+    const { controller } = makeController(
+      makeApi(),
+      makeFactory({
+        failLoad: true,
+        failMessage: `No object URL found for local track ${state.song!.id}`,
+      }),
+    );
+
+    await controller.onTrackChange(state.song!);
+
+    expect(useLocalFileStore.getState().missing).toContain("local:1");
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].text).toContain("not on this device");
+    expect(useToastStore.getState().toasts[0].text).not.toContain("Error:");
   });
 });

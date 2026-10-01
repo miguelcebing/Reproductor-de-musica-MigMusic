@@ -14,7 +14,13 @@ import type { AudioSource, PlaybackState, RepeatMode, SkipDirection, Song } from
 import { usePlaybackStore } from "../state/playbackStore";
 import { useSettingsStore } from "../state/settingsStore";
 import { useToastStore } from "../state/toastStore";
+import { useLocalFileStore } from "../state/localFileStore";
 import { translate, type Language, type MessageKey } from "../i18n/messages";
+
+/** Thrown by `LocalAudioPlayer` when IndexedDB has no bytes for the track. */
+export function isMissingLocalFile(cause: unknown): boolean {
+  return cause instanceof Error && cause.message.startsWith("No object URL found");
+}
 
 export interface PlaybackControllerOptions {
   readonly language: () => Language;
@@ -57,13 +63,21 @@ export class PlaybackController {
       }
     });
 
-    // Track user gesture for autoplay policy
+    // Autoplay policy: the browser only lets audio start after a real user
+    // gesture. Listening in the *capture* phase means we record it before
+    // React's delegated handlers run, so the very first click already counts.
     if (typeof window !== "undefined") {
-      const setGesture = () => { this.userGesture = true; };
-      window.addEventListener("click", setGesture, { once: true, passive: true });
-      window.addEventListener("touchstart", setGesture, { once: true, passive: true });
-      window.addEventListener("keydown", setGesture, { once: true, passive: true });
+      const setGesture = () => this.markUserGesture();
+      const capture: AddEventListenerOptions = { once: true, passive: true, capture: true };
+      window.addEventListener("click", setGesture, capture);
+      window.addEventListener("touchstart", setGesture, capture);
+      window.addEventListener("keydown", setGesture, capture);
     }
+  }
+
+  /** Record that the user interacted with the page (autoplay policy). */
+  markUserGesture(): void {
+    this.userGesture = true;
   }
 
   /** Check if user has interacted with the page (for autoplay policy). */
@@ -89,21 +103,25 @@ export class PlaybackController {
 
   /** Activate a track from a playlist. */
   async select(playlistId: string, index: number): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.selectSong(playlistId, index));
   }
 
   /** Open a playlist at its first song. */
   open(playlistId: string): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.openPlaylist(playlistId));
   }
 
   /** Step forward in the list. */
   next(): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.next());
   }
 
   /** Step back in the list. */
   previous(): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.previous());
   }
 
@@ -116,15 +134,20 @@ export class PlaybackController {
   }
 
   skip(direction: SkipDirection): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.skip(direction));
   }
 
   seek(position: number): Promise<PlaybackState | null> {
+    this.markUserGesture();
     return this.commit(() => this.api.seek(position));
   }
 
   /** Play or pause the real audio, then report to backend. */
   async togglePlaying(): Promise<PlaybackState | null> {
+    // This method is only reachable from a click/keypress, so it *is* the
+    // gesture the autoplay policy waits for (the first press must not no-op).
+    this.markUserGesture();
     const current = usePlaybackStore.getState().playback;
     if (!current?.song) return null;
 
@@ -136,10 +159,6 @@ export class PlaybackController {
     }
 
     if (willPlay) {
-      if (!this.userGesture) {
-        this.toast("error", "autoplayBlocked");
-        return null;
-      }
       try {
         await this.player?.play();
       } catch (cause) {
@@ -201,6 +220,13 @@ export class PlaybackController {
     } catch (cause) {
       this.detachPlayer();
       this.activeSource = null;
+      if (song.source === "local" && isMissingLocalFile(cause)) {
+        // The bytes are gone (cleared site data, legacy record): remember it so
+        // the row offers to re-link the file, instead of a raw error toast.
+        useLocalFileStore.getState().markMissing(song.id);
+        this.toast("error", "local.missingFile", { title: song.title });
+        return;
+      }
       this.fail(cause);
     }
   }

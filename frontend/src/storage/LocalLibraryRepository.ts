@@ -6,7 +6,11 @@ export interface LocalTrackMetadata {
   readonly id: string;
   readonly fileName: string;
   readonly fileHandle?: FileSystemFileHandle;
-  readonly blob: Blob; // Stored blob for object URL recreation
+  /** Audio bytes. Absent on records written before blob persistence: those
+   * tracks cannot be restored after a reload and are re-linked by the user. */
+  readonly blob?: Blob;
+  /** Embedded cover bytes, so the artwork URL can be rebuilt after a reload. */
+  readonly artworkBlob?: Blob | null;
   readonly title: string;
   readonly artist: string;
   readonly album?: string | null;
@@ -32,9 +36,15 @@ export class LocalLibraryRepository {
 
   async getAll(): Promise<readonly LocalTrackMetadata[]> {
     const allKeys = await keys();
-    const trackKeys = allKeys.filter((k): k is string => typeof k === "string" && k.startsWith(STORE_PREFIX));
-    const tracks = await Promise.all(trackKeys.map((k) => get(k)));
-    return tracks.filter((t): t is LocalTrackMetadata => t !== undefined);
+    const trackKeys = allKeys.filter(
+      (k): k is string => typeof k === "string" && k.startsWith(STORE_PREFIX),
+    );
+    // One unreadable record (older schema, corrupted row) must not hide every
+    // other track: read them independently and keep what survives.
+    const settled = await Promise.allSettled(trackKeys.map((k) => get(k)));
+    return settled.flatMap((result) =>
+      result.status === "fulfilled" && result.value ? [result.value as LocalTrackMetadata] : [],
+    );
   }
 
   async getBlob(id: string): Promise<Blob | undefined> {
@@ -44,6 +54,22 @@ export class LocalLibraryRepository {
 
   async put(track: LocalTrackMetadata): Promise<void> {
     await set(key(track.id), { ...track, available: true });
+  }
+
+  /** Re-attach the audio file of an existing track after the user picks it again. */
+  async relink(id: string, file: File): Promise<LocalTrackMetadata | undefined> {
+    const existing = await this.get(id);
+    if (!existing) return undefined;
+    const updated: LocalTrackMetadata = {
+      ...existing,
+      blob: file,
+      fileName: file.name,
+      lastModified: file.lastModified,
+      size: file.size,
+      available: true,
+    };
+    await this.put(updated);
+    return updated;
   }
 
   async markUnavailable(id: string): Promise<void> {
@@ -57,9 +83,11 @@ export class LocalLibraryRepository {
     await del(key(id));
   }
 
-async clear(): Promise<void> {
+  async clear(): Promise<void> {
     const allKeys = await keys();
-    const trackKeys = allKeys.filter((k): k is string => typeof k === "string" && k.startsWith(STORE_PREFIX));
+    const trackKeys = allKeys.filter(
+      (k): k is string => typeof k === "string" && k.startsWith(STORE_PREFIX),
+    );
     await Promise.all(trackKeys.map((k) => del(k)));
   }
 }

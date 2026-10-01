@@ -11,11 +11,13 @@ import { readCallbackParams } from "./services/callbackParams";
 import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
 import { REPEAT_CYCLE } from "./ui/constants";
 import { useT } from "./i18n/useT";
+import { translate } from "./i18n/messages";
 import { useSettingsStore, applyDocumentSettings } from "./state/settingsStore";
 import { usePlaylistStore } from "./state/playlistStore";
 import { usePlaybackStore } from "./state/playbackStore";
 import { useSpotifyStore } from "./state/spotifyStore";
 import { useAuthStore } from "./state/authStore";
+import { useLocalFileStore } from "./state/localFileStore";
 import { useToastStore } from "./state/toastStore";
 import { AppShell } from "./ui/layouts/AppShell";
 import { CoverArt } from "./ui/components/CoverArt";
@@ -91,12 +93,29 @@ export function App(): React.JSX.Element {
     applyDocumentSettings(theme, language);
   }, [theme, language]);
 
-  // Initial load
+  // Initial load: rebuild the local object URLs *before* the queue is read, so
+  // `blob:` artwork URLs that died on reload are replaced, and tracks whose
+  // bytes are gone are reported instead of failing silently (`LOCAL-006`).
   useEffect(() => {
-    void restoreObjectUrlsFromIndexedDB();
-    void controllers.playlists.refresh();
+    let cancelled = false;
+    const bootstrap = async (): Promise<void> => {
+      try {
+        const report = await restoreObjectUrlsFromIndexedDB();
+        if (!cancelled) useLocalFileStore.getState().setMissing(report.missing);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const language = useSettingsStore.getState().language;
+        useToastStore.getState().push("error", translate(language, "toast.error", { message }));
+      } finally {
+        if (!cancelled) await controllers.playlists.refresh();
+      }
+    };
+    void bootstrap();
     void controllers.playback.refresh();
     void controllers.auth.refresh();
+    return () => {
+      cancelled = true;
+    };
   }, [controllers]);
 
   // Wire the player when the active track moves (F5/F7). Position ticks only

@@ -38,13 +38,22 @@ export async function extractMetadata(file: File): Promise<ExtractedMetadata> {
   }
 }
 
-/** Create an object URL for the embedded artwork, or return null. */
-export function artworkToObjectUrl(picture: { data: Uint8Array; format: string } | null): string | null {
+/** Embedded cover as a Blob, so the artwork URL can be rebuilt after a reload. */
+export function artworkBlobOf(
+  picture: { data: Uint8Array; format: string } | null | undefined,
+): Blob | null {
   if (!picture) return null;
   try {
-    const blob = new Blob([picture.data], { type: picture.format });
-    return URL.createObjectURL(blob);
+    return new Blob([picture.data], { type: picture.format });
   } catch {
     return null;
   }
+}
+
+/** Create an object URL for the embedded artwork, or return null. */
+export function artworkToObjectUrl(
+  picture: { data: Uint8Array; format: string } | null | undefined,
+): string | null {
+  const blob = artworkBlobOf(picture);
+  return blob ? URL.createObjectURL(blob) : null;
 }
