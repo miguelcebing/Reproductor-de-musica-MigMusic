@@ -12,6 +12,7 @@ import { createPlayerForSource, type PlayerFactoryOptions } from "../players/Pla
 import type { AudioPlayer } from "../players/AudioPlayer";
 import type { AudioSource, PlaybackState, RepeatMode, SkipDirection, Song } from "../domain/types";
 import { usePlaybackStore } from "../state/playbackStore";
+import { usePlaylistStore } from "../state/playlistStore";
 import { useSettingsStore } from "../state/settingsStore";
 import { useToastStore } from "../state/toastStore";
 import { useLocalFileStore } from "../state/localFileStore";
@@ -27,6 +28,11 @@ export function isAutoplayBlocked(cause: unknown): boolean {
   const name = (cause as { name?: string } | null)?.name;
   const message = cause instanceof Error ? cause.message : "";
   return name === "NotAllowedError" || message.includes("user didn't interact");
+}
+
+/** The backend lost its playback context (restart); the client can rebuild it. */
+function isNoActivePlayback(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.code === "no_active_playback";
 }
 
 export interface PlaybackControllerOptions {
@@ -56,6 +62,9 @@ export class PlaybackController {
   private unsubscribeError: (() => void) | null = null;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
   private userGesture = false;
+  /** Newest request started; responses older than `lastAppliedSeq` are stale. */
+  private requestSeq = 0;
+  private lastAppliedSeq = 0;
 
   constructor(api: ApiClient, options: PlaybackControllerOptions) {
     this.api = api;
@@ -85,11 +94,6 @@ export class PlaybackController {
   /** Record that the user interacted with the page (autoplay policy). */
   markUserGesture(): void {
     this.userGesture = true;
-  }
-
-  /** Check if user has interacted with the page (for autoplay policy). */
-  hasUserGesture(): boolean {
-    return this.userGesture;
   }
 
   /** Load the transport state from backend. */
@@ -124,14 +128,14 @@ export class PlaybackController {
   next(): Promise<PlaybackState | null> {
     this.markUserGesture();
     if (this.atEdge("available_next", "player.atEnd")) return Promise.resolve(null);
-    return this.commit(() => this.api.next());
+    return this.commit(() => this.api.next(), this.targetPatch("next_index"));
   }
 
   /** Step back in the list. */
   previous(): Promise<PlaybackState | null> {
     this.markUserGesture();
     if (this.atEdge("available_previous", "player.atStart")) return Promise.resolve(null);
-    return this.commit(() => this.api.previous());
+    return this.commit(() => this.api.previous(), this.targetPatch("previous_index"));
   }
 
   /**
@@ -153,19 +157,43 @@ export class PlaybackController {
     return this.commit(() => this.api.songFinished());
   }
 
+  /** Move ±`skip_seconds`; backing up near 0 crosses to the previous song. */
   skip(direction: SkipDirection): Promise<PlaybackState | null> {
     this.markUserGesture();
-    return this.commit(() => this.api.skip(direction));
+    const current = usePlaybackStore.getState().playback;
+    if (!current?.song) return this.commit(() => this.api.skip(direction));
+
+    if (direction === "backward" && current.position <= current.skip_seconds) {
+      // Backing up past 0:00 jumps to the previous song (or rewinds at the head).
+      return this.commit(
+        () => this.api.skip(direction),
+        this.targetPatch("previous_index") ?? { position: 0 },
+      );
+    }
+
+    const delta = current.skip_seconds * (direction === "forward" ? 1 : -1);
+    const duration = current.song.duration;
+    const position =
+      duration > 0
+        ? Math.min(Math.max(current.position + delta, 0), duration)
+        : Math.max(current.position + delta, 0);
+    void this.player?.seek(position); // audible immediately, the answer confirms
+    return this.commit(() => this.api.skip(direction), { position });
   }
 
   seek(position: number): Promise<PlaybackState | null> {
     this.markUserGesture();
-    return this.commit(() => this.api.seek(position));
+    const current = usePlaybackStore.getState().playback;
+    void this.player?.seek(position); // audible immediately, the answer just confirms
+    return this.commit(
+      () => this.api.seek(position),
+      current ? { position } : undefined,
+    );
   }
 
   /** Play or pause the real audio, then report to backend. */
   async togglePlaying(): Promise<PlaybackState | null> {
-    // This method is only reachable from a click/keypress, so it *is* the
+    // This method is only reachable from a click/keypress, so it *is the
     // gesture the autoplay policy waits for (the first press must not no-op).
     this.markUserGesture();
     const current = usePlaybackStore.getState().playback;
@@ -188,17 +216,20 @@ export class PlaybackController {
     } else {
       this.player?.pause();
     }
-    return this.send(() => this.api.report(undefined, willPlay));
+    return this.send(() => this.api.report(undefined, willPlay), { playing: willPlay });
   }
 
   async setRepeat(repeat: RepeatMode): Promise<PlaybackState | null> {
-    return this.send(() => this.api.setModes({ repeat }));
+    return this.send(() => this.api.setModes({ repeat }), { repeat });
   }
 
   async toggleShuffle(): Promise<PlaybackState | null> {
     const current = usePlaybackStore.getState().playback;
     if (!current) return Promise.resolve(null);
-    return this.send(() => this.api.setModes({ shuffle: !current.shuffle }));
+    return this.send(
+      () => this.api.setModes({ shuffle: !current.shuffle }),
+      { shuffle: !current.shuffle },
+    );
   }
 
   /** Stop playback and clear the playback state (e.g., when playlist is deleted). */
@@ -213,7 +244,7 @@ export class PlaybackController {
   }
 
   /** Load the actual audio file for a local track. */
-  async loadLocalTrack(song: Song): Promise<void> {
+  private async loadLocalTrack(song: Song): Promise<void> {
     if (song.source !== "local" || !song.id.startsWith("local:")) {
       throw new Error("loadLocalTrack only supports local tracks");
     }
@@ -221,7 +252,7 @@ export class PlaybackController {
   }
 
   /** Drive the Web Playback SDK for a Spotify track (`F6`). */
-  async loadSpotifyTrack(song: Song): Promise<void> {
+  private async loadSpotifyTrack(song: Song): Promise<void> {
     await this.attachPlayer(this.createPlayer("spotify", { api: this.api }), song);
   }
 
@@ -254,11 +285,101 @@ export class PlaybackController {
   // ------------------------------------------------------------ internals
 
   /** Send a transport request and mirror the answer into the live player. */
-  private async commit(request: () => Promise<PlaybackState>): Promise<PlaybackState | null> {
+  private async commit(
+    request: () => Promise<PlaybackState>,
+    optimistic?: Partial<PlaybackState>,
+  ): Promise<PlaybackState | null> {
     const before = this.identity();
-    const state = await this.send(request);
+    const state = await this.send(request, optimistic);
     if (state) await this.syncAfterState(state, before);
     return state;
+  }
+
+  /**
+   * Send a transport request, mirroring the answer into the store.
+   *
+   * `optimistic` lands in the store immediately, so the UI reacts to the click
+   * instead of to the round trip; a failed request restores the previous state
+   * (and the live player). Answers apply in initiation order: a response older
+   * than one already applied is dropped, so a slow `report` can never undo a
+   * `next`. A `no_active_playback` answer (the backend lost its context on
+   * restart) rebuilds it with a `select` and retries once before giving up.
+   */
+  private async send(
+    request: () => Promise<PlaybackState>,
+    optimistic?: Partial<PlaybackState>,
+  ): Promise<PlaybackState | null> {
+    const seq = ++this.requestSeq;
+    const store = usePlaybackStore.getState();
+    const snapshot = optimistic && store.playback ? store.playback : null;
+    if (snapshot && optimistic) store.setPlayback({ ...snapshot, ...optimistic });
+    try {
+      let state: PlaybackState;
+      try {
+        state = await request();
+      } catch (cause) {
+        if (!isNoActivePlayback(cause) || !(await this.rebuildContext())) throw cause;
+        state = await request();
+      }
+      if (seq < this.lastAppliedSeq) return null; // a newer answer already won
+      this.lastAppliedSeq = seq;
+      usePlaybackStore.getState().setPlayback(state);
+      return state;
+    } catch (cause) {
+      if (seq >= this.lastAppliedSeq) {
+        if (snapshot && optimistic) this.rollback(snapshot, optimistic);
+        this.fail(cause);
+      }
+      return null;
+    }
+  }
+
+  /** Undo an optimistic patch after its request failed, player included. */
+  private rollback(snapshot: PlaybackState, patch: Partial<PlaybackState>): void {
+    usePlaybackStore.getState().setPlayback(snapshot);
+    const player = this.player;
+    if (!player || !snapshot.song || player.source !== snapshot.song.id) {
+      return; // the song itself changed: the App effect reloads it from the snapshot
+    }
+    if (patch.position !== undefined) void player.seek(snapshot.position);
+    if (patch.playing !== undefined) {
+      if (snapshot.playing) void player.play();
+      else player.pause();
+    }
+  }
+
+  /**
+   * State `next`/`previous` should show right away, built from the loaded queue.
+   *
+   * With shuffle off the edge flags and target indexes are recomputed exactly
+   * like the backend does; with shuffle on the order is private to the server,
+   * so only the song/index/position jump is optimistic and the flags stay stale
+   * until the answer (one round trip) lands.
+   */
+  private targetPatch(key: "next_index" | "previous_index"): Partial<PlaybackState> | undefined {
+    const playback = usePlaybackStore.getState().playback;
+    const target = playback ? playback[key] : null;
+    if (!playback || target === null || !playback.song) return undefined;
+    const playlist = usePlaylistStore
+      .getState()
+      .playlists.find((item) => item.id === playback.playlist_id);
+    const song = playlist?.songs[target];
+    if (!song) return undefined; // queue not loaded: wait for the server answer
+
+    const patch: Partial<PlaybackState> = { song, index: target, position: 0, playing: true };
+    if (playback.shuffle || !playlist) return patch;
+
+    const size = playlist.songs.length;
+    const wrap = playback.repeat === "all" && size > 0;
+    const atLast = target >= size - 1;
+    const atFirst = target <= 0;
+    return {
+      ...patch,
+      available_next: size > 0 && (!atLast || wrap),
+      available_previous: size > 0 && (!atFirst || wrap),
+      next_index: atLast ? (wrap ? 0 : null) : target + 1,
+      previous_index: atFirst ? (wrap ? size - 1 : null) : target - 1,
+    };
   }
 
   private identity(): SongIdentity {
@@ -318,6 +439,9 @@ export class PlaybackController {
       const pos = (payload as { currentTime: number }).currentTime;
       usePlaybackStore.setState((prev) => {
         if (!prev.playback) return prev;
+        // Whole seconds only: the UI shows mm:ss, and a tick inside the same
+        // second would re-render subscribers for nothing (`PERF-001`).
+        if (Math.floor(prev.playback.position) === Math.floor(pos)) return prev;
         return { ...prev, playback: { ...prev.playback, position: pos, playing: true } };
       });
       this.scheduleReport(pos);
@@ -427,14 +551,18 @@ export class PlaybackController {
     }, 1000); // throttle position reports
   }
 
-  private async send(request: () => Promise<PlaybackState>): Promise<PlaybackState | null> {
+  /** Recreate the backend playback context after it was lost (restart/spin-down). */
+  private async rebuildContext(): Promise<boolean> {
+    const playback = usePlaybackStore.getState().playback;
+    if (!playback?.playlist_id || playback.index === null) return false;
     try {
-      const state = await request();
-      usePlaybackStore.getState().setPlayback(state);
-      return state;
+      await this.api.selectSong(playback.playlist_id, playback.index);
+      return true;
     } catch (cause) {
-      this.fail(cause);
-      return null;
+      if (cause instanceof ApiError && cause.code === "not_found") {
+        await this.refresh(); // the playlist itself is gone: drop the dead state
+      }
+      return false;
     }
   }
 
@@ -447,9 +575,5 @@ export class PlaybackController {
     useToastStore
       .getState()
       .push("error", translate(this.language(), "toast.error", { message }));
-  }
-
-  static get errorKey(): MessageKey {
-    return "toast.error";
   }
 }

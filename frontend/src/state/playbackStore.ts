@@ -22,8 +22,3 @@ export const usePlaybackStore = create<PlaybackStoreState>((set) => ({
     }),
   reset: () => set({ playback: null }),
 }));
-
-/** Read the current transport state outside React (controllers, tests). */
-export function getPlayback(): PlaybackState | null {
-  return usePlaybackStore.getState().playback;
-}

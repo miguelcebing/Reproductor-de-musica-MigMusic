@@ -88,16 +88,6 @@ export class PlaylistController {
     }
   }
 
-  async addSong(playlistId: string, song: SongInput, index?: number): Promise<Playlist | null> {
-    return this.mutate(
-      () => this.api.addSong(playlistId, song, index),
-      (playlist) => {
-        usePlaylistStore.getState().upsertPlaylist(playlist);
-        this.toast("success", "toast.added");
-      },
-    );
-  }
-
   /** Add picked files as local tracks (`LOCAL-003`), honouring the position. */
   async addLocalTracks(
     playlistId: string,

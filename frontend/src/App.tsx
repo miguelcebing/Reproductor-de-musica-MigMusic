@@ -34,6 +34,8 @@ import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
 import playerStyles from "./ui/components/Player.module.css";
 
+const EMPTY_SONGS: readonly Song[] = [];
+
 export function App(): React.JSX.Element {
   const t = useT();
 
@@ -53,8 +55,16 @@ export function App(): React.JSX.Element {
   const loading = usePlaylistStore((s) => s.loading);
   const setActiveId = usePlaylistStore((s) => s.setActiveId);
 
-  // Playback
-  const playback = usePlaybackStore((s) => s.playback);
+  // Playback: field selectors, never the whole object — `position` ticks 1 Hz
+  // and must not re-render this tree (the ProgressBar subscribes on its own).
+  const playbackActive = usePlaybackStore((s) => s.playback !== null);
+  const song = usePlaybackStore((s) => s.playback?.song ?? null);
+  const playing = usePlaybackStore((s) => s.playback?.playing ?? false);
+  const shuffle = usePlaybackStore((s) => s.playback?.shuffle ?? false);
+  const repeat = usePlaybackStore((s) => s.playback?.repeat ?? "off");
+  const playbackIndex = usePlaybackStore((s) => s.playback?.index ?? null);
+  const playlistId = usePlaybackStore((s) => s.playback?.playlist_id ?? null);
+  const skipSeconds = usePlaybackStore((s) => s.playback?.skip_seconds ?? 5);
 
   // Spotify link + catalog (`F6`)
   const spotifyStatus = useAuthStore((s) => s.status);
@@ -106,12 +116,21 @@ export function App(): React.JSX.Element {
         const message = cause instanceof Error ? cause.message : String(cause);
         const language = useSettingsStore.getState().language;
         useToastStore.getState().push("error", translate(language, "toast.error", { message }));
-      } finally {
-        if (!cancelled) await controllers.playlists.refresh();
       }
+      if (cancelled) return;
+      const [, playback] = await Promise.all([
+        controllers.playlists.refresh(),
+        controllers.playback.refresh(),
+      ]);
+      if (cancelled || !playback?.playlist_id) return;
+      // A reload restarts `activeId` while the backend keeps its playback
+      // context: show the playlist being played, not the first one, or the
+      // list on screen stops matching the transport (`UX-011`).
+      const store = usePlaylistStore.getState();
+      const exists = store.playlists.some((item) => item.id === playback.playlist_id);
+      if (exists) store.setActiveId(playback.playlist_id);
     };
     void bootstrap();
-    void controllers.playback.refresh();
     void controllers.auth.refresh();
     return () => {
       cancelled = true;
@@ -121,9 +140,8 @@ export function App(): React.JSX.Element {
   // Wire the player when the active track moves (F5/F7). Position ticks only
   // change `position`, so they re-render but never reload the audio; the song
   // identity (playlist + index + id) is what decides a reload.
-  const songId = playback?.song?.id ?? null;
-  const songIndex = playback?.index ?? null;
-  const playlistId = playback?.playlist_id ?? null;
+  const songId = song?.id ?? null;
+  const songIndex = playbackIndex;
   useEffect(() => {
     const current = usePlaybackStore.getState().playback;
     const unchanged =
@@ -136,17 +154,10 @@ export function App(): React.JSX.Element {
   // Derived state
   const activePlaylist = playlists.find((p) => p.id === activeId) ?? null;
   const currentIndex =
-    playback && activePlaylist && playback.playlist_id === activePlaylist.id
-      ? playback.index
-      : null;
-  const songs = activePlaylist?.songs ?? [];
-  const skipSeconds = playback?.skip_seconds ?? 5;
-  const hasTrack = playback?.song != null;
-  const duration = playback?.song?.duration ?? 0;
-  const progressLabel = t("player.time", {
-    current: Math.round(playback?.position ?? 0),
-    total: Math.round(duration),
-  });
+    playlistId && activePlaylist && playlistId === activePlaylist.id ? playbackIndex : null;
+  const songs = activePlaylist?.songs ?? EMPTY_SONGS;
+  const hasTrack = song != null;
+  const duration = song?.duration ?? 0;
 
   // Event handlers
   const handleSelectPlaylist = useCallback(
@@ -268,12 +279,11 @@ export function App(): React.JSX.Element {
   }, [controllers]);
 
   const handleCycleRepeat = useCallback(() => {
-    if (!playback) return;
-    const current = playback.repeat;
-    const idx = REPEAT_CYCLE.indexOf(current);
+    if (!playbackActive) return;
+    const idx = REPEAT_CYCLE.indexOf(repeat);
     const next = REPEAT_CYCLE[(idx + 1) % REPEAT_CYCLE.length];
     void controllers.playback.setRepeat(next);
-  }, [controllers, playback]);
+  }, [controllers, playbackActive, repeat]);
 
   const handleVolumeChange = useCallback(
     (v: number) => setVolume(v),
@@ -307,6 +317,22 @@ export function App(): React.JSX.Element {
     [activeId, controllers],
   );
 
+  const handleToggleTheme = useCallback(() => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  }, [theme, setTheme]);
+
+  const handleToggleLanguage = useCallback(() => {
+    setLanguage(language === "es" ? "en" : "es");
+  }, [language, setLanguage]);
+
+  const handleToggleNodes = useCallback(() => {
+    setNodesVisible((v) => !v);
+  }, []);
+
+  const handleCloseDialog = useCallback(() => {
+    setDialogOpen(false);
+  }, []);
+
   // OAuth callback: exchange the code and go back home (`F6`)
   if (callback) {
     return (
@@ -324,35 +350,28 @@ export function App(): React.JSX.Element {
       language={language}
       nodesVisible={nodesVisible}
       toasts={toasts}
-      onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-      onToggleLanguage={() => setLanguage(language === "es" ? "en" : "es")}
-      onToggleNodes={() => setNodesVisible((v) => !v)}
+      onToggleTheme={handleToggleTheme}
+      onToggleLanguage={handleToggleLanguage}
+      onToggleNodes={handleToggleNodes}
       onDismissToast={dismissToast}
     >
       <section className={shellStyles.card} aria-label={t("player.play")}>
         <div className={playerStyles.player}>
           <CoverArt
-            artworkUrl={playback?.song?.artwork_url ?? null}
-            alt={hasTrack ? playback!.song!.title : t("player.noTrack")}
-            playing={playback?.playing ?? false}
+            artworkUrl={song?.artwork_url ?? null}
+            alt={song ? song.title : t("player.noTrack")}
+            playing={playing}
           />
           <NowPlaying
-            title={hasTrack ? playback!.song!.title : t("player.noTrack")}
-            artist={hasTrack ? playback!.song!.artist : t("player.selectHint")}
+            title={song ? song.title : t("player.noTrack")}
+            artist={song ? song.artist : t("player.selectHint")}
           />
-          <ProgressBar
-            position={playback?.position ?? 0}
-            duration={duration}
-            disabled={!hasTrack}
-            step={skipSeconds}
-            label={progressLabel}
-            onSeek={handleSeek}
-          />
+          <ProgressBar duration={duration} disabled={!hasTrack} step={skipSeconds} onSeek={handleSeek} />
           <PlayerControls
-            playing={playback?.playing ?? false}
+            playing={playing}
             disabled={!hasTrack}
-            shuffle={playback?.shuffle ?? false}
-            repeat={playback?.repeat ?? "off"}
+            shuffle={shuffle}
+            repeat={repeat}
             skipSeconds={skipSeconds}
             onTogglePlay={handleTogglePlay}
             onPrevious={handlePrevious}
@@ -401,7 +420,7 @@ export function App(): React.JSX.Element {
         spotifyConnected={spotifyStatus === "linked"}
         spotifyLoading={spotifyLoading}
         spotifyResults={spotifyResults}
-        onClose={() => setDialogOpen(false)}
+        onClose={handleCloseDialog}
         onSubmit={handleSubmitTracks}
         onSubmitSpotify={handleSubmitSpotify}
         onSpotifySearch={handleSpotifySearch}

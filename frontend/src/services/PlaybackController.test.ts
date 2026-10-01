@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlaybackController } from "./PlaybackController";
-import type { ApiClient } from "./apiClient";
+import { ApiError, type ApiClient } from "./apiClient";
 import type {
   AudioSource,
   PlaybackState,
@@ -11,6 +11,7 @@ import type {
 } from "../domain/types";
 import type { AudioPlayer, PlayerEventType, PlayerEventListener } from "../players/AudioPlayer";
 import { usePlaybackStore } from "../state/playbackStore";
+import { usePlaylistStore } from "../state/playlistStore";
 import { useSettingsStore } from "../state/settingsStore";
 import { useToastStore } from "../state/toastStore";
 import { useLocalFileStore } from "../state/localFileStore";
@@ -45,6 +46,8 @@ function makeState(overrides: Partial<PlaybackState> = {}): PlaybackState {
     size: 2,
     available_next: true,
     available_previous: false,
+    next_index: 1,
+    previous_index: null,
     skip_seconds: 5,
     ...overrides,
   };
@@ -242,7 +245,7 @@ describe("PlaybackController (F7 integration)", () => {
     await controller.onTrackChange(null);
   });
 
-  it("does not touch the old player when a transport op changed the song", async () => {
+  it("does not sync the old player with the answer when the song changed", async () => {
     const state = makeState({ playing: true });
     usePlaybackStore.getState().setPlayback(state);
     const { controller, api, factory } = makeController();
@@ -254,7 +257,9 @@ describe("PlaybackController (F7 integration)", () => {
     await controller.skip("forward");
 
     expect(api.skip).toHaveBeenCalledWith("forward");
-    expect(factory.players[0].seekCalls).toHaveLength(0);
+    // The optimistic scrub (+5s) touched it live, but the answer's position
+    // belongs to another song and must never be seeked into the old player.
+    expect(factory.players[0].seekCalls).toEqual([5]);
     await controller.onTrackChange(null);
   });
 
@@ -496,5 +501,179 @@ describe("PlaybackController (F7 integration)", () => {
     expect(toasts).toHaveLength(1);
     expect(toasts[0].kind).toBe("info");
     expect(toasts[0].text).toContain("first song");
+  });
+});
+
+describe("PlaybackController resilience", () => {
+  it("drops a stale answer when a newer request already applied", async () => {
+    const { controller, api } = makeController();
+    usePlaybackStore.getState().setPlayback(makeState({ index: 0, position: 0 }));
+
+    let releaseSeek!: (state: PlaybackState) => void;
+    api.seek.mockImplementation(
+      () =>
+        new Promise<PlaybackState>((resolve) => {
+          releaseSeek = resolve;
+        }),
+    );
+    api.next.mockResolvedValue(makeState({ index: 1, position: 0 }));
+
+    const seekInFlight = controller.seek(42); // slow answer (seq 1)
+    await controller.next(); // fast answer (seq 2) lands first
+    releaseSeek(makeState({ index: 0, position: 42 })); // stale now
+    await seekInFlight;
+
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("rebuilds the backend context and retries once after a restart", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ playlist_id: "pl-1", index: 1 }));
+    const { controller, api } = makeController();
+    api.next
+      .mockRejectedValueOnce(
+        new ApiError(404, "no_active_playback", "no playlist is being played"),
+      )
+      .mockResolvedValue(makeState({ index: 2 }));
+
+    const result = await controller.next();
+
+    expect(api.selectSong).toHaveBeenCalledWith("pl-1", 1);
+    expect(api.next).toHaveBeenCalledTimes(2);
+    expect(result?.index).toBe(2);
+    expect(usePlaybackStore.getState().playback?.index).toBe(2);
+    expect(useToastStore.getState().toasts).toHaveLength(0); // silent recovery
+  });
+
+  it("drops the dead state and still reports when the playlist is gone", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ playlist_id: "pl-1", index: 0 }));
+    const { controller, api } = makeController();
+    api.next.mockRejectedValueOnce(
+      new ApiError(404, "no_active_playback", "no playlist is being played"),
+    );
+    api.selectSong.mockRejectedValue(new ApiError(404, "not_found", "playlist not found"));
+    api.getPlayback.mockRejectedValue(new ApiError(404, "not_found", "playlist not found"));
+
+    const result = await controller.next();
+
+    expect(api.selectSong).toHaveBeenCalledWith("pl-1", 0);
+    expect(result).toBeNull();
+    expect(usePlaybackStore.getState().playback).toBeNull();
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("error");
+    expect(toasts[0].text).toContain("no playlist is being played");
+  });
+});
+
+describe("PlaybackController optimistic UI", () => {
+  beforeEach(() => {
+    usePlaylistStore.getState().setPlaylists([
+      {
+        id: "pl-1",
+        name: "Queue",
+        size: 3,
+        current_index: 0,
+        songs: [makeSong("local:1"), makeSong("local:2"), makeSong("local:3")],
+      },
+    ]);
+  });
+
+  afterEach(() => {
+    usePlaylistStore.getState().setPlaylists([]);
+  });
+
+  /** A request that never resolves until the test releases it. */
+  function hang(): { promise: Promise<PlaybackState>; release: (state: PlaybackState) => void } {
+    let release!: (state: PlaybackState) => void;
+    const promise = new Promise<PlaybackState>((resolve) => {
+      release = resolve;
+    });
+    return { promise, release };
+  }
+
+  it("shows the next song before the server answers", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    const hung = hang();
+    api.next.mockReturnValue(hung.promise);
+
+    const inFlight = controller.next(); // not awaited yet
+
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+
+    hung.release(makeState({ index: 1, position: 0 }));
+    await inFlight;
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+  });
+
+  it("moves the progress bar before the seek is confirmed", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ position: 10, playing: true }));
+    const { controller, api } = makeController();
+    await controller.onTrackChange(makeState().song!);
+    const hung = hang();
+    api.seek.mockReturnValue(hung.promise);
+
+    const inFlight = controller.seek(120);
+
+    expect(usePlaybackStore.getState().playback?.position).toBe(120);
+
+    hung.release(makeState({ position: 120 }));
+    await inFlight;
+    expect(usePlaybackStore.getState().playback?.position).toBe(120);
+    await controller.onTrackChange(null);
+  });
+
+  it("backing up past 0:00 jumps to the previous song at once", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 1, position: 3, next_index: 2, previous_index: 0 }),
+    );
+    const { controller, api } = makeController();
+    const hung = hang();
+    api.skip.mockReturnValue(hung.promise);
+
+    const inFlight = controller.skip("backward"); // 3 <= skip_seconds (5)
+
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:1");
+    expect(usePlaybackStore.getState().playback?.index).toBe(0);
+    expect(usePlaybackStore.getState().playback?.position).toBe(0);
+
+    hung.release(makeState({ index: 0, song: makeSong("local:1"), position: 0 }));
+    await inFlight;
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:1");
+  });
+
+  it("rolls back an optimistic pause when the report fails", async () => {
+    const state = makeState({ playing: true });
+    usePlaybackStore.getState().setPlayback(state);
+    const { controller, api, factory } = makeController();
+    await controller.onTrackChange(state.song!);
+    api.report.mockRejectedValue(new Error("server down"));
+
+    const result = await controller.togglePlaying();
+
+    expect(result).toBeNull();
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true); // restored
+    expect(factory.players[0].isPlaying).toBe(true); // the audio was resumed too
+    expect(useToastStore.getState().toasts).toHaveLength(1);
+    await controller.onTrackChange(null);
+  });
+
+  it("flips repeat before the modes round trip lands", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ repeat: "off" }));
+    const { controller, api } = makeController();
+    const hung = hang();
+    api.setModes.mockReturnValue(hung.promise);
+
+    const inFlight = controller.setRepeat("all");
+
+    expect(usePlaybackStore.getState().playback?.repeat).toBe("all");
+
+    hung.release(makeState({ repeat: "all" }));
+    await inFlight;
+    expect(usePlaybackStore.getState().playback?.repeat).toBe("all");
   });
 });

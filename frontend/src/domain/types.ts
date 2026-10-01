@@ -64,6 +64,10 @@ export interface PlaybackState {
   readonly size: number;
   readonly available_next: boolean;
   readonly available_previous: boolean;
+  /** Index `next` would select (`null` at the tail); drives the optimistic jump. */
+  readonly next_index: number | null;
+  /** Index `previous` would select (`null` at the head). */
+  readonly previous_index: number | null;
   readonly skip_seconds: number;
 }
 
