@@ -24,11 +24,13 @@ from migmusic.application.services import PlaybackService, PlaylistService
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
 from migmusic.domain.ports.playlist_repository import PlaylistRepository
+from migmusic.domain.ports.token_store import TokenStore
 from migmusic.infrastructure.persistence import (
     InMemoryPlaylistRepository,
     SqlPlaylistRepository,
 )
 from migmusic.infrastructure.security.session_token_store import InMemoryTokenStore
+from migmusic.infrastructure.security.sql_token_store import SqlTokenStore
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
 from migmusic.infrastructure.spotify.spotify_music_provider import SpotifyMusicProvider
 from migmusic.infrastructure.spotify.spotify_oauth import SpotifyOAuth
@@ -87,8 +89,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Spotify: a session-scoped token store and the catalog adapter
     # (stateless: the access token travels per call).
+    # `DATABASE_URL` keeps the tokens across Render restarts; the in-memory
+    # store would log every user out on each redeploy.
     app.state.http_client = http_client
-    token_store = InMemoryTokenStore()
+    token_store: TokenStore
+    if config.database_url:
+        token_store = SqlTokenStore(config.database_url)
+    else:
+        token_store = InMemoryTokenStore()
     app.state.spotify_oauth = SpotifyOAuth(config.spotify)
     app.state.spotify_token_store = token_store
     app.state.spotify_auth_service = SpotifyAuthService(
@@ -119,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "app_env": config.app_env,
             "cors_origins": config.cors_origins,
             "playlist_repository": repository_adapter,
+            "spotify_token_store": "sql" if config.database_url else "in_memory",
         },
     )
     return app

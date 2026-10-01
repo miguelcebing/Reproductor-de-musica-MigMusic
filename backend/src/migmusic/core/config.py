@@ -62,6 +62,8 @@ class Settings(BaseSettings):
 
     # --- Session ---
     session_secret_key: SecretStr = Field(alias="SESSION_SECRET_KEY")
+    # How long a Spotify login may stay unfinished (2FA + consent screen).
+    oauth_state_max_age: int = Field(default=900, alias="OAUTH_STATE_MAX_AGE", ge=60)
 
     # --- Playback ---
     skip_seconds: float = Field(default=5.0, alias="SKIP_SECONDS", gt=0)

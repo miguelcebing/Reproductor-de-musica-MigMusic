@@ -23,32 +23,40 @@ from fastapi.responses import RedirectResponse
 from migmusic.api.dependencies import SpotifyAuthServiceDep
 from migmusic.api.schemas import AccessTokenOut, AuthStatusOut, CallbackBody, CallbackOut
 from migmusic.api.spotify_session import (
+    OAUTH_COOKIE,
     SESSION_MAX_AGE,
     OauthState,
     clear_oauth_cookie,
     clear_session_cookie,
-    read_oauth_cookie,
     read_session_id,
+    resolve_oauth_state,
+    sign_oauth_state,
     write_oauth_cookie,
     write_session_cookie,
 )
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
+from migmusic.core import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth/spotify", tags=["auth"])
 
 
 @router.get("/login", summary="Start the Spotify OAuth flow", status_code=302)
 async def login(request: Request, service: SpotifyAuthServiceDep) -> RedirectResponse:
-    """Generate PKCE + state, stash them in a signed cookie, redirect to Spotify."""
-    auth_url, state, code_verifier = service.login_parts()
+    """Prepare PKCE, sign a self-contained state, redirect to Spotify.
+
+    ``state`` carries the signed ``code_verifier`` + session id, so the callback
+    does not depend on the short-lived cookie surviving the round-trip (slow 2FA,
+    blocked third-party cookies, proxy rewrites).
+    """
+    code_verifier = service.new_code_verifier()
     session_id = read_session_id(request) or secrets.token_urlsafe(24)
+    state = sign_oauth_state(request, code_verifier=code_verifier, session_id=session_id)
+    auth_url = service.authorization_url(state=state, code_verifier=code_verifier)
 
     response = RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
-    write_oauth_cookie(
-        response,
-        request,
-        OauthState(state=state, code_verifier=code_verifier, session_id=session_id),
-    )
+    write_oauth_cookie(response, request, state)
     return response
 
 
@@ -163,13 +171,22 @@ async def _exchange(
     code: str,
     state: str,
 ) -> OauthState:
-    """Validate the OAuth cookie and exchange the code; return the session id.
+    """Rebuild the pending login, then exchange the code; return its session id.
 
-    Raises ``401`` when the short-lived cookie is missing or tampered with, so
-    both callback flavours fail identically.
+    The pending login comes from the OAuth cookie when it is present and matches
+    ``state``, otherwise from the signature carried by ``state`` itself. Raises
+    ``401`` when neither is available, and ``422`` on a state mismatch, so both
+    callback flavours fail identically.
     """
-    pending = read_oauth_cookie(request)
+    pending = resolve_oauth_state(request, state)
     if pending is None:
+        logger.warning(
+            "spotify_callback_rejected",
+            extra={
+                "oauth_cookie": "present" if request.cookies.get(OAUTH_COOKIE) else "absent",
+                "state_len": len(state),
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or expired OAuth state; start the login again",

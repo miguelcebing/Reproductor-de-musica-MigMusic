@@ -9,7 +9,9 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT
+    # --proxy-headers: honour X-Forwarded-* from Vercel so redirects and
+    # secure cookies see the real scheme/host (`DEPLOY-005`).
+    startCommand: uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION

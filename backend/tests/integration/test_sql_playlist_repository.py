@@ -7,15 +7,12 @@ dev dependency boots a throwaway server — no Docker (`DEPLOY-004`) required.
 
 from __future__ import annotations
 
-import atexit
-import os
-import tempfile
 from collections.abc import Callable, Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
 import pytest
+from postgres_dsn import DSN as _DSN
 from psycopg.rows import dict_row
 
 from migmusic.domain.entities.playlist import Playlist
@@ -23,30 +20,6 @@ from migmusic.infrastructure.persistence import SqlPlaylistRepository
 
 if TYPE_CHECKING:
     from migmusic.domain.entities.song import Song
-
-try:  # Embedded PostgreSQL; absent only in environments that override the DSN.
-    import pgserver
-except ImportError:  # pragma: no cover - depends on the environment
-    pgserver = None  # type: ignore[assignment]
-
-
-def _resolve_dsn() -> str:
-    """Prefer ``TEST_DATABASE_URL``; else boot an embedded server once."""
-    provided = os.environ.get("TEST_DATABASE_URL", "")
-    if provided:
-        return provided
-    if pgserver is None:  # pragma: no cover - depends on the environment
-        return ""
-    try:
-        data_dir = Path(tempfile.gettempdir()) / "migmusic-test-pg"
-        server = pgserver.get_server(str(data_dir))
-        atexit.register(server.cleanup)
-        return server.get_uri()
-    except Exception:  # pragma: no cover - skip instead of failing collection
-        return ""
-
-
-_DSN = _resolve_dsn()
 
 pytestmark = [
     pytest.mark.integration,

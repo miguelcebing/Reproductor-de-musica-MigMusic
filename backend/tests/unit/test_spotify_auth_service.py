@@ -158,6 +158,64 @@ def test_failed_refresh_forgets_the_session() -> None:
     asyncio.run(run())
 
 
+def test_transient_refresh_failure_keeps_the_session() -> None:
+    """A 5xx from Spotify must not throw the refresh token away."""
+    store = InMemoryTokenStore()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "temporarily_unavailable"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = SpotifyAuthService(SpotifyOAuth(CONFIG), store, client)
+
+    async def run() -> None:
+        await store.set(
+            "session-1",
+            TokenBundle(
+                access_token="at-stale",
+                refresh_token="rt-1",
+                expires_at=time.time() + 1,
+                scope="streaming",
+            ),
+        )
+        token = await service.valid_access_token("session-1")
+
+        assert token is None
+        bundle = await store.get("session-1")
+        assert bundle is not None and bundle.refresh_token == "rt-1"
+
+    asyncio.run(run())
+
+
+def test_malformed_refresh_response_keeps_the_session() -> None:
+    """A payload we cannot parse also leaves the stored bundle untouched."""
+    store = InMemoryTokenStore()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"token_type": "Bearer"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = SpotifyAuthService(SpotifyOAuth(CONFIG), store, client)
+
+    async def run() -> None:
+        await store.set(
+            "session-1",
+            TokenBundle(
+                access_token="at-stale",
+                refresh_token="rt-1",
+                expires_at=time.time() + 1,
+                scope="streaming",
+            ),
+        )
+        token = await service.valid_access_token("session-1")
+
+        assert token is None
+        bundle = await store.get("session-1")
+        assert bundle is not None and bundle.refresh_token == "rt-1"
+
+    asyncio.run(run())
+
+
 def test_valid_token_without_session_is_none() -> None:
     """An anonymous visitor simply has no token."""
     service = _service(InMemoryTokenStore())

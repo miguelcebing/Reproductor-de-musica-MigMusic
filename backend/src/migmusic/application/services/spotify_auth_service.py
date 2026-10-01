@@ -7,9 +7,15 @@ from dataclasses import dataclass
 
 import httpx
 
-from migmusic.core import ValidationError
+from migmusic.core import ValidationError, get_logger
 from migmusic.domain.ports.token_store import TokenBundle, TokenStore
-from migmusic.infrastructure.spotify.spotify_oauth import SpotifyOAuth, TokenResponse
+from migmusic.infrastructure.spotify.spotify_oauth import (
+    SpotifyOAuth,
+    SpotifyOAuthError,
+    TokenResponse,
+)
+
+logger = get_logger(__name__)
 
 
 class SpotifyAuthError(ValidationError):
@@ -44,10 +50,14 @@ class SpotifyAuthService:
         self._tokens = token_store
         self._http = http_client
 
-    def login_parts(self) -> tuple[str, str, str]:
-        """Return ``(auth_url, state, code_verifier)`` for the redirect."""
-        parts = self._oauth.build_authorization_url()
-        return parts.url, parts.state, parts.code_verifier
+    def new_code_verifier(self) -> str:
+        """Fresh PKCE verifier for a new authorization attempt."""
+        return self._oauth.new_code_verifier()
+
+    def authorization_url(self, *, state: str, code_verifier: str) -> str:
+        """Spotify's authorize URL for a prepared PKCE pair and signed state."""
+        parts = self._oauth.build_authorization_url(state=state, code_verifier=code_verifier)
+        return parts.url
 
     async def handle_callback(
         self,
@@ -67,8 +77,9 @@ class SpotifyAuthService:
     async def valid_access_token(self, session_id: str) -> ValidAccessToken | None:
         """Return a token valid for at least a minute, refreshing when needed.
 
-        Returns ``None`` when the session has no tokens or the refresh failed
-        (revoked session) — the caller then reports "reconnect".
+        Returns ``None`` when the session has no tokens, when Spotify rejected
+        them, or when the refresh failed transiently — the caller then reports
+        "reconnect". Only the rejection actually forgets the stored bundle.
         """
         bundle = await self._tokens.get(session_id)
         if bundle is None:
@@ -83,7 +94,8 @@ class SpotifyAuthService:
 
         refreshed = await self._refresh(session_id, bundle)
         if refreshed is None:
-            await self._tokens.delete(session_id)
+            # _refresh only forgets the bundle when Spotify rejected it; a
+            # transient failure keeps it so the next attempt can retry.
             return None
         await self._store(session_id, refreshed)
         return ValidAccessToken(
@@ -111,9 +123,23 @@ class SpotifyAuthService:
         )
 
     async def _refresh(self, session_id: str, old: TokenBundle) -> TokenResponse | None:
-        """Single refresh attempt; failures propagate as ``None`` (revoked)."""
-        del session_id  # kept for API symmetry with future audit logging
+        """Single refresh attempt; ``None`` when no new token could be obtained.
+
+        The stored bundle is deleted only when Spotify itself rejects it
+        (``invalid_grant``: revoked or rotated refresh token). Every other
+        failure — network, 5xx, malformed payload — keeps the bundle, so the
+        session survives and the next call retries instead of forcing a new
+        sign-in.
+        """
         try:
             return await self._oauth.refresh_token(old.refresh_token, self._http)
-        except Exception:
+        except SpotifyOAuthError as exc:
+            if exc.code == "invalid_grant":
+                logger.warning("Spotify rejected the refresh token; forgetting the session")
+                await self._tokens.delete(session_id)
+            else:
+                logger.warning("Spotify refresh deferred [%s]: %s", exc.code, exc)
+            return None
+        except Exception as exc:
+            logger.warning("Spotify refresh failed transiently: %s", exc)
             return None

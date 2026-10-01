@@ -61,18 +61,29 @@ class SpotifyOAuth:
     def __init__(self, config: SpotifyConfig) -> None:
         self._config = config
 
-    def build_authorization_url(self) -> AuthURLParts:
-        """Generate PKCE code_verifier/challenge and a random state."""
-        code_verifier = secrets.token_urlsafe(64)
-        code_challenge = self._pkce_challenge(code_verifier)
-        state = secrets.token_urlsafe(24)
+    @staticmethod
+    def new_code_verifier() -> str:
+        """Fresh PKCE code_verifier (RFC 7636, 64 URL-safe chars)."""
+        return secrets.token_urlsafe(64)
+
+    def build_authorization_url(
+        self, *, state: str | None = None, code_verifier: str | None = None
+    ) -> AuthURLParts:
+        """Generate PKCE code_verifier/challenge and a random state.
+
+        Both parts may be supplied by the caller: the API signs its own
+        ``state`` so the callback still works when the OAuth cookie is lost.
+        """
+        verifier = code_verifier if code_verifier is not None else self.new_code_verifier()
+        code_challenge = self._pkce_challenge(verifier)
+        state_value = state if state is not None else secrets.token_urlsafe(24)
 
         params = {
             "response_type": "code",
             "client_id": self._config.client_id,
             "redirect_uri": self._config.redirect_uri,
             "scope": self._config.scopes,
-            "state": state,
+            "state": state_value,
             "code_challenge_method": "S256",
             "code_challenge": code_challenge,
             "show_dialog": "false",
@@ -80,8 +91,8 @@ class SpotifyOAuth:
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return AuthURLParts(
             url=f"{self.AUTH_URL}?{query}",
-            state=state,
-            code_verifier=code_verifier,
+            state=state_value,
+            code_verifier=verifier,
         )
 
     async def exchange_code(

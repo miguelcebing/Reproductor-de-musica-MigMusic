@@ -58,6 +58,47 @@ def test_callback_with_wrong_state_is_rejected(spotify_client: TestClient) -> No
     assert response.json()["error"]["code"] == "validation_error"
 
 
+def test_callback_completes_without_the_oauth_cookie(spotify_client: TestClient) -> None:
+    """A lost/expired ``mig_oauth`` cookie must not break the callback.
+
+    Slow 2FA or consent screens, blocked third-party cookies and proxy rewrites
+    all drop that cookie: the signed ``state`` Spotify echoes back carries the
+    same pending login, so the round-trip still succeeds.
+    """
+    login = spotify_client.get("/api/auth/spotify/login", follow_redirects=False)
+    state = _state_from(login.headers["location"])
+    assert spotify_client.cookies.get(OAUTH_COOKIE)  # sanity: the cookie was set
+    spotify_client.cookies.clear()  # simulate it never arriving at the callback
+
+    response = spotify_client.get(
+        f"/api/auth/spotify/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert spotify_client.cookies.get(SESSION_COOKIE)
+    assert spotify_client.get("/api/auth/spotify/status").json() == {"authenticated": True}
+
+
+def test_callback_accepts_a_state_from_a_second_login(spotify_client: TestClient) -> None:
+    """Two tabs may start a login; the older ``state`` stays redeemable."""
+    first = spotify_client.get("/api/auth/spotify/login", follow_redirects=False)
+    first_state = _state_from(first.headers["location"])
+    second = spotify_client.get("/api/auth/spotify/login", follow_redirects=False)
+    second_state = _state_from(second.headers["location"])
+
+    assert first_state != second_state
+    assert spotify_client.cookies.get(OAUTH_COOKIE) == second_state
+
+    response = spotify_client.get(
+        f"/api/auth/spotify/callback?code=abc&state={first_state}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert spotify_client.get("/api/auth/spotify/status").json() == {"authenticated": True}
+
+
 def test_get_callback_sets_the_session_and_redirects_home(spotify_client: TestClient) -> None:
     """Production flow: Spotify lands on the API, which returns the SPA."""
     login = spotify_client.get("/api/auth/spotify/login", follow_redirects=False)
