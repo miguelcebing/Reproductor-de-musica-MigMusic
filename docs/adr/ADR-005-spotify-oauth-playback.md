@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-28
+- **Updated:** 2026-10-01 (signed `state` fallback + persistent token store,
+  after the production `401` on the callback)
 - **Related:** `SPOTIFY-001`…`SPOTIFY-008`, `F6-STATE`, `F6-SCOPES`,
   `DEPLOY-001`, `DEPLOY-002`, ADR-003
 
@@ -37,13 +39,25 @@ docs on 2026-09-28.
      (ADR-003 single origin). The backend exchanges the code and redirects
      the browser back to the SPA.
 3. **Session (`F6-STATE`):** tokens live **only** in the backend
-   (`TokenStore` keyed by session id). The browser holds two `HttpOnly`
-   cookies signed with HMAC-SHA256: `mig_oauth` (10 min, PKCE state +
-   session id, cleared on callback) and `mig_session` (30 d, session id).
-   `SameSite=Lax` (same-origin in both environments), `Secure` when
-   `APP_ENV=production`. The access token is refreshed server-side ~60 s
-   before expiry; if the refresh fails the session is dropped and the UI
-   asks the user to reconnect (`SPOTIFY-007`).
+   (`TokenStore` keyed by session id): `SqlTokenStore` (PostgreSQL) whenever
+   `DATABASE_URL` is set, `InMemoryTokenStore` otherwise — the SQL adapter is
+   the one that survives a Render redeploy. The browser holds two `HttpOnly`
+   cookies signed with HMAC-SHA256: `mig_oauth` (`OAUTH_STATE_MAX_AGE`,
+   default 900 s, cleared on callback) and `mig_session` (30 d, session id).
+   `SameSite=Lax` in development, `SameSite=None` in production, `Secure` when
+   `APP_ENV=production`.
+   - **Pending login (`SPOTIFY-004`, revised):** `sign_oauth_state` signs
+     `code_verifier|session_id` once, and that single blob travels both as the
+     `mig_oauth` value **and** as the `state` query parameter. The callback
+     trusts a matching cookie first (browser-bound, anti-CSRF), then falls back
+     to the signature carried by `state`; a cookie that is present but does not
+     verify answers `422`, and nothing to verify answers `401`. The cookie is
+     therefore no longer a single point of failure — this is what fixed the
+     production `401` (slow 2FA and proxy rewrites used to age it out).
+   - **Refresh:** renewed server-side ~60 s before expiry, and the stored
+     bundle is dropped **only** when Spotify answers `invalid_grant`. Network
+     errors and `5xx` keep it, so a transient failure no longer signs the user
+     out (`SPOTIFY-007`).
 4. **SDK token:** `GET /api/auth/spotify/token` returns a *fresh* access
    token (`Cache-Control: no-store`) to the Web Playback SDK's
    `getOAuthToken`. The refresh token and the Client Secret are **never**

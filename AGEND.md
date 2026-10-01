@@ -1446,12 +1446,12 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] Sin secretos en repositorio ni en frontend; `.env.example` presente.
 
 **Interfaz**
-- [x] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado. (`tokens.css`, F9-GATE)
+- [x] Refleja las decisiones `VIS-*`/`UX-*` confirmadas; animaciones acordes; `prefers-reduced-motion` respetado. (`tokens.css` + Framer Motion con `MotionConfig reducedMotion="user"`, F9-GATE/F4-ANIM)
 - [x] Responsive verificado en mobile, tablet, laptop y desktop. (breakpoints 640/1024/1440 + E2E en Pixel 7)
 - [x] Accesibilidad básica cumplida (teclado, foco, ARIA, contraste). (axe WCAG 2.1 A/AA sin violaciones + focus-trap en E2E)
 
 **Calidad y despliegue**
-- [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (292 pytest/96.96 %/dominio 100 %, 69 Vitest, 7 E2E; ver `docs/testing.md`)
+- [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (309 pytest/96.83 %/dominio 100 %, 77 Vitest, 9 E2E; ver `docs/testing.md`)
 - [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(desplegado 2026-09-30: `https://migmusic.vercel.app` → proxy `/api/*` → `https://migmusic-api.onrender.com` (health 200, CORS preflight 200 con ACAO `https://migmusic.vercel.app`, Neon conectado, auto-deploy Render por commit). Queda: `SPOTIFY_CLIENT_SECRET` real en Render (placeholder), Redirect URI en Spotify Dashboard y conexión GitHub en Vercel)*
 - [x] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas. (`FEAT-001-b/c/d/e`: favoritos, búsqueda, repeat, drag & drop)
 - [x] Documentación (README, docs/architecture, ADRs) actualizada.
@@ -1581,6 +1581,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-09-29 | F11-GATE | Cierre: suite E2E Playwright (smoke, flujo maestro en desktop + móvil, accesibilidad axe WCAG 2.1 A/AA), fix del crash de arranque detectado por E2E (`hasTrack` con `playback: null`), job `e2e` en CI, `docs/testing.md` (reporte criterio → evidencia → estado) | TEST-001/002/003/004 y SKILL6; backend: 292 tests/96.96%/dominio 100%; frontend: lint/tsc/69 tests/7 E2E/build; axe: 0 violaciones |
 | 2026-09-30 | DEPLOY-GATE | Despliegue real ejecutado: Vercel proyecto `migmusic` (`https://migmusic.vercel.app`, rewrite `/api/*`), Render `migmusic-api` (`srv-dau8psugekts73del56g`, rootDir `backend`, auto-deploy por commit), Neon `MigMusic` (`DATABASE_URL` fuera del repo en `deploy/credentials.env`) | DEPLOY-001..005, ADR-006; health 200 directo y por proxy, CORS preflight 200 con ACAO correcto, deploy `7f256c6` live |
 | 2026-09-30 | DEPLOY-FIX | Root Directory `frontend` en el proyecto Vercel (el build de Git ejecutaba `vite build` en la raíz del repo) e integración Git conectada | Auto-deploy de Vercel operativo (commit → Ready en ~13 s y alias `migmusic.vercel.app`); verificado con `60ab478` |
+| 2026-10-01 | F4-ANIM | Se revoca la decisión de "CSS puro": se instala Framer Motion para las microinteracciones de PlayerControls, TrackList, AddTrackDialog y ProgressBar | Anula la línea F4-ANIM del 2026-09-28; MotionConfig `reducedMotion="user"` y los tokens CSS siguen garantizando VIS-006/FRONT-003/004; gates: tsc, eslint, 77 Vitest, build y 8 E2E OK |
 
 ## Validación de entrega de este AGEND.md
 

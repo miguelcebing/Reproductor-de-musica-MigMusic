@@ -125,15 +125,39 @@ stored backend-side under the session id (`SPOTIFY-007`, ADR-005).
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/auth/spotify/login` | `302` to `accounts.spotify.com/authorize`. Sets the short-lived `mig_oauth` cookie (state + PKCE verifier + session id). |
-| `GET` | `/api/auth/spotify/callback` | **Production** Redirect URI. Exchanges the code, sets `mig_session`, redirects to the SPA. `401` when the state cookie is missing/tampered with. |
+| `GET` | `/api/auth/spotify/login` | `302` to `accounts.spotify.com/authorize`. Sets the short-lived `mig_oauth` cookie and hands Spotify the very same signed blob as `state`. |
+| `GET` | `/api/auth/spotify/callback` | **Production** Redirect URI. Validates `state`, exchanges the code, sets `mig_session`, redirects to the SPA. |
+| `GET` | `/api/auth/callback` | Alias of the previous route mounted at the root: the exact string registered in the Spotify Dashboard (`SPOTIFY-003`). |
+| `GET` | `/api/auth/spotify/callback-legacy` | Same handler under the `/spotify/` router, for dashboards that registered it. |
 | `POST` | `/api/auth/spotify/callback` | **Development** variant: the SPA forwards the reply. Body: `{"code": "...", "state": "..."}` → `{"authenticated": true}`. |
 | `GET` | `/api/auth/spotify/status` | `{"authenticated": true \| false}` — cheap link check for the UI. |
 | `GET` | `/api/auth/spotify/token` | Fresh access token for the Web Playback SDK: `{"access_token": "...", "expires_in": 3600, "token_type": "Bearer"}`, `Cache-Control: no-store`. `401` when the session is missing or expired; **never** returns the refresh token. |
 | `POST` | `/api/auth/spotify/logout` | Drops the stored tokens and expires `mig_session`. `204`. |
 
-**Cookies** — `HttpOnly`, `SameSite=Lax`, `Secure` in production, `Path=/`:
-`mig_oauth` (10 min, deleted on callback) and `mig_session` (30 days).
+**State (anti-CSRF)** — `sign_oauth_state` HMAC-signs `code_verifier|session_id`
+with `SESSION_SECRET_KEY`. That single blob is both the `mig_oauth` cookie value
+and the `state` query parameter, so the login survives a callback where the cookie
+never made it back (slow 2FA, blocked third-party cookies, proxy rewrites).
+`resolve_oauth_state` applies this order:
+
+1. cookie present and equal to the echoed `state` → browser-bound path;
+2. otherwise the signature carried by `state` itself;
+3. cookie present but unverifiable → `422` (CSRF or corrupted redirect);
+4. nothing usable → `401`, and the user signs in again.
+
+The cookie lives `OAUTH_STATE_MAX_AGE` seconds (default `900`, minimum `60`) and is
+cleared as soon as the callback finishes.
+
+**Cookies** — `HttpOnly`, `Secure` in production, `Path=/`; `SameSite=Lax` in
+development and `SameSite=None` in production (the callback comes back through the
+Vercel proxy): `mig_oauth` (`OAUTH_STATE_MAX_AGE`) and `mig_session` (30 days).
+
+**Token store** — tokens are keyed by session id in `SqlTokenStore` (PostgreSQL)
+whenever `DATABASE_URL` is set, in `InMemoryTokenStore` otherwise; the SQL store is
+what keeps users signed in across Render redeploys. Refresh runs ~60 s before expiry
+and forgets the bundle only when Spotify answers `invalid_grant` (revoked or rotated
+refresh token); network errors and `5xx` keep it, so the next request retries
+instead of forcing a new login.
 
 ---
 

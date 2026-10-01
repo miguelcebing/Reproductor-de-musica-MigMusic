@@ -18,7 +18,8 @@ de la lista enlazada pensada para la sustentación.
 | Base de datos | PostgreSQL (Neon, plan gratuito) |
 | Fuentes de audio | HTML5 `<audio>` (local) · Spotify Web Playback SDK |
 | Testing | pytest · Vitest · Playwright |
-| CI/CD | GitHub Actions (lint + tests que bloquean) |
+| Animaciones | Framer Motion (`MotionConfig reducedMotion="user"`) |
+| CI/CD | GitHub Actions (lint + tests que bloquean + *keep-alive* cada 10 min) |
 | Despliegue | Vercel (frontend) · Render (backend) · Neon (DB) |
 
 ---
@@ -74,7 +75,8 @@ Copia `.env.example` a `.env` y rellena. **Nunca** subas `.env` al repositorio.
 | `SPOTIFY_CLIENT_ID` | Client ID (público) |
 | `SPOTIFY_CLIENT_SECRET` | **Solo backend.** Jamás en chat, código ni frontend |
 | `SPOTIFY_REDIRECT_URI` | Debe coincidir **exactamente** con el Dashboard |
-| `SESSION_SECRET_KEY` | Firma de cookies de sesión |
+| `SESSION_SECRET_KEY` | Firma de cookies de sesión y del `state` OAuth |
+| `OAUTH_STATE_MAX_AGE` | Segundos que puede durar un login sin terminar (defecto `900`) |
 | `DATABASE_URL` | URL de conexión a PostgreSQL (Neon) |
 | `RENDER_BACKEND_URL` | URL del backend para el proxy `/api/*` de Vercel |
 
@@ -148,13 +150,15 @@ el backend en Render.
 | Pieza | URL / recurso | Estado |
 | --- | --- | --- |
 | Frontend (Vercel, proyecto `migmusic`) | <https://migmusic.vercel.app> | ✅ desplegado |
-| Backend (Render `migmusic-api`, `srv-dau8psugekts73del56g`) | <https://migmusic-api.onrender.com> | ✅ `live`, health 200 |
+| Backend (Render `migmusic-api`, `srv-dauk5k8jo6nc73dgl7ug`) | <https://migmusic-api.onrender.com> | ✅ `live`, health 200 |
 | Proxy `/api/*` | <https://migmusic.vercel.app/api/health> | ✅ 200 → Render |
 | CORS | preflight con ACAO `https://migmusic.vercel.app` | ✅ 200 |
 | BD (Neon, proyecto `MigMusic`) | schema auto-creado en el arranque | ✅ conectada |
 
-Pendiente (acciones del usuario): `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder),
-registrar la Redirect URI en Spotify Dashboard, y UptimeRobot.
+Pendiente (acciones del usuario): `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder)
+y registrar la Redirect URI en Spotify Dashboard. El *keep-alive* ya no depende de un
+servicio externo: el workflow `keep-alive.yml` de GitHub Actions pinga `/api/health`
+cada 10 minutos.
 El auto-deploy de Vercel está activo (proyecto con *Root Directory* `frontend`); el de
 Render se dispara con `render deploys create` mientras no llegue el webhook de la App de
 GitHub.
@@ -167,7 +171,9 @@ detecta `render.yaml` en la raíz y crea el servicio con las variables no secret
 **Opción B — manual:**
 
 1. Conecta el repo de GitHub y crea un **Web Service** con root directory `backend`.
-2. Build: `uv sync --frozen` · Start: `uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT`
+2. Build: `uv sync --frozen` · Start: `uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"`
+   (las cabeceras `X-Forwarded-*` que manda Vercel son las que dan el esquema y el host
+   reales a las redirecciones y a las cookies `Secure`).
 3. Añade todas las variables del panel (incluido `SPOTIFY_CLIENT_SECRET` y `DATABASE_URL` de Neon).
 4. Copia la URL generada (`https://<servicio>.onrender.com`) a `RENDER_BACKEND_URL` **y** al
    destino del rewrite en `frontend/vercel.json`.
@@ -181,6 +187,8 @@ detecta `render.yaml` en la raíz y crea el servicio con las variables no secret
    servicio de Render de otra forma).
    > Desde el 06/04/2026 Vercel cachea los *rewrites* por defecto: sin esta cabecera el
    > tráfico de `/api/*` puede quedar cacheado en el borde y servir respuestas viejas.
+   > El segundo rewrite (`/(.*)` → `/index.html`) es el *catch-all* del SPA: sin él,
+   > el callback de OAuth y los enlaces profundos contestan `404` en Vercel.
 3. Añade `SPOTIFY_REDIRECT_URI=https://migmusic.vercel.app/api/auth/callback` al
    Dashboard **y** las variables de entorno del proyecto.
 4. Despliega. Verifica que `/api/health` responde desde `https://migmusic.vercel.app/api/health`.
@@ -189,19 +197,25 @@ detecta `render.yaml` en la raíz y crea el servicio con las variables no secret
 
 ```bash
 # Últimos deploys de Render (estado live / build_failed)
-render deploys list srv-dau8psugekts73del56g
+render deploys list srv-dauk5k8jo6nc73dgl7ug
 
 # Salud del backend y del proxy de un solo origen
 curl https://migmusic-api.onrender.com/api/health
 curl https://migmusic.vercel.app/api/health
 ```
 
-### 4. Cold start
+### 4. Cold start y monitorización
 
-Render apaga el servicio en planes gratuitos. Un *ping* de
-[UptimeRobot](https://uptimerobot.com/) cada 5 minutos a `/api/health` evita la primera
-petición lenta. Configuración usada: monitor **HTTP(s)**, nombre `MigMusic API`,
-URL `https://migmusic-api.onrender.com/api/health`, intervalo **5 min**.
+Render apaga el servicio en planes gratuitos. El workflow
+[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) pinga
+`https://migmusic-api.onrender.com/api/health` cada 10 minutos (`schedule` +
+`workflow_dispatch`), reintenta hasta 90 s para absorber el arranque en frío y después
+comprueba el mismo health a través del proxy de Vercel. A la vez es *keep-alive* y
+monitor de producción: si responde 200, el flujo completo (navegador → Vercel → Render)
+está vivo.
+
+> GitHub desactiva los `schedule` de un repositorio sin actividad durante 60 días;
+> un commit o un disparo manual del workflow lo vuelve a activar.
 
 ### Rollback
 
@@ -220,7 +234,7 @@ migmusic/
 ├── skills/             # skills del agente (SKILL0–SKILL7)
 ├── README.md
 ├── .env.example
-├── .github/workflows/  # CI: lint + tests que bloquean
+├── .github/workflows/  # CI: lint + tests que bloquean + keep-alive
 ├── docs/
 │   ├── architecture.md # capas + diagramas Mermaid (clases, secuencia, ER)
 │   ├── adr/            # Architecture Decision Records
@@ -233,7 +247,7 @@ migmusic/
 ├── frontend/           # React + Vite + TypeScript
 │   ├── package.json
 │   ├── vercel.json     # rewrite /api/* → Render (un solo origen)
-│   ├── e2e/            # Playwright: smoke, flujo maestro, accesibilidad (axe)
+│   ├── e2e/            # Playwright: smoke, maestro, drag & drop, persistencia, axe
 │   └── src/
 └── render.yaml         # blueprint de Render: Web Service + variables
 ```

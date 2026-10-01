@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-28
+- **Updated:** 2026-10-01 (catch-all rewrite, uvicorn `--proxy-headers`, keep-alive)
 - **Related:** `DEPLOY-001`, `DEPLOY-002`, `SPOTIFY-003`, `SPOTIFY-004`,
   `CONS-005`
 
@@ -19,7 +20,8 @@ Deploy the frontend on **Vercel** and the API on **Render**, but expose a
 ```json
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
+    { "source": "/api/(.*)", "destination": "https://migmusic-api.onrender.com/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -31,6 +33,10 @@ Deploy the frontend on **Vercel** and the API on **Render**, but expose a
   ]
 }
 ```
+
+The second rewrite is the SPA catch-all: without it, the OAuth callback path
+answers `404` on Vercel instead of reaching the API, and deep links land on a
+blank page. `/api/*` is matched first, so it always wins over `index.html`.
 
 Production Redirect URI: `https://migmusic.vercel.app/api/auth/callback`.
 Development: `http://127.0.0.1:5173/callback` (Spotify rejects `localhost`
@@ -44,5 +50,10 @@ since 2025-11-27).
   Vercel caches rewrites by default, which would serve stale API responses.
 - The rewrite proxy inherits Vercel's 120 s timeout; long polling is not
   supported (not needed here).
-- Render sleeps on the free tier → an UptimeRobot ping every 5 min against
-  `/api/health` avoids the first-request cold start.
+- Uvicorn runs with `--proxy-headers --forwarded-allow-ips="*"` (`render.yaml`)
+  so redirects and `Secure` cookies are built from the `X-Forwarded-*` values
+  Vercel sends, not from the internal Render host.
+- Render sleeps on the free tier → the `keep-alive` GitHub Actions workflow
+  pings `/api/health` every 10 min (backend first, then the Vercel proxy) and
+  doubles as a production monitor. It replaces the external UptimeRobot
+  monitor, so no third-party service has to be kept configured.

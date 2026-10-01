@@ -1,7 +1,7 @@
 # Estrategia y reporte de pruebas (F11)
 
 > Fuente de verdad de calidad: `AGEND.md` (`TEST-001..004`) y `skills/SKILL6.md`.
-> Actualizado: 2026-09-29 (F11 — Cierre).
+> Actualizado: 2026-10-01 (OAuth, música local tras F5 y Framer Motion).
 
 ## 1. Pirámide y herramientas (`TEST-001`)
 
@@ -33,15 +33,15 @@ La suite E2E es hermética: no necesita `.env`, arranca Vite (5173) y Uvicorn (8
 fuerza `DATABASE_URL=""` (repositorio in-memory, nunca toca una base real) y resetea los
 playlists vía API en cada test.
 
-## 3. Estado actual (2026-09-29)
+## 3. Estado actual (2026-10-01)
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **96.96 %** |
+| Cobertura global backend | ≥ 80 % | **96.83 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **292** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **69** (7 archivos) |
-| Tests E2E (Playwright) | — | **7** (3 specs × proyectos desktop/móvil) |
+| Tests backend | — | **309** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **77** (8 archivos) |
+| Tests E2E (Playwright) | — | **9** (5 specs: smoke, maestro, drag & drop, persistencia local, axe) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
 
@@ -81,6 +81,19 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   poblados: el E2E en navegador real lo detectó en el primer arranque.
 - **Colisión de aria-label**: el botón de favorito ("Quitar … de favoritas") y el de borrar
   ("Quitar …") comparten prefijo; los tests E2E usan `data-testid` en lugar de nombre.
+- **Click bajo el header sticky (Pixel 7)**: la barra de seek quedaba a 42 px del borde
+  superior mientras el header sticky ocupaba 93 px, así que `page.mouse.click` con
+  coordenadas crudas disparaba `language-toggle` y el test se quedaba esperando
+  `spinbutton "Índice"`. Corregido con `scrollIntoView({ block: "center" })` antes de
+  leer `boundingBox()`; un diagnóstico temporal que midió `scrollY`, `barTop` y
+  `headerBottom` confirmó la causa y se retiró.
+- **Texto suelto en el diálogo de agregar**: la rama de Spotify del `AddTrackDialog`
+  dejaba un `)}` huérfano que se pintaba como texto (bug heredado, sin cobertura);
+  corregido al migrar el diálogo a Framer Motion.
+- **`prefers-reduced-motion` y framer**: `tokens.css` anula las transiciones CSS, pero
+  no las animaciones de framer → `MotionConfig reducedMotion="user"` en `main.tsx`
+  (`VIS-006`). El drag & drop nativo se cubre ahora con `drag-reorder.spec.ts`
+  (eventos sintéticos `dragstart`/`dragover`/`drop` sobre `motion.li`).
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -91,7 +104,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    fidelidad SQL la dan los tests de contrato con `pgserver` (8 tests).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 69 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 77 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
