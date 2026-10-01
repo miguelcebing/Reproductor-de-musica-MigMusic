@@ -123,13 +123,26 @@ export class PlaybackController {
   /** Step forward in the list. */
   next(): Promise<PlaybackState | null> {
     this.markUserGesture();
+    if (this.atEdge("available_next", "player.atEnd")) return Promise.resolve(null);
     return this.commit(() => this.api.next());
   }
 
   /** Step back in the list. */
   previous(): Promise<PlaybackState | null> {
     this.markUserGesture();
+    if (this.atEdge("available_previous", "player.atStart")) return Promise.resolve(null);
     return this.commit(() => this.api.previous());
+  }
+
+  /**
+   * Manual skips stop at the edges (`PLAYLIST-009 = A`): the backend would
+   * only pause the music there, so answer with a toast and touch nothing.
+   */
+  private atEdge(edge: "available_next" | "available_previous", key: MessageKey): boolean {
+    const playback = usePlaybackStore.getState().playback;
+    if (!playback || playback[edge]) return false;
+    this.toast("info", key);
+    return true;
   }
 
   /** Called when the player reports the track ended. */

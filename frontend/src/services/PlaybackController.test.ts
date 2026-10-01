@@ -469,4 +469,32 @@ describe("PlaybackController (F7 integration)", () => {
     expect(toasts[0].text).toContain("not on this device");
     expect(useToastStore.getState().toasts[0].text).not.toContain("Error:");
   });
+
+  it("refuses to step past the tail and says why instead of pausing", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ available_next: false, playing: true }));
+    const { controller, api } = makeController();
+
+    const result = await controller.next();
+
+    expect(api.next).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("info");
+    expect(toasts[0].text).toContain("last song");
+  });
+
+  it("refuses to step before the head and says why instead of pausing", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ available_previous: false }));
+    const { controller, api } = makeController();
+
+    const result = await controller.previous();
+
+    expect(api.previous).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("info");
+    expect(toasts[0].text).toContain("first song");
+  });
 });

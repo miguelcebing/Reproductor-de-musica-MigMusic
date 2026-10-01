@@ -5,13 +5,11 @@ import { useT } from "../../i18n/useT";
 import styles from "./Player.module.css";
 import { AnimatePresence, motion } from "framer-motion";
 import { IconButton } from "./IconButton";
-import { BackIcon, ForwardIcon, NextIcon, PauseIcon, PlayIcon, PreviousIcon, RepeatIcon, ShuffleIcon } from "./icons";
+import { NextIcon, PauseIcon, PlayIcon, PreviousIcon, RepeatIcon, ShuffleIcon } from "./icons";
 
 export interface PlayerControlsProps {
   readonly playing: boolean;
   readonly disabled: boolean;
-  readonly canPrevious: boolean;
-  readonly canNext: boolean;
   readonly shuffle: boolean;
   readonly repeat: RepeatMode;
   readonly skipSeconds: number;
@@ -26,8 +24,6 @@ export interface PlayerControlsProps {
 export function PlayerControls({
   playing,
   disabled,
-  canPrevious,
-  canNext,
   shuffle,
   repeat,
   skipSeconds,
@@ -58,13 +54,13 @@ export function PlayerControls({
         disabled={disabled}
         testId="skip-backward"
       >
-        <BackIcon />
+        <span className={styles.skipLabel}>{`-${skipSeconds} s`}</span>
       </IconButton>
 
       <IconButton
         label={t("player.previous")}
         onClick={onPrevious}
-        disabled={disabled || !canPrevious}
+        disabled={disabled}
         testId="previous"
       >
         <PreviousIcon />
@@ -94,7 +90,7 @@ export function PlayerControls({
       <IconButton
         label={t("player.next")}
         onClick={onNext}
-        disabled={disabled || !canNext}
+        disabled={disabled}
         testId="next"
       >
         <NextIcon />
@@ -106,7 +102,7 @@ export function PlayerControls({
         disabled={disabled}
         testId="skip-forward"
       >
-        <ForwardIcon />
+        <span className={styles.skipLabel}>{`+${skipSeconds} s`}</span>
       </IconButton>
 
       <IconButton

@@ -351,8 +351,6 @@ export function App(): React.JSX.Element {
           <PlayerControls
             playing={playback?.playing ?? false}
             disabled={!hasTrack}
-            canPrevious={playback?.available_previous ?? false}
-            canNext={playback?.available_next ?? false}
             shuffle={playback?.shuffle ?? false}
             repeat={playback?.repeat ?? "off"}
             skipSeconds={skipSeconds}
