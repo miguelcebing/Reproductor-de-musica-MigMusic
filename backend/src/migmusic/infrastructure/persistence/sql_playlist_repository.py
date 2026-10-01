@@ -27,13 +27,17 @@ from migmusic.domain.ports.playlist_repository import PlaylistRepository
 
 # Idempotent schema: safe to run on every process start (`IF NOT EXISTS`).
 # ``created_seq`` gives ``list_all`` the insertion order of the in-memory
-# adapter; ``position`` is the dense fallback from `ADR-004`.
+# adapter; ``position`` is the dense fallback from `ADR-004`. ``owner_id`` is
+# the device that created the playlist (UX isolation, null = unscoped).
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS playlists (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    owner_id TEXT,
     created_seq BIGSERIAL
 );
+
+ALTER TABLE playlists ADD COLUMN IF NOT EXISTS owner_id TEXT;
 
 CREATE TABLE IF NOT EXISTS songs (
     playlist_id TEXT NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
@@ -101,22 +105,26 @@ class SqlPlaylistRepository(PlaylistRepository):
 
     # ----------------------------------------------------------------- write
 
-    def save(self, playlist: Playlist) -> None:
+    def save(self, playlist: Playlist, *, owner_id: str | None = None) -> None:
         """Upsert the playlist and rewrite its songs as one transaction.
 
         Songs are immutable in place (``FEAT-001-b`` replaces the value), so a
         full rewrite of the child rows keeps ``position`` / ``prev_id`` /
         ``next_id`` consistent without per-row diffing — playlists are small
         and writes are user-driven.
+
+        ``owner_id`` is written on insert and left alone afterwards, so an
+        edit never re-homes a playlist to another device.
         """
         songs = playlist.to_list()
         with self._connection() as connection:
             connection.execute(
                 """
-                INSERT INTO playlists (id, name) VALUES (%(id)s, %(name)s)
+                INSERT INTO playlists (id, name, owner_id)
+                VALUES (%(id)s, %(name)s, %(owner_id)s)
                 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
                 """,
-                {"id": playlist.id, "name": playlist.name},
+                {"id": playlist.id, "name": playlist.name, "owner_id": owner_id},
             )
             connection.execute(
                 "DELETE FROM songs WHERE playlist_id = %(id)s",
@@ -176,12 +184,24 @@ class SqlPlaylistRepository(PlaylistRepository):
             songs=[_row_to_song(song_row) for song_row in song_rows],
         )
 
-    def list_all(self) -> list[Playlist]:
-        """Every playlist in insertion order with its songs."""
+    def list_all(self, *, owner_id: str | None = None) -> list[Playlist]:
+        """Every playlist in insertion order with its songs.
+
+        ``owner_id`` narrows the query to one device; ``None`` lists all.
+        """
         with self._connection() as connection:
-            playlist_rows = connection.execute(
-                "SELECT id, name FROM playlists ORDER BY created_seq"
-            ).fetchall()
+            if owner_id is None:
+                playlist_rows = connection.execute(
+                    "SELECT id, name FROM playlists ORDER BY created_seq"
+                ).fetchall()
+            else:
+                playlist_rows = connection.execute(
+                    """
+                    SELECT id, name FROM playlists
+                    WHERE owner_id = %(owner_id)s ORDER BY created_seq
+                    """,
+                    {"owner_id": owner_id},
+                ).fetchall()
             song_rows = connection.execute(
                 """
                 SELECT playlist_id, position, song_id, title, artist, source,

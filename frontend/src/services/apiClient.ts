@@ -19,6 +19,7 @@ import type {
   SpotifyPlaylist,
   SpotifyPlayerState,
 } from "../domain/types";
+import { getDeviceId } from "./deviceId";
 
 /** Development uses the Vite proxy; production goes through Vercel's /api rewrite. */
 export function resolveApiBaseUrl(origin: string): string {
@@ -272,6 +273,10 @@ export class ApiClient {
 
   private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
     const init: RequestInit = { method, headers: { accept: "application/json" }, credentials: "include" };
+    const deviceId = getDeviceId();
+    if (deviceId) {
+      (init.headers as Record<string, string>)["x-device-id"] = deviceId;
+    }
     if (body !== undefined) {
       init.body = JSON.stringify(body);
       (init.headers as Record<string, string>)["content-type"] = "application/json";

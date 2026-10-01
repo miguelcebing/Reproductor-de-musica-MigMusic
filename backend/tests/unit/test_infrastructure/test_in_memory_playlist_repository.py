@@ -89,3 +89,38 @@ def test_repository_instances_do_not_share_state() -> None:
 
     assert second.list_all() == []
     assert len(first.list_all()) == 1
+
+
+def test_list_all_scopes_to_one_device() -> None:
+    """Each device sees its own lists; the unscoped view sees all of them."""
+    repository = InMemoryPlaylistRepository()
+    repository.save(Playlist("Phone mix"), owner_id="device-a")
+    repository.save(Playlist("Laptop mix"), owner_id="device-b")
+    repository.save(Playlist("Shared"))
+
+    assert [p.name for p in repository.list_all(owner_id="device-a")] == ["Phone mix"]
+    assert [p.name for p in repository.list_all(owner_id="device-b")] == ["Laptop mix"]
+    assert [p.name for p in repository.list_all()] == ["Phone mix", "Laptop mix", "Shared"]
+
+
+def test_later_saves_keep_the_first_owner() -> None:
+    """An edit rewrites the aggregate, never its device."""
+    repository = InMemoryPlaylistRepository()
+    playlist = Playlist("Owned")
+    repository.save(playlist, owner_id="device-a")
+
+    playlist.rename("Renamed")
+    repository.save(playlist)
+
+    assert [p.name for p in repository.list_all(owner_id="device-a")] == ["Renamed"]
+    assert repository.list_all(owner_id="device-b") == []
+
+
+def test_delete_forgets_the_owner_too() -> None:
+    """Removing a playlist releases its device stamp as well."""
+    repository = InMemoryPlaylistRepository()
+    playlist = Playlist("Gone")
+    repository.save(playlist, owner_id="device-a")
+
+    assert repository.delete(playlist.id) is True
+    assert repository.list_all(owner_id="device-a") == []

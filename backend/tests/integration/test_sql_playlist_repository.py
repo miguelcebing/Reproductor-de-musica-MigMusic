@@ -161,3 +161,40 @@ def test_duplicates_survive_and_cursor_resets_to_head(
 def test_empty_dsn_is_rejected() -> None:
     with pytest.raises(ValueError, match="DSN"):
         SqlPlaylistRepository("   ")
+
+
+def test_list_all_scopes_to_one_device(sql_repository: SqlPlaylistRepository) -> None:
+    """`owner_id` narrows the listing; the unscoped view keeps everything."""
+    sql_repository.save(Playlist("Phone mix"), owner_id="device-a")
+    sql_repository.save(Playlist("Laptop mix"), owner_id="device-b")
+    sql_repository.save(Playlist("Shared"))
+
+    assert [p.name for p in sql_repository.list_all(owner_id="device-a")] == ["Phone mix"]
+    assert [p.name for p in sql_repository.list_all(owner_id="device-b")] == ["Laptop mix"]
+    assert [p.name for p in sql_repository.list_all()] == ["Phone mix", "Laptop mix", "Shared"]
+
+
+def test_owner_survives_updates(sql_repository: SqlPlaylistRepository) -> None:
+    """`ON CONFLICT` rewrites the name only: edits never re-home a playlist."""
+    playlist = Playlist("Owned")
+    sql_repository.save(playlist, owner_id="device-a")
+    playlist.rename("Renamed")
+    sql_repository.save(playlist)
+
+    assert [p.name for p in sql_repository.list_all(owner_id="device-a")] == ["Renamed"]
+    assert sql_repository.list_all(owner_id="device-b") == []
+
+
+def test_schema_adds_owner_id_to_a_pre_existing_table() -> None:
+    """A database created before the feature gains the column on startup."""
+    with psycopg.connect(_DSN) as connection:
+        connection.execute("DROP TABLE IF EXISTS songs, playlists CASCADE")
+        connection.execute(
+            "CREATE TABLE playlists ("
+            "id TEXT PRIMARY KEY, name TEXT NOT NULL, created_seq BIGSERIAL)"
+        )
+
+    repository = SqlPlaylistRepository(_DSN)  # runs the idempotent schema
+    repository.save(Playlist("Migrated"), owner_id="device-a")
+
+    assert [p.name for p in repository.list_all(owner_id="device-a")] == ["Migrated"]

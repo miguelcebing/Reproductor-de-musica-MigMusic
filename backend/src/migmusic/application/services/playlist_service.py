@@ -26,9 +26,13 @@ class PlaylistService:
 
     # ----------------------------------------------------------------- read
 
-    def list(self) -> list[Playlist]:
-        """All stored playlists (``PLAYLIST-001 = B`` allows several)."""
-        return self._repository.list_all()
+    def list(self, *, owner_id: str | None = None) -> list[Playlist]:
+        """Stored playlists (``PLAYLIST-001 = B`` allows several).
+
+        ``owner_id`` scopes the answer to one device; ``None`` lists every
+        playlist, which is what the tooling and smoke checks rely on.
+        """
+        return self._repository.list_all(owner_id=owner_id)
 
     def get(self, playlist_id: str) -> Playlist:
         """One playlist, or a :class:`PlaylistNotFoundError` (HTTP 404)."""
@@ -39,10 +43,14 @@ class PlaylistService:
 
     # --------------------------------------------------------------- write
 
-    def create(self, name: str) -> Playlist:
-        """Create and persist an empty playlist (``PLAYLIST-002``)."""
+    def create(self, name: str, *, owner_id: str | None = None) -> Playlist:
+        """Create and persist an empty playlist (``PLAYLIST-002``).
+
+        ``owner_id`` stamps the device that asked for it, so later lists from
+        other devices never see it (UX isolation, not authentication).
+        """
         playlist = Playlist(name)
-        self._repository.save(playlist)
+        self._repository.save(playlist, owner_id=owner_id)
         return playlist
 
     def rename(self, playlist_id: str, name: str) -> Playlist:

@@ -42,6 +42,20 @@ def get_music_provider(request: Request) -> MusicProvider:
     return cast(MusicProvider, request.app.state.music_provider)
 
 
+DEVICE_ID_HEADER = "x-device-id"
+
+
+def get_device_id(request: Request) -> str | None:
+    """Optional device scope: ``X-Device-Id`` narrows playlist visibility.
+
+    Missing or blank means "unscoped" (``None``): the caller sees every
+    playlist. This is UX isolation for local lists, not authentication — the
+    header is advisory and cheap to omit in tooling and curl checks.
+    """
+    value = request.headers.get(DEVICE_ID_HEADER, "").strip()
+    return value or None
+
+
 async def require_spotify_token(
     request: Request,
     service: Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)],
@@ -59,6 +73,7 @@ async def require_spotify_token(
 
 PlaylistServiceDep = Annotated[PlaylistService, Depends(get_playlist_service)]
 PlaybackServiceDep = Annotated[PlaybackService, Depends(get_playback_service)]
+DeviceIdDep = Annotated[str | None, Depends(get_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]
 MusicProviderDep = Annotated[MusicProvider, Depends(get_music_provider)]

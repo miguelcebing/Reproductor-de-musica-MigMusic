@@ -44,6 +44,26 @@ def test_list_returns_every_stored_playlist(playlist_service: PlaylistService) -
     assert [playlist.name for playlist in playlist_service.list()] == ["First", "Second"]
 
 
+def test_create_stamps_the_owner_device(playlist_service: PlaylistService) -> None:
+    """A playlist belongs to the device that asked for it (UX isolation)."""
+    playlist = playlist_service.create("Phone mix", owner_id="device-a")
+
+    assert [item.id for item in playlist_service.list(owner_id="device-a")] == [playlist.id]
+    assert playlist_service.list(owner_id="device-b") == []
+    # The unscoped view (tooling, smoke checks) still sees everything.
+    assert [item.id for item in playlist_service.list()] == [playlist.id]
+
+
+def test_edits_keep_the_owner_device(playlist_service: PlaylistService) -> None:
+    """Renaming must never re-home a playlist to another device."""
+    playlist = playlist_service.create("Owned", owner_id="device-a")
+
+    playlist_service.rename(playlist.id, "Renamed")
+
+    assert [item.name for item in playlist_service.list(owner_id="device-a")] == ["Renamed"]
+    assert playlist_service.list(owner_id="device-b") == []
+
+
 def test_get_returns_the_playlist(playlist_service: PlaylistService) -> None:
     """Reads by id are the backbone of every other use case."""
     created = playlist_service.create("Road trip")
@@ -200,9 +220,9 @@ def test_move_song_to_the_same_index_is_a_no_op(
             super().__init__()
             self.saves: list[Playlist] = []
 
-        def save(self, playlist: Playlist) -> None:
+        def save(self, playlist: Playlist, *, owner_id: str | None = None) -> None:
             self.saves.append(playlist)
-            super().save(playlist)
+            super().save(playlist, owner_id=owner_id)
 
     recording = RecordingRepository()
     service = PlaylistService(recording)
@@ -225,9 +245,9 @@ def test_service_never_builds_an_adapter() -> None:
             super().__init__()
             self.saved = False
 
-        def save(self, playlist: Playlist) -> None:
+        def save(self, playlist: Playlist, *, owner_id: str | None = None) -> None:
             self.saved = True
-            super().save(playlist)
+            super().save(playlist, owner_id=owner_id)
 
     recording = RecordingRepository()
 

@@ -50,6 +50,42 @@ def test_list_playlists_returns_every_playlist(
     assert [item["name"] for item in response.json()] == ["First", "Second"]
 
 
+def test_playlists_are_scoped_by_the_device_header(client: TestClient) -> None:
+    """`X-Device-Id` isolates local lists per device (UX, not auth)."""
+    phone = {"X-Device-Id": "device-a"}
+    laptop = {"X-Device-Id": "device-b"}
+    assert (
+        client.post("/api/playlists", json={"name": "Phone mix"}, headers=phone).status_code == 201
+    )
+    assert (
+        client.post("/api/playlists", json={"name": "Laptop mix"}, headers=laptop).status_code
+        == 201
+    )
+
+    from_a = client.get("/api/playlists", headers=phone)
+    from_b = client.get("/api/playlists", headers=laptop)
+    unscoped = client.get("/api/playlists")
+
+    assert [item["name"] for item in from_a.json()] == ["Phone mix"]
+    assert [item["name"] for item in from_b.json()] == ["Laptop mix"]
+    # No header (tooling, smoke checks) still sees every playlist.
+    assert [item["name"] for item in unscoped.json()] == ["Phone mix", "Laptop mix"]
+
+
+def test_a_blank_device_header_stays_unscoped(client: TestClient) -> None:
+    """Whitespace-only headers are treated as "no device", not as an owner."""
+    assert (
+        client.post(
+            "/api/playlists", json={"name": "Shared"}, headers={"X-Device-Id": "device-a"}
+        ).status_code
+        == 201
+    )
+
+    response = client.get("/api/playlists", headers={"X-Device-Id": "   "})
+
+    assert [item["name"] for item in response.json()] == ["Shared"]
+
+
 def test_get_playlist_returns_its_songs_in_order(
     client: TestClient, filled_playlist: FilledPlaylist
 ) -> None:

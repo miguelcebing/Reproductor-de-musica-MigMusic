@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApiClient, apiUrl, resolveApiBaseUrl, type FetchLike } from "./apiClient";
 
@@ -213,5 +213,41 @@ describe("ApiClient in-list search and favourites", () => {
     expect(calls[0]?.init?.method).toBe("PUT");
     expect(calls[0]?.url).toBe(`${origin}/api/playlists/pl-1/songs/2/favorite`);
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ favorite: true });
+  });
+});
+
+describe("ApiClient device scope header", () => {
+  const origin = "https://migmusic.example";
+
+  it("omits x-device-id when storage is unavailable", async () => {
+    vi.stubGlobal("localStorage", undefined);
+    try {
+      const { fetchImpl, calls } = recorder(200, { authenticated: true });
+      const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+      await api.spotifyStatus();
+
+      expect((calls[0]?.init?.headers as Record<string, string>)["x-device-id"]).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("tags every request with the stored device id", async () => {
+    const values = new Map<string, string>([["mig_device_id", "device-a"]]);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+    });
+    try {
+      const { fetchImpl, calls } = recorder(200, { authenticated: true });
+      const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+      await api.spotifyStatus();
+
+      expect((calls[0]?.init?.headers as Record<string, string>)["x-device-id"]).toBe("device-a");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

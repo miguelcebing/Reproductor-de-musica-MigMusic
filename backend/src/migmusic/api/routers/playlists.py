@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Response, status
 
-from migmusic.api.dependencies import PlaybackServiceDep, PlaylistServiceDep
+from migmusic.api.dependencies import DeviceIdDep, PlaybackServiceDep, PlaylistServiceDep
 from migmusic.api.schemas import (
     PlaybackOut,
     PlaylistCreate,
@@ -26,15 +26,21 @@ router = APIRouter(prefix="/api/playlists", tags=["playlists"])
 
 
 @router.get("", summary="List every playlist")
-def list_playlists(service: PlaylistServiceDep) -> list[PlaylistOut]:
-    """Return all stored playlists with their songs in list order."""
-    return [PlaylistOut.from_entity(playlist) for playlist in service.list()]
+def list_playlists(service: PlaylistServiceDep, owner_id: DeviceIdDep) -> list[PlaylistOut]:
+    """Return stored playlists with their songs in list order.
+
+    Scoped to the caller's ``X-Device-Id`` when the header is present; every
+    playlist when it is not.
+    """
+    return [PlaylistOut.from_entity(playlist) for playlist in service.list(owner_id=owner_id)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Create a playlist")
-def create_playlist(body: PlaylistCreate, service: PlaylistServiceDep) -> PlaylistOut:
-    """Create an empty playlist (``PLAYLIST-002``)."""
-    return PlaylistOut.from_entity(service.create(body.name))
+def create_playlist(
+    body: PlaylistCreate, service: PlaylistServiceDep, owner_id: DeviceIdDep
+) -> PlaylistOut:
+    """Create an empty playlist (``PLAYLIST-002``) owned by the caller device."""
+    return PlaylistOut.from_entity(service.create(body.name, owner_id=owner_id))
 
 
 @router.get("/{playlist_id}", summary="Read one playlist")
