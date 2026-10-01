@@ -1,5 +1,7 @@
 /** Transport buttons (`PLAYER-001/002`, `FEAT-001-d`). */
 
+import { memo } from "react";
+
 import type { RepeatMode, SkipDirection } from "../../domain/types";
 import { useT } from "../../i18n/useT";
 import styles from "./Player.module.css";
@@ -21,7 +23,7 @@ export interface PlayerControlsProps {
   readonly onCycleRepeat: () => void;
 }
 
-export function PlayerControls({
+export const PlayerControls = memo(function PlayerControls({
   playing,
   disabled,
   shuffle,
@@ -116,4 +118,4 @@ export function PlayerControls({
       </IconButton>
     </div>
   );
-}
+});

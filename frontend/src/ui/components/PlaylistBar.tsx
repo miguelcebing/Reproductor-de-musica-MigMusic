@@ -1,6 +1,6 @@
 /** Playlist selector with create / rename / delete (`PLAYLIST-001 = B`). */
 
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import type { Playlist } from "../../domain/types";
 import { useT } from "../../i18n/useT";
@@ -16,7 +16,7 @@ export interface PlaylistBarProps {
   readonly onAddMusic: () => void;
 }
 
-export function PlaylistBar({
+export const PlaylistBar = memo(function PlaylistBar({
   playlists,
   activeId,
   onSelect,
@@ -102,4 +102,4 @@ export function PlaylistBar({
       </button>
     </div>
   );
-}
+});

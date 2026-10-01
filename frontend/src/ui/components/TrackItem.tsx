@@ -4,7 +4,7 @@
  * a re-link action instead of failing on play (`LOCAL-006`).
  */
 
-import { useRef, type DragEvent } from "react";
+import { memo, useRef, type DragEvent } from "react";
 import { motion } from "framer-motion";
 
 import type { Song } from "../../domain/types";
@@ -16,13 +16,11 @@ import { formatTime } from "../utils/format";
 import styles from "./Queue.module.css";
 import { DownIcon, HeartIcon, LinkIcon, TrashIcon, UpIcon } from "./icons";
 
-/** Drag wiring owned by `TrackList`; every row forwards it to its `<li>`. */
+/** Drag wiring owned by `TrackList`; index-aware so one object serves all rows. */
 export interface RowDragProps {
-  readonly isDragging: boolean;
-  readonly isDragOver: boolean;
-  readonly onDragStart: (event: DragEvent<HTMLLIElement>) => void;
-  readonly onDragOver: (event: DragEvent<HTMLLIElement>) => void;
-  readonly onDrop: (event: DragEvent<HTMLLIElement>) => void;
+  readonly onDragStart: (index: number, event: DragEvent<HTMLLIElement>) => void;
+  readonly onDragOver: (index: number, event: DragEvent<HTMLLIElement>) => void;
+  readonly onDrop: (index: number, event: DragEvent<HTMLLIElement>) => void;
   readonly onDragEnd: () => void;
   readonly onDragLeave: () => void;
 }
@@ -32,20 +30,25 @@ export interface TrackItemProps {
   readonly index: number;
   readonly isActive: boolean;
   readonly isMatch: boolean;
+  readonly isDragging: boolean;
+  readonly isDragOver: boolean;
   readonly canMoveUp: boolean;
   readonly canMoveDown: boolean;
-  readonly onPlay: () => void;
-  readonly onRemove: () => void;
-  readonly onMove: (delta: -1 | 1) => void;
-  readonly onFavorite: () => void;
+  /** Index-aware callbacks: rows share the stable ones from `App`. */
+  readonly onPlay: (index: number) => void;
+  readonly onRemove: (index: number) => void;
+  readonly onMove: (index: number, delta: -1 | 1) => void;
+  readonly onFavorite: (index: number, favorite: boolean) => void;
   readonly drag: RowDragProps;
 }
 
-export function TrackItem({
+export const TrackItem = memo(function TrackItem({
   song,
   index,
   isActive,
   isMatch,
+  isDragging,
+  isDragOver,
   canMoveUp,
   canMoveDown,
   onPlay,
@@ -75,8 +78,8 @@ export function TrackItem({
     styles.row,
     isActive ? styles.rowCurrent : "",
     isMatch ? styles.rowMatch : "",
-    drag.isDragging ? styles.rowDragging : "",
-    drag.isDragOver ? styles.rowDropTarget : "",
+    isDragging ? styles.rowDragging : "",
+    isDragOver ? styles.rowDropTarget : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -90,13 +93,13 @@ export function TrackItem({
       data-match={isMatch}
       aria-current={isActive ? "true" : undefined}
       draggable
-      onDragStartCapture={drag.onDragStart}
-      onDragOver={drag.onDragOver}
-      onDrop={drag.onDrop}
+      onDragStartCapture={(event) => drag.onDragStart(index, event)}
+      onDragOver={(event) => drag.onDragOver(index, event)}
+      onDrop={(event) => drag.onDrop(index, event)}
       onDragEndCapture={drag.onDragEnd}
       onDragLeave={drag.onDragLeave}
       initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: drag.isDragging ? 0.5 : 1, y: 0 }}
+      animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
     >
@@ -117,7 +120,7 @@ export function TrackItem({
       )}
 
       <div className={styles.rowMain}>
-        <button type="button" className={styles.rowTitle} onClick={onPlay} aria-label={t("list.play", { title: song.title })}>
+        <button type="button" className={styles.rowTitle} onClick={() => onPlay(index)} aria-label={t("list.play", { title: song.title })}>
           {song.title}
         </button>
         <p className={styles.rowMeta}>
@@ -157,7 +160,7 @@ export function TrackItem({
         <button
           type="button"
           className={`${styles.button} ${song.favorite ? styles.buttonFavorite : ""}`}
-          onClick={onFavorite}
+          onClick={() => onFavorite(index, !song.favorite)}
           aria-pressed={song.favorite}
           aria-label={t(song.favorite ? "list.unfavorite" : "list.favorite", { title: song.title })}
           data-testid={`favorite-${index}`}
@@ -171,7 +174,7 @@ export function TrackItem({
         <button
           type="button"
           className={styles.button}
-          onClick={() => onMove(-1)}
+          onClick={() => onMove(index, -1)}
           disabled={!canMoveUp}
           aria-label={t("list.moveUp", { title: song.title })}
         >
@@ -180,7 +183,7 @@ export function TrackItem({
         <button
           type="button"
           className={styles.button}
-          onClick={() => onMove(1)}
+          onClick={() => onMove(index, 1)}
           disabled={!canMoveDown}
           aria-label={t("list.moveDown", { title: song.title })}
         >
@@ -189,7 +192,7 @@ export function TrackItem({
         <button
           type="button"
           className={styles.button}
-          onClick={onRemove}
+          onClick={() => onRemove(index)}
           aria-label={t("list.remove", { title: song.title })}
           data-testid={`remove-${index}`}
         >
@@ -198,4 +201,4 @@ export function TrackItem({
       </div>
     </motion.li>
   );
-}
+});

@@ -1,29 +1,37 @@
-/** Interactive progress bar: click, drag and keyboard (`PLAYER-007`). */
+/** Interactive progress bar: click, drag and keyboard (`PLAYER-007`).
 
-import { useRef, useState } from "react";
+ * Subscribes to `position` itself, so the 1 Hz playhead ticks re-render this
+ * widget alone instead of the whole tree.
+ */
+
+import { memo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import styles from "./Player.module.css";
 import { formatTime, ratioToPosition } from "../utils/format";
+import { usePlaybackStore } from "../../state/playbackStore";
+import { useT } from "../../i18n/useT";
 
 export interface ProgressBarProps {
-  readonly position: number;
   readonly duration: number;
   readonly disabled?: boolean;
   /** Seconds moved by a keyboard press (the `PLAYER-001` step). */
   readonly step: number;
-  readonly label: string;
   readonly onSeek: (position: number) => void;
 }
 
-export function ProgressBar({
-  position,
+export const ProgressBar = memo(function ProgressBar({
   duration,
   disabled = false,
   step,
-  label,
   onSeek,
 }: ProgressBarProps): React.JSX.Element {
+  const position = usePlaybackStore((state) => state.playback?.position ?? 0);
+  const t = useT();
+  const label = t("player.time", {
+    current: Math.round(position),
+    total: Math.round(duration),
+  });
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [draggingPosition, setDraggingPosition] = useState<number | null>(null);
@@ -114,4 +122,4 @@ export function ProgressBar({
       </div>
     </div>
   );
-}
+});

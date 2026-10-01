@@ -4,7 +4,7 @@
  * native drag & drop reordering (`FEAT-001-e`).
  */
 
-import { useState, type DragEvent } from "react";
+import { memo, useCallback, useMemo, useState, type DragEvent } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import type { Song } from "../../domain/types";
@@ -29,7 +29,7 @@ export interface TrackListProps {
   readonly onAddMusic?: () => void;
 }
 
-export function TrackList({
+export const TrackList = memo(function TrackList({
   songs,
   currentIndex,
   loading,
@@ -48,6 +48,60 @@ export function TrackList({
   const [noMatch, setNoMatch] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback(
+    (index: number, event: DragEvent<HTMLLIElement>) => {
+      setDragIndex(index);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(index));
+    },
+    [],
+  );
+
+  const handleDragOver = useCallback(
+    (index: number, event: DragEvent<HTMLLIElement>) => {
+      if (dragIndex === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDragOverIndex(index);
+    },
+    [dragIndex],
+  );
+
+  const handleDrop = useCallback(
+    (index: number, event: DragEvent<HTMLLIElement>) => {
+      event.preventDefault();
+      const fallback = Number(event.dataTransfer.getData("text/plain"));
+      const from = dragIndex ?? (Number.isNaN(fallback) ? null : fallback);
+      setDragIndex(null);
+      setDragOverIndex(null);
+      if (from === null || from === index) return;
+      onReorder(from, index);
+    },
+    [dragIndex, onReorder],
+  );
+
+  const handleDragEnd = useCallback((): void => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDragLeave = useCallback((): void => {
+    setDragOverIndex(null);
+  }, []);
+
+  // One shared object (identity moves only while a drag is running) so the
+  // memoised rows skip re-renders for search, filters and hover changes.
+  const drag = useMemo(
+    () => ({
+      onDragStart: handleDragStart,
+      onDragOver: handleDragOver,
+      onDrop: handleDrop,
+      onDragEnd: handleDragEnd,
+      onDragLeave: handleDragLeave,
+    }),
+    [handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleDragLeave],
+  );
 
   if (loading) {
     return <p className={styles.loading}>{t("list.loading")}</p>;
@@ -105,38 +159,6 @@ export function TrackList({
     setMatchIndex(found);
   };
 
-  const handleDragStart = (index: number) => (event: DragEvent<HTMLLIElement>): void => {
-    setDragIndex(index);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", String(index));
-  };
-
-  const handleDragOver = (index: number) => (event: DragEvent<HTMLLIElement>): void => {
-    if (dragIndex === null) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDragOverIndex(index);
-  };
-
-  const handleDrop = (index: number) => (event: DragEvent<HTMLLIElement>): void => {
-    event.preventDefault();
-    const fallback = Number(event.dataTransfer.getData("text/plain"));
-    const from = dragIndex ?? (Number.isNaN(fallback) ? null : fallback);
-    setDragIndex(null);
-    setDragOverIndex(null);
-    if (from === null || from === index) return;
-    onReorder(from, index);
-  };
-
-  const handleDragEnd = (): void => {
-    setDragIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragLeave = (): void => {
-    setDragOverIndex(null);
-  };
-
   // Stable keys keep enter/exit animations on the rows that really changed;
   // a repeated song id falls back to the index to stay unique.
   const idCounts = new Map<string, number>();
@@ -190,25 +212,19 @@ export function TrackList({
               index={index}
               isActive={index === currentIndex}
               isMatch={index === matchIndex}
+              isDragging={index === dragIndex}
+              isDragOver={index === dragOverIndex && index !== dragIndex}
               canMoveUp={index > 0}
               canMoveDown={index < songs.length - 1}
-              onPlay={() => onPlay(index)}
-              onRemove={() => onRemove(index)}
-              onMove={(delta) => onMove(index, delta)}
-              onFavorite={() => onFavorite(index, !song.favorite)}
-              drag={{
-                isDragging: index === dragIndex,
-                isDragOver: index === dragOverIndex && index !== dragIndex,
-                onDragStart: handleDragStart(index),
-                onDragOver: handleDragOver(index),
-                onDrop: handleDrop(index),
-                onDragEnd: handleDragEnd,
-                onDragLeave: handleDragLeave,
-              }}
+              onPlay={onPlay}
+              onRemove={onRemove}
+              onMove={onMove}
+              onFavorite={onFavorite}
+              drag={drag}
             />
           ))}
         </AnimatePresence>
       </ul>
     </section>
   );
-}
+});

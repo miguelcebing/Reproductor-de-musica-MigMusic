@@ -1,5 +1,7 @@
 /** Cover art with the subtle motion approved in `VIS-009`/`VIS-010`. */
 
+import { memo } from "react";
+
 import styles from "./Player.module.css";
 
 export interface CoverArtProps {
@@ -8,7 +10,11 @@ export interface CoverArtProps {
   readonly playing: boolean;
 }
 
-export function CoverArt({ artworkUrl, alt, playing }: CoverArtProps): React.JSX.Element {
+export const CoverArt = memo(function CoverArt({
+  artworkUrl,
+  alt,
+  playing,
+}: CoverArtProps): React.JSX.Element {
   const classes = [styles.cover];
   if (playing) classes.push(styles.coverPlaying);
 
@@ -33,4 +39,4 @@ export function CoverArt({ artworkUrl, alt, playing }: CoverArtProps): React.JSX
       )}
     </div>
   );
-}
+});

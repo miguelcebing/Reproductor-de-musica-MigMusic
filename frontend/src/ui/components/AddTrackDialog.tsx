@@ -5,7 +5,7 @@
  * in bulk to the active playlist.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { Song, TrackPosition } from "../../domain/types";
@@ -29,7 +29,7 @@ export interface AddTrackDialogProps {
   readonly onSpotifyDisconnect: () => void;
 }
 
-export function AddTrackDialog({
+export const AddTrackDialog = memo(function AddTrackDialog({
   open,
   songsLength,
   spotifyConnected,
@@ -399,4 +399,4 @@ export function AddTrackDialog({
       )}
     </AnimatePresence>
   );
-}
+});

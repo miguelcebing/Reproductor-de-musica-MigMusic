@@ -1,5 +1,7 @@
 /** Volume slider and mute (`VIS-011`: the control reacts to hover/focus). */
 
+import { memo } from "react";
+
 import { useT } from "../../i18n/useT";
 import styles from "./Player.module.css";
 import { IconButton } from "./IconButton";
@@ -12,7 +14,7 @@ export interface VolumeControlProps {
   readonly onToggleMute: () => void;
 }
 
-export function VolumeControl({
+export const VolumeControl = memo(function VolumeControl({
   volume,
   muted,
   onVolume,
@@ -43,4 +45,4 @@ export function VolumeControl({
       />
     </div>
   );
-}
+});

@@ -1,5 +1,7 @@
 /** Didactic view of the list: `head ⇄ node ⇄ … ⇄ node ⇄ tail` (`UX-002`). */
 
+import { memo } from "react";
+
 import type { Song } from "../../domain/types";
 import { useT } from "../../i18n/useT";
 import styles from "./Queue.module.css";
@@ -9,7 +11,10 @@ export interface LinkedListViewProps {
   readonly currentIndex: number | null;
 }
 
-export function LinkedListView({ songs, currentIndex }: LinkedListViewProps): React.JSX.Element {
+export const LinkedListView = memo(function LinkedListView({
+  songs,
+  currentIndex,
+}: LinkedListViewProps): React.JSX.Element {
   const t = useT();
 
   return (
@@ -34,4 +39,4 @@ export function LinkedListView({ songs, currentIndex }: LinkedListViewProps): Re
       <span className={styles.nodeTail}>{t("nodes.tail")}</span>
     </div>
   );
-}
+});
