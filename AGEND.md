@@ -1451,7 +1451,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 - [x] Accesibilidad básica cumplida (teclado, foco, ARIA, contraste). (axe WCAG 2.1 A/AA sin violaciones + focus-trap en E2E)
 
 **Calidad y despliegue**
-- [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (309 pytest/96.83 %/dominio 100 %, 77 Vitest, 9 E2E; ver `docs/testing.md`)
+- [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (317 pytest/97.06 %/dominio 100 %, 80 Vitest, 9 E2E; ver `docs/testing.md`)
 - [x] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(verificado 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` → proxy `/api/*` → `https://migmusic-api.onrender.com`; health 200 directo y por proxy, preflight 200 con ACAO `https://migmusic.vercel.app` + `credentials: true`, Spotify acepta la Redirect URI registrada, Render y Vercel auto-desplegaron el push y el workflow `keep-alive` vigila `/api/health` cada 10 min)*
 - [x] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas. (`FEAT-001-b/c/d/e`: favoritos, búsqueda, repeat, drag & drop)
 - [x] Documentación (README, docs/architecture, ADRs) actualizada.

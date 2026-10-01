@@ -61,6 +61,11 @@ def register_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         upstream_status = exc.status_code if exc.status_code is not None else 502
         status_code = upstream_status if 400 <= upstream_status < 600 else 502
+        # The client only gets "{service} unavailable"; the upstream detail
+        # ("Invalid limit", "rate limited"...) is what the logs need.
+        request.app.state.logger.warning(
+            "upstream_error service=%s status=%s detail=%s", exc.service, status_code, exc
+        )
         return JSONResponse(
             status_code=status_code,
             content=_payload(request, status_code, "upstream_error", f"{exc.service} unavailable"),

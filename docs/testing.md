@@ -37,10 +37,10 @@ playlists vía API en cada test.
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **96.83 %** |
+| Cobertura global backend | ≥ 80 % | **97.06 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **309** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **77** (8 archivos) |
+| Tests backend | — | **317** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **80** (8 archivos) |
 | Tests E2E (Playwright) | — | **9** (5 specs: smoke, maestro, drag & drop, persistencia local, axe) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -72,7 +72,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 | ≥2 funcionalidades adicionales aprobadas e implementadas | `FEAT-001-b/c/d/e` (favoritos, búsqueda, repeat, drag & drop) — 4 de 2 | ✅ |
 | Documentación actualizada | README, `docs/architecture.md`, `docs/api.md`, ADR-001..006, este documento | ✅ |
 
-## 5. Hallazgos de la suite E2E
+## 5. Hallazgos (suite E2E y prueba manual en producción)
 
 - **Crash de arranque (F11)**: `hasTrack = playback?.song !== null` daba `true` cuando
   `playback` era `null` (`undefined !== null`), y `App` accedía a `playback.song.title`
@@ -94,6 +94,20 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   no las animaciones de framer → `MotionConfig reducedMotion="user"` en `main.tsx`
   (`VIS-006`). El drag & drop nativo se cubre ahora con `drag-reorder.spec.ts`
   (eventos sintéticos `dragstart`/`dragover`/`drop` sobre `motion.li`).
+- **La búsqueda en Spotify devolvía "Spotify unavailable" (producción)**: el backend
+  pedía `limit=20` a `GET /v1/search` y Spotify contesta `400 Invalid limit` por encima
+  de 10 resultados (verificado el 2026-10-01 contra la API real, con token de cliente y
+  con token de usuario). El manejador traducía ese 400 a `spotify unavailable`, la lista
+  salía vacía y daba la impresión de que "no se podía buscar mientras sonaba música
+  local" (el diálogo no tiene ninguna dependencia del transporte). Corregido recortando
+  el límite a 10 en `SpotifyApiClient.search_tracks` (con reintento a `limit=1` si la
+  cota bajara) y registrando el detalle de Spotify en el log del manejador. Smoke real:
+  10 canciones para "alvaro diaz".
+- **F5 con una pista en marcha**: `attachPlayer` llamaba a `play()` sin gesto de
+  usuario y el `NotAllowedError` del navegador aparecía como toast de error
+  (`play() failed because the user didn't interact with the document first`).
+  Corregido con `isAutoplayBlocked`: se carga en pausa, se muestra el aviso
+  informativo `autoplayBlocked` y se sincroniza el backend a `playing=false`.
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -104,7 +118,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    fidelidad SQL la dan los tests de contrato con `pgserver` (8 tests).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 77 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 80 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

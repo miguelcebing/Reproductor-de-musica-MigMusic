@@ -170,7 +170,7 @@ browser. `SongOut` is the same shape as in *Playlists*, with
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/spotify/search` | `?q=…&limit=1..50` → `SongOut[]`. |
+| `GET` | `/api/spotify/search` | `?q=…&limit=1..10` → `SongOut[]`. |
 | `GET` | `/api/spotify/saved` | The user's saved tracks (`user-library-read`). |
 | `GET` | `/api/spotify/playlists` | Playlist headers: `id`, `name`, `track_count`, `artwork_url`. |
 | `GET` | `/api/spotify/playlists/{id}/tracks` | Tracks of one Spotify playlist (`?limit=1..100`). |
@@ -186,6 +186,10 @@ browser. `SongOut` is the same shape as in *Playlists*, with
 
 - Every route answers `401` (`code: "http_error"`) when the session holds no
   Spotify tokens, so the frontend can re-run the login flow.
+- `/search` is capped at 10 results: Spotify answers `400 Invalid limit` for
+  anything above that (verified against the live API on 2026-10-01), so a
+  larger `limit` is clamped by the client instead of failing the request; if
+  the cap ever drops below 10, the query is retried once with `limit=1`.
 - `429` from Spotify (rate limit **or** `reason: "QUOTA_EXCEEDED"`, see
   ADR-005) propagates with `Retry-After` honoured once by the client.
 - `5xx` from Spotify surface as `502/503`; `404`/`409` keep their status so

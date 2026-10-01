@@ -116,6 +116,13 @@ describe("ApiClient Spotify catalog and player", () => {
     );
   });
 
+  it("defaults the search page size to Spotify's limit of 10", async () => {
+    const { fetchImpl, calls } = recorder(200, []);
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+    await api.searchSpotify("night");
+    expect(calls[0]?.url).toBe(`${origin}/api/spotify/search?q=night&limit=10`);
+  });
+
   it("encodes the playlist id in the tracks route", async () => {
     const { fetchImpl, calls } = recorder(200, []);
     const api = ApiClient.fromOrigin(origin, fetchImpl);

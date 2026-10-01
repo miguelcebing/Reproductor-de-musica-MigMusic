@@ -92,6 +92,20 @@ def test_exceptions_map_to_the_expected_response(
     assert body["request_id"]
 
 
+def test_upstream_failures_keep_the_detail_in_the_log_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Clients get "{service} unavailable"; the reason stays in the logs."""
+    client = _build_client()
+
+    with caplog.at_level(logging.WARNING):
+        response = client.get("/upstream")
+
+    assert response.json()["error"]["message"] == "spotify unavailable"
+    assert "rate limited" in caplog.text
+    assert "spotify" in caplog.text
+
+
 def test_error_bodies_never_leak_internals() -> None:
     """Unhandled errors return a generic message, not the exception text."""
     client = _build_client()

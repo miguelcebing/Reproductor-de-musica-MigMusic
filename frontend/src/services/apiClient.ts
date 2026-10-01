@@ -204,7 +204,9 @@ export class ApiClient {
 
   // --- Spotify catalog (`F6`) -----------------------------------------------
 
-  searchSpotify(query: string, limit = 20): Promise<Song[]> {
+  // Spotify answers 400 "Invalid limit" above 10 results, so the default
+  // (and the only safe page size) is 10.
+  searchSpotify(query: string, limit = 10): Promise<Song[]> {
     const params = `?q=${encodeURIComponent(query)}&limit=${limit}`;
     return this.send<Song[]>("GET", `/spotify/search${params}`);
   }

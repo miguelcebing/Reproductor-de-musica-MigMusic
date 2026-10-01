@@ -27,6 +27,9 @@ from migmusic.infrastructure.spotify.errors import (
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 _MAX_ATTEMPTS = 2
 _MAX_RETRY_AFTER = 3.0
+# `/v1/search` answers 400 "Invalid limit" for anything above 10 results
+# (verified against the live API on 2026-10-01 with a user token).
+_SEARCH_LIMIT_MAX = 10
 
 
 class SpotifyApiClient:
@@ -42,13 +45,21 @@ class SpotifyApiClient:
     async def search_tracks(
         self, token: str, query: str, *, limit: int = 20
     ) -> list[dict[str, Any]]:
-        """Search tracks; returns the raw ``items`` array."""
-        data = await self._request(
-            "GET",
-            "/search",
-            token,
-            params={"q": query, "type": "track", "limit": max(1, min(limit, 50))},
-        )
+        """Search tracks; returns the raw ``items`` array.
+
+        The ask is clamped to the cap Spotify enforces on ``/search``; if the
+        cap ever shrinks below it, the query is retried once with a single
+        result instead of failing the whole search with a 400.
+        """
+        wanted = max(1, min(limit, _SEARCH_LIMIT_MAX))
+        params: dict[str, Any] = {"q": query, "type": "track", "limit": wanted}
+        try:
+            data = await self._request("GET", "/search", token, params=params)
+        except SpotifyApiError as exc:
+            if wanted == 1 or exc.status_code != 400 or "Invalid limit" not in str(exc):
+                raise
+            params["limit"] = 1
+            data = await self._request("GET", "/search", token, params=params)
         return _items(data, "tracks")
 
     async def saved_tracks(self, token: str, *, limit: int = 20) -> list[dict[str, Any]]:
@@ -238,8 +249,8 @@ class SpotifyApiClient:
 
         raise last_error if last_error else SpotifyApiError("Spotify request failed")
 
-    @staticmethod
-    def _status_error(response: httpx.Response) -> SpotifyApiError:
+    @classmethod
+    def _status_error(cls, response: httpx.Response) -> SpotifyApiError:
         if response.status_code == 401:
             return SpotifyAuthError("Spotify access token rejected", status_code=401)
         if response.status_code == 429:
@@ -247,11 +258,30 @@ class SpotifyApiClient:
             return SpotifyRateLimitError(retry_after)
         if 400 <= response.status_code < 500:
             # 404 (no device) and 409 (command rejected) stay meaningful upstream.
+            # The upstream message ("Invalid limit", "bad request"...) travels
+            # inside the error so logs can explain it; clients only ever see
+            # the generic "{service} unavailable" envelope.
+            detail = cls._upstream_detail(response)
             return SpotifyApiError(
-                f"Spotify answered {response.status_code}",
+                f"Spotify answered {response.status_code}" + (f": {detail}" if detail else ""),
                 status_code=response.status_code,
             )
         return SpotifyApiError("Spotify answered an upstream error", status_code=502)
+
+    @staticmethod
+    def _upstream_detail(response: httpx.Response) -> str | None:
+        """Read ``error.message`` out of a Spotify error body, when present."""
+        try:
+            payload: Any = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        error: Any = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            return message if isinstance(message, str) else None
+        return error if isinstance(error, str) else None
 
     @classmethod
     def _raise_for_status(cls, response: httpx.Response) -> None:

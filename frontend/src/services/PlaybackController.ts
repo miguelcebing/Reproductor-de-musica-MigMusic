@@ -22,6 +22,13 @@ export function isMissingLocalFile(cause: unknown): boolean {
   return cause instanceof Error && cause.message.startsWith("No object URL found");
 }
 
+/** Browser autoplay rejection: a reload resumed a track with no gesture yet. */
+export function isAutoplayBlocked(cause: unknown): boolean {
+  const name = (cause as { name?: string } | null)?.name;
+  const message = cause instanceof Error ? cause.message : "";
+  return name === "NotAllowedError" || message.includes("user didn't interact");
+}
+
 export interface PlaybackControllerOptions {
   readonly language: () => Language;
   /** Injectable factory (tests); defaults to the source-aware `PlayerFactory`. */
@@ -327,9 +334,15 @@ export class PlaybackController {
           await player.play();
         } catch (cause) {
           if (seq !== this.attachSeq) throw cause;
-          // Autoplay blocked (no user gesture): fall back to paused so the UI
-          // matches reality instead of showing a silent "playing" track.
-          this.fail(cause);
+          if (isAutoplayBlocked(cause)) {
+            // Autoplay policy: the reload restored a "playing" track with no
+            // user gesture behind it. Load it paused, say why, and sync the
+            // backend so the transport matches reality.
+            player.pause();
+            this.toast("info", "autoplayBlocked");
+          } else {
+            this.fail(cause);
+          }
           await this.send(() => this.api.report(undefined, false));
         }
       } else {

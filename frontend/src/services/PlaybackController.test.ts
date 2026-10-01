@@ -70,6 +70,7 @@ class FakePlayer implements AudioPlayer {
     readonly kind: AudioSource,
     private readonly failLoad = false,
     private readonly failMessage = "boom",
+    private readonly failPlay: { message: string; name?: string } | null = null,
   ) {}
 
   async load(source: string, options?: { startTime?: number }): Promise<void> {
@@ -81,6 +82,11 @@ class FakePlayer implements AudioPlayer {
 
   async play(): Promise<void> {
     this.playCalls += 1;
+    if (this.failPlay) {
+      const error = new Error(this.failPlay.message);
+      if (this.failPlay.name) error.name = this.failPlay.name;
+      throw error;
+    }
     this.isPlaying = true;
   }
 
@@ -119,10 +125,19 @@ class FakePlayer implements AudioPlayer {
   }
 }
 
-function makeFactory(options?: { failLoad?: boolean; failMessage?: string }) {
+function makeFactory(options?: {
+  failLoad?: boolean;
+  failMessage?: string;
+  failPlay?: { message: string; name?: string };
+}) {
   const players: FakePlayer[] = [];
   const createPlayer = vi.fn((source: AudioSource) => {
-    const player = new FakePlayer(source, options?.failLoad === true, options?.failMessage);
+    const player = new FakePlayer(
+      source,
+      options?.failLoad === true,
+      options?.failMessage,
+      options?.failPlay ?? null,
+    );
     players.push(player);
     return player;
   });
@@ -390,6 +405,49 @@ describe("PlaybackController (F7 integration)", () => {
     const toasts = useToastStore.getState().toasts;
     expect(toasts).toHaveLength(1);
     expect(toasts[0].kind).toBe("error");
+  });
+
+  it("restores a reloaded track paused when the browser blocks autoplay (F5)", async () => {
+    const state = makeState({ playing: true });
+    usePlaybackStore.getState().setPlayback(state);
+    const { controller, api, factory } = makeController(
+      makeApi(),
+      makeFactory({
+        failPlay: {
+          message: "play() failed because the user didn't interact with the document first",
+          name: "NotAllowedError",
+        },
+      }),
+    );
+
+    await controller.onTrackChange(state.song!);
+
+    expect(factory.players[0].playCalls).toBe(1);
+    expect(factory.players[0].pauseCalls).toBeGreaterThan(0);
+    expect(api.report).toHaveBeenCalledWith(undefined, false);
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("info");
+    expect(toasts[0].text).toContain("Click on the page"); // `autoplayBlocked`
+    await controller.onTrackChange(null);
+  });
+
+  it("keeps reporting a real playback failure as an error toast", async () => {
+    const state = makeState({ playing: true });
+    usePlaybackStore.getState().setPlayback(state);
+    const { controller, factory } = makeController(
+      makeApi(),
+      makeFactory({ failPlay: { message: "device disconnected" } }),
+    );
+
+    await controller.onTrackChange(state.song!);
+
+    expect(factory.players[0].pauseCalls).toBe(0);
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("error");
+    expect(toasts[0].text).toContain("device disconnected");
+    await controller.onTrackChange(null);
   });
 
   it("offers to re-link a local track whose bytes are gone (F5)", async () => {
