@@ -1,8 +1,9 @@
 # Estrategia y reporte de pruebas (F11)
 
 > Fuente de verdad de calidad: `AGEND.md` (`TEST-001..004`) y `skills/SKILL6.md`.
-> Actualizado: 2026-10-01 (OAuth, música local tras F5, Framer Motion y las
-> tres correcciones UX: diálogo Spotify, skip ±5 s y aislamiento por dispositivo).
+> Actualizado: 2026-10-01 (OAuth, música local tras F5, Framer Motion, correcciones
+> UX, y el reproductor: resiliencia ante reinicio del backend, UI optimista,
+> rendimiento del hilo principal, auto-avance y limpieza de código).
 
 ## 1. Pirámide y herramientas (`TEST-001`)
 
@@ -38,11 +39,11 @@ playlists vía API en cada test.
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **97.08 %** |
+| Cobertura global backend | ≥ 80 % | **97.13 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **327** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **88** (9 archivos) |
-| Tests E2E (Playwright) | — | **12** (8 specs: smoke, maestro, drag & drop, persistencia local, axe, diálogo Spotify, bordes del transporte, aislamiento por dispositivo) |
+| Tests backend | — | **334** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **96** (9 archivos) |
+| Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
 
@@ -123,6 +124,38 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   por el resto. Aislamiento por `X-Device-Id` (`UX-010`): solo playlists
   (el reproductor sigue siendo global), sin cabecera ⇒ vista completa para
   no romper E2E/smoke; E2E `device-isolation.spec.ts` con dos contextos.
+- **"Siguiente/anterior no cambia nada" (producción y local)**: tras un
+  reinicio del backend (Render free se duerme), cualquier llamada al
+  transporte contestaba `404 not_found` genérico y la UI se quedaba muda.
+  Ahora el backend distingue `404 no_active_playback`, el cliente reconstruye
+  el contexto (`open` + `select`) y reintenta una vez; además `GET
+  /api/playback` expone `next_index`/`previous_index` para que la UI compute
+  el destino optimista. E2E `playback-reload.spec.ts` (recarga con la lista
+  reproduciéndose) + unit "PlaybackController resilience" (3 tests: respuesta
+  stale descartada, rebuild+retry, playlist borrada).
+- **Carrera de respuestas al reportar posición**: dos `POST /playback/report`
+  en vuelo se aplicaban en llegada, revirtiendo un `next` reciente. Guarda de
+  secuencia por solicitud (`requestSeq`/`lastAppliedSeq`): una respuesta más
+  vieja que la última aplicada se descarta sin tocar el store.
+- **`activeId` rebotaba a la primera playlist al recargar**: el bootstrap
+  reseteaba la selección mientras el backend seguía reproduciendo otra lista;
+  ahora se sincroniza `activeId` con `playback.playlist_id` si existe.
+- **UI optimista con rollback**: play/pause, seek, ±5 s y siguiente/anterior
+  actualizan el store al entrar (y la canción se precarga en el reproductor
+  para que suene sin RTT); si la API falla, el estado previo se restaura —
+  salvo cuando la respuesta es un `no_active_playback` ya recuperado.
+  Unit "PlaybackController optimistic UI" (5 tests).
+- **`timeupdate` re-renderizaba toda la app (≈4 Hz)**: cada tick recomponía
+  el árbol de `App`. El transporte ahora se suscribe por campos (selectors de
+  zustand), `position` se cuantiza a segundos enteros (la UI muestra mm:ss),
+  `ProgressBar` se suscribe a `position` por su cuenta y las filas/listas/
+  controles van con `memo` + drag handlers estables por índice. Sin cambios
+  de comportamiento: la misma suite E2E pasa completa.
+- **Auto-avance al terminar la pista**: ya existía (`ended` →
+  `POST /playback/finished` → `_advance`), pero sin cobertura; ahora lo
+  fija `auto-advance.spec.ts` con WAVs de 1 s: la segunda pista arranca
+  sola y, en la cola con `repeat=off`, la reproducción se detiene sin
+  perder la canción visible.
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -134,7 +167,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 88 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 96 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

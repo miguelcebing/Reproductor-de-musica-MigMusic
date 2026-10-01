@@ -100,11 +100,13 @@ POST /api/playlists/{id}/songs
 
 One active playlist at a time. `PlaybackOut` — `playlist_id`, `song`,
 `index`, `position`, `playing`, `repeat`, `shuffle`, `size`,
-`available_next`, `available_previous`, `skip_seconds`.
+`available_next`, `available_previous`, `skip_seconds`,
+`next_index`, `previous_index` (the target index of each transport button, or
+`null` at the edge, so the UI can compute an optimistic target).
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/playback` | Current transport state. `404 not_found` when nothing is open. |
+| `GET` | `/api/playback` | Current transport state. `404 no_active_playback` when nothing is open. |
 | `POST` | `/api/playback/open` | Activate a playlist at its first song. Body: `{"playlist_id": "..."}` |
 | `POST` | `/api/playback/next` | Step forward; stops (`playing: false`) at the tail (`PLAYLIST-009 = A`). |
 | `POST` | `/api/playback/previous` | Step back; stays put at the head unless `repeat=all`. |
@@ -124,6 +126,9 @@ One active playlist at a time. `PlaybackOut` — `playlist_id`, `song`,
   reorders, so the queue the user sees stays intact.
 - `seek` is clamped to `0 .. duration` and `duration` may be `0` (unknown),
   in which case only `>= 0` is enforced.
+- Transport calls without an open playlist answer `404 no_active_playback`
+  (not a generic `not_found`); the client rebuilds its context with
+  `POST /open` + `POST /songs/{index}/select` and retries once.
 
 ---
 
@@ -212,7 +217,7 @@ browser. `SongOut` is the same shape as in *Playlists*, with
 | Code | Meaning |
 |---|---|
 | 400 | Domain rule violated (`DomainError`) |
-| 404 | Entity not found (`NotFoundError`), including "no active playback" |
+| 404 | Entity not found (`NotFoundError`), or no open playlist (`no_active_playback`) |
 | 422 | Request body failed validation (`request_validation_error`), or a domain rule (`validation_error`) |
 | 502/503 | Upstream failure (Spotify, database) |
 | 500 | Unhandled error; details only in the logs |
