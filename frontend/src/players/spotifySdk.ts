@@ -48,6 +48,7 @@ interface RawPlayerState {
   readonly track_window?: {
     readonly current_track?: { readonly uri: string; readonly duration_ms: number } | null;
   };
+  readonly error?: { readonly name?: string; readonly message?: string } | null;
 }
 
 interface RawPlayer {
@@ -143,7 +144,7 @@ function mapState(raw: RawPlayerState | null): SpotifySdkState | null {
     paused: raw.paused,
     position: Math.max(0, raw.position ?? 0) / 1000,
     duration: (current?.duration_ms ?? raw.duration ?? 0) / 1000,
-    error: (raw as any).error ?? null,
+    error: raw.error?.message ?? null,
   };
 }
 
