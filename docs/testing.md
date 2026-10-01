@@ -68,7 +68,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 | Responsive mobile/tablet/laptop/desktop | Breakpoints 640/1024/1440 (F4) + E2E en Pixel 7 | ✅ |
 | Accesibilidad (teclado, foco, ARIA, contraste) | E2E `a11y.spec.ts`: axe sin violaciones + focus-trap verificado (25 Tab) | ✅ |
 | Pruebas pasando con cobertura `TEST-002` | Tabla §3 | ✅ |
-| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-09-30: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200, proxy `/api/health` 200, CORS preflight 200 con ACAO correcto, Neon conectado, auto-deploy Render `trigger=commit`). Falta acción del usuario: secret real de Spotify + redirect URI en Spotify Dashboard | ⚠️ |
+| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200 directo y por proxy, preflight 200 con ACAO correcta + credenciales, Spotify acepta la Redirect URI, Render y Vercel auto-desplegaron, `keep-alive.yml` cada 10 min) | ✅ |
 | ≥2 funcionalidades adicionales aprobadas e implementadas | `FEAT-001-b/c/d/e` (favoritos, búsqueda, repeat, drag & drop) — 4 de 2 | ✅ |
 | Documentación actualizada | README, `docs/architecture.md`, `docs/api.md`, ADR-001..006, este documento | ✅ |
 
@@ -108,9 +108,12 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
-6. **Despliegue ejecutado, configuración parcial de Spotify pendiente**: el despliegue real se hizo
-   el 2026-09-30 (Vercel `migmusic` con Root Directory `frontend`, Render `migmusic-api`,
-   Neon `MigMusic`; health, proxy y CORS verificados; auto-deploy de Vercel activo).
-   Quedan acciones del usuario: `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder),
-   registrar la Redirect URI en Spotify Dashboard y el webhook de Render en GitHub;
-   hasta entonces OAuth no es utilizable en producción.
+6. **Demo manual de Spotify pendiente (lo único que queda)**: despliegue y OAuth
+   verificados el 2026-10-01 sobre `19e9408` — health 200 directo y por el proxy de
+   Vercel, preflight con ACAO correcta, Spotify acepta la Redirect URI registrada y el
+   callback reconstruye el login desde el `state` firmado aunque la cookie `mig_oauth`
+   no vuelva (422 con cookie y `state` falsificado, 401 sin nada). Auto-deploy de
+   Vercel y Render confirmado con ese push y `keep-alive.yml` vigilando `/api/health`.
+   No se puede automatizar la autorización con la cuenta Premium del usuario
+   (2FA + pantalla de consentimiento): la reproducción con el Web Playback SDK queda
+   para la demo guiada (SKILL6 §"Manual guiado").

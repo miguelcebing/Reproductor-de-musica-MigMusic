@@ -155,10 +155,12 @@ el backend en Render.
 | CORS | preflight con ACAO `https://migmusic.vercel.app` | ✅ 200 |
 | BD (Neon, proyecto `MigMusic`) | schema auto-creado en el arranque | ✅ conectada |
 
-Pendiente (acciones del usuario): `SPOTIFY_CLIENT_SECRET` real en Render (hoy placeholder)
-y registrar la Redirect URI en Spotify Dashboard. El *keep-alive* ya no depende de un
-servicio externo: el workflow `keep-alive.yml` de GitHub Actions pinga `/api/health`
-cada 10 minutos.
+Verificado el 2026-10-01: health 200 directo y por el proxy, CORS con credenciales,
+Redirect URI aceptada por Spotify y auto-deploy de Vercel y Render con el último push.
+El *keep-alive* ya no depende de un servicio externo: el workflow `keep-alive.yml` de
+GitHub Actions pinga `/api/health` cada 10 minutos.
+Queda solo la demo manual con cuenta Premium (autorizar y reproducir con el Web
+Playback SDK).
 El auto-deploy de Vercel está activo (proyecto con *Root Directory* `frontend`); el de
 Render se dispara con `render deploys create` mientras no llegue el webhook de la App de
 GitHub.

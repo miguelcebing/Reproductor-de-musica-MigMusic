@@ -1436,7 +1436,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 
 **Fuentes**
 - [x] Música local: File Picker, reproducir/pausar/seek/cambiar/eliminar. (E2E con `setInputFiles`)
-- [ ] Spotify: login OAuth completo, refresh de token, reproducción con Web Playback SDK (con cuenta Premium), errores manejados. *(pendiente de cuenta Premium + demo manual; código y dobles probados)*
+- [ ] Spotify: login OAuth completo, refresh de token, reproducción con Web Playback SDK (con cuenta Premium), errores manejados. *(2026-10-01: callback verificado en producción — `state` firmado sin cookie llega hasta Spotify (antes: 401), cookie + `state` falsificado → 422, sin nada → 401; la respuesta `invalid_grant` y no `invalid_client` confirma credenciales reales de la app. Queda la demo manual con cuenta Premium: autorizar, buscar y reproducir con el Web Playback SDK)*
 - [x] Spotify y local se tratan como fuentes separadas y polimórficas. (`AudioSource` en F5, unit tests de `SpotifyPlayer`/`LocalAudioPlayer`)
 
 **Arquitectura y código**
@@ -1452,7 +1452,7 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 
 **Calidad y despliegue**
 - [x] Pruebas unitarias/integración/e2e pasando; cobertura acorde a `TEST-002`. (309 pytest/96.83 %/dominio 100 %, 77 Vitest, 9 E2E; ver `docs/testing.md`)
-- [ ] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(desplegado 2026-09-30: `https://migmusic.vercel.app` → proxy `/api/*` → `https://migmusic-api.onrender.com` (health 200, CORS preflight 200 con ACAO `https://migmusic.vercel.app`, Neon conectado, auto-deploy Render por commit). Queda: `SPOTIFY_CLIENT_SECRET` real en Render (placeholder), Redirect URI en Spotify Dashboard y conexión GitHub en Vercel)*
+- [x] Desplegado en la nube con HTTPS, CORS correcto, Redirect URI de producción, logs y configuración de producción. *(verificado 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` → proxy `/api/*` → `https://migmusic-api.onrender.com`; health 200 directo y por proxy, preflight 200 con ACAO `https://migmusic.vercel.app` + `credentials: true`, Spotify acepta la Redirect URI registrada, Render y Vercel auto-desplegaron el push y el workflow `keep-alive` vigila `/api/health` cada 10 min)*
 - [x] Al menos 2 funcionalidades adicionales aprobadas por el usuario e implementadas. (`FEAT-001-b/c/d/e`: favoritos, búsqueda, repeat, drag & drop)
 - [x] Documentación (README, docs/architecture, ADRs) actualizada.
 
