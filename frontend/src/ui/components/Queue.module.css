@@ -244,11 +244,26 @@
 
 .dialog {
   width: min(480px, 100%);
+  max-height: calc(100vh - var(--space-4) * 2);
+  max-height: calc(100dvh - var(--space-4) * 2);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+/* Scrollable middle: header and tabs stay fixed, the action row is pinned
+   below it, so the submit button is always reachable with long results. */
+.dialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -315,6 +330,7 @@
 }
 
 .dialogActions {
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);

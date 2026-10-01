@@ -104,6 +104,7 @@ export function AddTrackDialog({
 
   const maxIndex = Math.max(0, songsLength - 1);
   const boundedIndex = Math.min(index, maxIndex);
+  const pendingCount = tab === "spotify" ? selected.size : files.length;
 
   const position: TrackPosition =
     positionKind === "start"
@@ -225,152 +226,156 @@ export function AddTrackDialog({
               </button>
             </div>
 
-            {tab === "local" ? (
-              <>
-                <label className={styles.field}>
-                  {t("dialog.files")}
-                  <input
-                    type="file"
-                    multiple
-                    accept="audio/mpeg,audio/wav,.mp3,.wav"
-                    data-testid="file-input"
-                    onChange={(event) => {
-                      setFiles(Array.from(event.target.files ?? []));
-                      setError(null);
-                    }}
-                  />
-                </label>
-                <p className={styles.hint}>{t("dialog.filesHint")}</p>
-              </>
-            ) : spotifyConnected ? (
-              <>
-                <form className={styles.playlistBar} onSubmit={runSearch}>
-                  <input
-                    type="search"
-                    className={styles.input}
-                    value={query}
-                    placeholder={t("spotify.searchPlaceholder")}
-                    aria-label={t("spotify.search")}
-                    data-testid="spotify-query"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    className={styles.button}
-                    disabled={spotifyLoading}
-                    data-testid="spotify-search"
-                  >
-                    {spotifyLoading ? t("spotify.searching") : t("spotify.search")}
-                  </button>
-                </form>
-                <p className={styles.hint}>{t("spotify.selectHint")}</p>
-                {spotifyLoading ? (
-                  <p className={styles.loading} data-testid="spotify-loading">
-                    {t("spotify.searching")}
-                  </p>
-                ) : spotifyResults.length === 0 ? (
-                  <p className={styles.hint} data-testid="spotify-empty">
-                    {searched ? t("spotify.noResults") : ""}
-                  </p>
-                ) : (
-                  <ul className={styles.list} data-testid="spotify-results">
-                    {spotifyResults.map((song) => (
-                      <li key={song.id} className={styles.row}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(song.id)}
-                          aria-label={`${song.title} â€” ${song.artist}`}
-                          onChange={() => toggleSelected(song.id)}
-                          data-testid={`spotify-result-${song.id}`}
-                        />
-                        <div className={styles.rowMain}>
-                          <p className={styles.rowTitle}>{song.title}</p>
-                          <p className={styles.rowMeta}>{song.artist}</p>
-                        </div>
-                        <span className={styles.duration}>{song.duration_label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className={styles.count}>
-                  {t("spotify.results", { count: spotifyResults.length })}
-                </p>
-                <button
-                  type="button"
-                  className={styles.button}
-                  onClick={onSpotifyDisconnect}
-                  data-testid="spotify-disconnect"
-                >
-                  {t("spotify.disconnect")}
-                </button>
-              </>
-            ) : (
-              <div className={styles.spotifyDisconnected} data-testid="spotify-disconnected">
-                <div className={styles.spotifyDisconnectedIcon}>
-                  <SpotifyIcon width={48} height={48} />
-                </div>
-                <h3 className={styles.spotifyDisconnectedTitle}>
-                  {t("dialog.spotifyMissing")}
-                </h3>
-                <p className={styles.spotifyDisconnectedDesc}>
-                  {t("dialog.spotifyMissingDesc")}
-                </p>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.buttonPrimary} ${styles.spotifyConnectBtn}`}
-                  onClick={onSpotifyConnect}
-                  data-testid="spotify-connect"
-                >
-                  <SpotifyIcon width={18} height={18} />
-                  {t("spotify.connect")}
-                </button>
-                <p className={styles.spotifyDisconnectedNote}>
-                  {t("dialog.spotifyPremiumNote")}
-                </p>
-              </div>
-            )}
-
-            {showPositionPicker && (
-              <fieldset className={styles.field}>
-                <legend>{t("dialog.position")}</legend>
-                <div className={styles.positions}>
-                  {(["start", "end", "index"] as const).map((kind) => (
+            {/* Scrollable body: the actions row stays pinned below it, so the
+                submit button is never pushed off-screen by long results. */}
+            <div className={styles.dialogBody}>
+              {tab === "local" ? (
+                <>
+                  <label className={styles.field}>
+                    {t("dialog.files")}
+                    <input
+                      type="file"
+                      multiple
+                      accept="audio/mpeg,audio/wav,.mp3,.wav"
+                      data-testid="file-input"
+                      onChange={(event) => {
+                        setFiles(Array.from(event.target.files ?? []));
+                        setError(null);
+                      }}
+                    />
+                  </label>
+                  <p className={styles.hint}>{t("dialog.filesHint")}</p>
+                </>
+              ) : spotifyConnected ? (
+                <>
+                  <form className={styles.playlistBar} onSubmit={runSearch}>
+                    <input
+                      type="search"
+                      className={styles.input}
+                      value={query}
+                      placeholder={t("spotify.searchPlaceholder")}
+                      aria-label={t("spotify.search")}
+                      data-testid="spotify-query"
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
                     <button
-                      key={kind}
-                      type="button"
-                      className={`${styles.position} ${
-                        positionKind === kind ? styles.positionActive : ""
-                      }`}
-                      aria-pressed={positionKind === kind}
-                      onClick={() => setPositionKind(kind)}
-                      data-testid={`position-${kind}`}
+                      type="submit"
+                      className={styles.button}
+                      disabled={spotifyLoading}
+                      data-testid="spotify-search"
                     >
-                      {kind === "start"
-                        ? t("dialog.positionStart")
-                        : kind === "end"
-                          ? t("dialog.positionEnd")
-                          : t("dialog.positionIndex")}
+                      {spotifyLoading ? t("spotify.searching") : t("spotify.search")}
                     </button>
-                  ))}
+                  </form>
+                  <p className={styles.hint}>{t("spotify.selectHint")}</p>
+                  {spotifyLoading ? (
+                    <p className={styles.loading} data-testid="spotify-loading">
+                      {t("spotify.searching")}
+                    </p>
+                  ) : spotifyResults.length === 0 ? (
+                    <p className={styles.hint} data-testid="spotify-empty">
+                      {searched ? t("spotify.noResults") : ""}
+                    </p>
+                  ) : (
+                    <ul className={styles.list} data-testid="spotify-results">
+                      {spotifyResults.map((song) => (
+                        <li key={song.id} className={styles.row}>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(song.id)}
+                            aria-label={`${song.title} â€” ${song.artist}`}
+                            onChange={() => toggleSelected(song.id)}
+                            data-testid={`spotify-result-${song.id}`}
+                          />
+                          <div className={styles.rowMain}>
+                            <p className={styles.rowTitle}>{song.title}</p>
+                            <p className={styles.rowMeta}>{song.artist}</p>
+                          </div>
+                          <span className={styles.duration}>{song.duration_label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className={styles.count}>
+                    {t("spotify.results", { count: spotifyResults.length })}
+                  </p>
+                  <button
+                    type="button"
+                    className={styles.button}
+                    onClick={onSpotifyDisconnect}
+                    data-testid="spotify-disconnect"
+                  >
+                    {t("spotify.disconnect")}
+                  </button>
+                </>
+              ) : (
+                <div className={styles.spotifyDisconnected} data-testid="spotify-disconnected">
+                  <div className={styles.spotifyDisconnectedIcon}>
+                    <SpotifyIcon width={48} height={48} />
+                  </div>
+                  <h3 className={styles.spotifyDisconnectedTitle}>
+                    {t("dialog.spotifyMissing")}
+                  </h3>
+                  <p className={styles.spotifyDisconnectedDesc}>
+                    {t("dialog.spotifyMissingDesc")}
+                  </p>
+                  <button
+                    type="button"
+                    className={`${styles.button} ${styles.buttonPrimary} ${styles.spotifyConnectBtn}`}
+                    onClick={onSpotifyConnect}
+                    data-testid="spotify-connect"
+                  >
+                    <SpotifyIcon width={18} height={18} />
+                    {t("spotify.connect")}
+                  </button>
+                  <p className={styles.spotifyDisconnectedNote}>
+                    {t("dialog.spotifyPremiumNote")}
+                  </p>
                 </div>
-                {positionKind === "index" && (
-                  <input
-                    type="number"
-                    min={0}
-                    max={maxIndex}
-                    value={boundedIndex}
-                    aria-label={t("dialog.positionIndex")}
-                    onChange={(event) => setIndex(Number(event.target.value))}
-                  />
-                )}
-              </fieldset>
-            )}
+              )}
 
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
+              {showPositionPicker && (
+                <fieldset className={styles.field}>
+                  <legend>{t("dialog.position")}</legend>
+                  <div className={styles.positions}>
+                    {(["start", "end", "index"] as const).map((kind) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`${styles.position} ${
+                          positionKind === kind ? styles.positionActive : ""
+                        }`}
+                        aria-pressed={positionKind === kind}
+                        onClick={() => setPositionKind(kind)}
+                        data-testid={`position-${kind}`}
+                      >
+                        {kind === "start"
+                          ? t("dialog.positionStart")
+                          : kind === "end"
+                            ? t("dialog.positionEnd")
+                            : t("dialog.positionIndex")}
+                      </button>
+                    ))}
+                  </div>
+                  {positionKind === "index" && (
+                    <input
+                      type="number"
+                      min={0}
+                      max={maxIndex}
+                      value={boundedIndex}
+                      aria-label={t("dialog.positionIndex")}
+                      onChange={(event) => setIndex(Number(event.target.value))}
+                    />
+                  )}
+                </fieldset>
+              )}
+
+              {error && (
+                <p className={styles.error} role="alert">
+                  {error}
+                </p>
+              )}
+            </div>
 
             <div className={styles.dialogActions}>
               <button type="button" className={styles.button} onClick={onClose}>
@@ -382,7 +387,11 @@ export function AddTrackDialog({
                 onClick={submit}
                 data-testid="dialog-submit"
               >
-                {tab === "spotify" && !spotifyConnected ? t("spotify.connect") : t("dialog.submit")}
+                {tab === "spotify" && !spotifyConnected
+                  ? t("spotify.connect")
+                  : pendingCount > 0
+                    ? t("dialog.submitCount", { count: pendingCount })
+                    : t("dialog.submit")}
               </button>
             </div>
           </motion.div>
