@@ -1,6 +1,7 @@
 /** Accessible icon button used by every transport control. */
 
 import type { ReactNode } from "react";
+import { motion } from "framer-motion";
 
 import styles from "./Player.module.css";
 
@@ -28,7 +29,7 @@ export function IconButton({
   if (active) classes.push(styles.iconButtonActive);
 
   return (
-    <button
+    <motion.button
       type="button"
       className={classes.join(" ")}
       aria-label={label}
@@ -36,8 +37,11 @@ export function IconButton({
       disabled={disabled}
       onClick={onClick}
       data-testid={testId}
+      whileHover={disabled ? {} : { scale: 1.08 }}
+      whileTap={disabled ? {} : { scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 420, damping: 26 }}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }

@@ -64,6 +64,11 @@ test("master flow: add, play, transport, seek, volume, insert, search, remove", 
     .toBeGreaterThanOrEqual(beforeSkip + 4);
 
   // --- Seek by clicking the bar (PLAYER-007) -----------------------------
+  // At max scroll the sticky header can cover the seek bar (mobile): pull it
+  // clear of the header before clicking, otherwise the click hits the header.
+  await page
+    .getByTestId("progress-track")
+    .evaluate((element) => element.scrollIntoView({ block: "center" }));
   const box = await page.getByTestId("progress-track").boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.click(box!.x + box!.width * 0.66, box!.y + box!.height / 2);

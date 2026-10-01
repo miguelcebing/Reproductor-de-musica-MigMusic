@@ -5,6 +5,7 @@
  */
 
 import { useState, type DragEvent } from "react";
+import { AnimatePresence } from "framer-motion";
 
 import type { Song } from "../../domain/types";
 import { useT } from "../../i18n/useT";
@@ -136,6 +137,15 @@ export function TrackList({
     setDragOverIndex(null);
   };
 
+  // Stable keys keep enter/exit animations on the rows that really changed;
+  // a repeated song id falls back to the index to stay unique.
+  const idCounts = new Map<string, number>();
+  for (const song of songs) {
+    idCounts.set(song.id, (idCounts.get(song.id) ?? 0) + 1);
+  }
+  const rowKey = (song: Song, index: number): string =>
+    idCounts.get(song.id) === 1 ? song.id : `${song.id}#${index}`;
+
   return (
     <section aria-label={t("list.title")}>
       <div className={styles.searchRow}>
@@ -172,30 +182,32 @@ export function TrackList({
         </p>
       )}
       <ul className={styles.list} data-testid="track-list">
-        {visible.map(({ song, index }) => (
-          <TrackItem
-            key={`${song.id}-${index}`}
-            song={song}
-            index={index}
-            isActive={index === currentIndex}
-            isMatch={index === matchIndex}
-            canMoveUp={index > 0}
-            canMoveDown={index < songs.length - 1}
-            onPlay={() => onPlay(index)}
-            onRemove={() => onRemove(index)}
-            onMove={(delta) => onMove(index, delta)}
-            onFavorite={() => onFavorite(index, !song.favorite)}
-            drag={{
-              isDragging: index === dragIndex,
-              isDragOver: index === dragOverIndex && index !== dragIndex,
-              onDragStart: handleDragStart(index),
-              onDragOver: handleDragOver(index),
-              onDrop: handleDrop(index),
-              onDragEnd: handleDragEnd,
-              onDragLeave: handleDragLeave,
-            }}
-          />
-        ))}
+        <AnimatePresence initial={false}>
+          {visible.map(({ song, index }) => (
+            <TrackItem
+              key={rowKey(song, index)}
+              song={song}
+              index={index}
+              isActive={index === currentIndex}
+              isMatch={index === matchIndex}
+              canMoveUp={index > 0}
+              canMoveDown={index < songs.length - 1}
+              onPlay={() => onPlay(index)}
+              onRemove={() => onRemove(index)}
+              onMove={(delta) => onMove(index, delta)}
+              onFavorite={() => onFavorite(index, !song.favorite)}
+              drag={{
+                isDragging: index === dragIndex,
+                isDragOver: index === dragOverIndex && index !== dragIndex,
+                onDragStart: handleDragStart(index),
+                onDragOver: handleDragOver(index),
+                onDrop: handleDrop(index),
+                onDragEnd: handleDragEnd,
+                onDragLeave: handleDragLeave,
+              }}
+            />
+          ))}
+        </AnimatePresence>
       </ul>
     </section>
   );

@@ -3,6 +3,7 @@
 import type { RepeatMode, SkipDirection } from "../../domain/types";
 import { useT } from "../../i18n/useT";
 import styles from "./Player.module.css";
+import { AnimatePresence, motion } from "framer-motion";
 import { IconButton } from "./IconButton";
 import { BackIcon, ForwardIcon, NextIcon, PauseIcon, PlayIcon, PreviousIcon, RepeatIcon, ShuffleIcon } from "./icons";
 
@@ -76,7 +77,18 @@ export function PlayerControls({
         primary
         testId="play-pause"
       >
-        {playing ? <PauseIcon width={26} height={26} /> : <PlayIcon width={26} height={26} />}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={playing ? "pause" : "play"}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.7 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            style={{ display: "inline-flex" }}
+          >
+            {playing ? <PauseIcon width={26} height={26} /> : <PlayIcon width={26} height={26} />}
+          </motion.span>
+        </AnimatePresence>
       </IconButton>
 
       <IconButton

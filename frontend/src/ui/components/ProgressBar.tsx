@@ -1,6 +1,7 @@
 /** Interactive progress bar: click, drag and keyboard (`PLAYER-007`). */
 
 import { useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 import styles from "./Player.module.css";
 import { formatTime, ratioToPosition } from "../utils/format";
@@ -99,7 +100,13 @@ export function ProgressBar({
         }}
       >
         <div className={styles.progressFill} style={{ width: `${ratio * 100}%` }} />
-        <div className={styles.progressKnob} style={{ left: `${ratio * 100}%` }} />
+        <motion.div
+          className={styles.progressKnob}
+          style={{ left: `${ratio * 100}%`, x: "-50%", y: "-50%" }}
+          animate={{ scale: draggingPosition !== null ? 1.35 : 1 }}
+          whileHover={disabled ? {} : { scale: 1.25 }}
+          transition={{ type: "spring", stiffness: 500, damping: 28 }}
+        />
       </div>
       <div className={styles.progressTimes}>
         <span>{formatTime(current)}</span>
