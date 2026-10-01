@@ -114,6 +114,8 @@ class PlaybackService:
             size=size,
             available_next=size > 0 and (not at_last or wrap),
             available_previous=size > 0 and (not at_first or wrap),
+            next_index=self._next_index(playlist, index),
+            previous_index=self._previous_index(playlist, index),
             skip_seconds=self._skip_seconds,
         )
 
@@ -266,6 +268,30 @@ class PlaybackService:
         if index is None:
             return True, True
         return index <= 0, index >= playlist.size - 1
+
+    def _next_index(self, playlist: Playlist, index: int | None) -> int | None:
+        """Index ``next`` would select, mirroring ``_advance`` without mutating."""
+        if playlist.size == 0 or index is None:
+            return None
+        if self._shuffle:
+            if self._order_index + 1 < len(self._order):
+                return self._order[self._order_index + 1]
+            return self._order[0] if self._repeat is RepeatMode.ALL else None
+        if index < playlist.size - 1:
+            return index + 1
+        return 0 if self._repeat is RepeatMode.ALL else None
+
+    def _previous_index(self, playlist: Playlist, index: int | None) -> int | None:
+        """Index ``previous`` would select, mirroring ``previous`` without mutating."""
+        if playlist.size == 0 or index is None:
+            return None
+        if self._shuffle:
+            if self._order_index > 0:
+                return self._order[self._order_index - 1]
+            return self._order[-1] if self._repeat is RepeatMode.ALL else None
+        if index > 0:
+            return index - 1
+        return playlist.size - 1 if self._repeat is RepeatMode.ALL else None
 
     def _duration(self, playlist: Playlist) -> float:
         song = playlist.current

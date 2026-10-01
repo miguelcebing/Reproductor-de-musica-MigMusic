@@ -12,11 +12,11 @@ FilledPlaylist = Callable[..., PlaylistPayload]
 
 
 def test_state_before_opening_a_playlist_returns_404(client: TestClient) -> None:
-    """There is no implicit playlist."""
+    """There is no implicit playlist; the code tells the client to rebuild it."""
     response = client.get("/api/playback")
 
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "not_found"
+    assert response.json()["error"]["code"] == "no_active_playback"
 
 
 def test_open_starts_the_first_song(client: TestClient, filled_playlist: FilledPlaylist) -> None:
@@ -34,6 +34,31 @@ def test_open_starts_the_first_song(client: TestClient, filled_playlist: FilledP
     assert body["skip_seconds"] == 5.0
     assert body["available_previous"] is False
     assert body["available_next"] is True
+    assert body["next_index"] == 1
+    assert body["previous_index"] is None
+
+
+def test_next_and_previous_indexes_are_reported_for_the_optimistic_ui(
+    client: TestClient, filled_playlist: FilledPlaylist
+) -> None:
+    """Every answer says where each transport button would land."""
+    payload = filled_playlist(count=3)
+    client.post("/api/playback/open", json={"playlist_id": payload["id"]})
+
+    opened = client.get("/api/playback").json()
+    assert opened["next_index"] == 1
+    assert opened["previous_index"] is None
+
+    client.post("/api/playback/next")
+    middle = client.get("/api/playback").json()
+    assert middle["next_index"] == 2
+    assert middle["previous_index"] == 0
+
+    client.post("/api/playback/next")
+    tail = client.get("/api/playback").json()
+    assert tail["next_index"] is None
+    assert tail["previous_index"] == 1
+    assert tail["available_next"] is False
 
 
 def test_open_unknown_playlist_returns_404(client: TestClient) -> None:

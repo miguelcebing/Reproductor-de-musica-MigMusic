@@ -17,6 +17,7 @@ from migmusic.core import (
     ValidationError,
 )
 from migmusic.domain import EmptyPlaylistError, InvalidPositionError, ItemNotFoundError
+from migmusic.domain.exceptions import NoActivePlaybackError
 
 
 def _build_client() -> TestClient:
@@ -61,6 +62,10 @@ def _build_client() -> TestClient:
     async def domain_missing() -> None:
         raise ItemNotFoundError("song not found in the list")
 
+    @app.get("/playback-inactive")
+    async def playback_inactive() -> None:
+        raise NoActivePlaybackError("no playlist is being played")
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -76,6 +81,7 @@ def _build_client() -> TestClient:
         ("/domain-empty", 400, "bad_request"),
         ("/domain-position", 422, "validation_error"),
         ("/domain-missing", 404, "not_found"),
+        ("/playback-inactive", 404, "no_active_playback"),
     ],
 )
 def test_exceptions_map_to_the_expected_response(

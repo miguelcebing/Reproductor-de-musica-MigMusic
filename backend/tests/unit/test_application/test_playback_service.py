@@ -485,6 +485,95 @@ def test_edges_are_reported_to_the_ui(
     assert playback_service.state().available_next is False
 
 
+def test_state_reports_where_the_transport_would_land(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The optimistic UI needs the exact target of next/previous."""
+    playlist = seed_playlist(count=3)
+    state = playback_service.open(playlist.id)
+
+    assert state.next_index == 1
+    assert state.previous_index is None
+
+    playback_service.next()
+    state = playback_service.state()
+    assert state.next_index == 2
+    assert state.previous_index == 0
+
+    playback_service.next()
+    state = playback_service.state()
+    assert state.next_index is None
+    assert state.previous_index == 1
+
+
+def test_state_indexes_wrap_with_repeat_all(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Repeat all turns both edges into real targets."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ALL)
+    playback_service.next()
+    playback_service.next()
+
+    at_tail = playback_service.state()
+    assert at_tail.index == 2
+    assert at_tail.next_index == 0
+    assert at_tail.previous_index == 1
+
+    playback_service.previous()
+    playback_service.previous()
+    at_head = playback_service.state()
+    assert at_head.index == 0
+    assert at_head.previous_index == 2
+
+
+def test_state_indexes_ignore_repeat_one(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """A manual press still means the next song under repeat one."""
+    playlist = seed_playlist(count=3)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(repeat=RepeatMode.ONE)
+
+    assert playback_service.state().next_index == 1
+
+
+def test_shuffle_state_indexes_follow_the_playback_order(
+    playback_service: PlaybackService, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Under shuffle the prediction comes from the permutation, not the list."""
+    playlist = seed_playlist(count=5)
+    playback_service.open(playlist.id)
+    playback_service.set_modes(shuffle=True)
+
+    seen = [playback_service.state().index]
+    for _ in range(4):
+        predicted = playback_service.state().next_index
+        assert predicted is not None
+        landed = playback_service.next().index
+        assert landed == predicted
+        seen.append(landed)
+
+    assert sorted(seen) == [0, 1, 2, 3, 4]
+    assert playback_service.state().next_index is None
+
+
+def test_empty_playlist_has_no_transport_targets(
+    playback_service: PlaybackService, repository: InMemoryPlaylistRepository
+) -> None:
+    """An empty playlist offers nothing to jump to."""
+    empty = Playlist("Fresh")
+    repository.save(empty)
+
+    state = playback_service.open(empty.id)
+
+    assert state.next_index is None
+    assert state.previous_index is None
+    assert state.available_next is False
+    assert state.available_previous is False
+
+
 def test_state_after_the_playlist_was_deleted_raises(
     playback_service: PlaybackService,
     playlist_service: PlaylistService,

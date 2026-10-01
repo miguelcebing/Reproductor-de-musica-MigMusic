@@ -14,10 +14,14 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from migmusic.core import DomainError, ExternalServiceError, NotFoundError, ValidationError
+from migmusic.domain.exceptions import NoActivePlaybackError
 
 # Domain error class -> (HTTP status, machine-readable code)
 _DOMAIN_STATUS: dict[type[BaseException], tuple[int, str]] = {
     NotFoundError: (404, "not_found"),
+    # The transport lost its context (backend restart): the frontend rebuilds it
+    # by re-selecting, so this code must stay distinct from a missing playlist.
+    NoActivePlaybackError: (404, "no_active_playback"),
     ValidationError: (422, "validation_error"),
     DomainError: (400, "bad_request"),
 }

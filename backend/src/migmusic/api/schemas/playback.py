@@ -23,6 +23,8 @@ class PlaybackOut(BaseModel):
     size: int
     available_next: bool
     available_previous: bool
+    next_index: int | None
+    previous_index: int | None
     skip_seconds: float
 
     @classmethod

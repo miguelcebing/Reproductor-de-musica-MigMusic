@@ -44,6 +44,9 @@ class PlaybackState:
         size: Number of songs in the playlist.
         available_next: ``False`` at the tail (``PLAYLIST-009 = A``).
         available_previous: ``False`` at the head (``PLAYLIST-009 = A``).
+        next_index: Index ``next`` would select (``None`` at the tail); the
+            frontend uses it to move optimistically before the answer lands.
+        previous_index: Index ``previous`` would select (``None`` at the head).
         skip_seconds: Configured ``PLAYER-001/002`` step.
     """
 
@@ -57,4 +60,6 @@ class PlaybackState:
     size: int
     available_next: bool
     available_previous: bool
+    next_index: int | None
+    previous_index: int | None
     skip_seconds: float

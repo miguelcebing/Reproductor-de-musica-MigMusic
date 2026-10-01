@@ -10,7 +10,7 @@ Exception                    Status  Code
 ``InvalidPositionError``     422     ``validation_error``
 ``ItemNotFoundError``        404     ``not_found``
 ``PlaylistNotFoundError``    404     ``not_found``
-``NoActivePlaybackError``    404     ``not_found``
+``NoActivePlaybackError``    404     ``no_active_playback``
 ===========================  ======  ==================
 """
 
