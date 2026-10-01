@@ -65,6 +65,16 @@
 | `PUT` | `/api/playlists/{id}/songs/{index}/favorite` | Set `{"favorite": true}` / `{"favorite": false}`; returns the song (`FEAT-001-b`). |
 | `POST` | `/api/playlists/{id}/songs/{index}/select` | Activate the playlist, move the cursor, return the playback state. |
 
+**Device scoping (`UX-010`)**
+
+- `GET /api/playlists` and `POST /api/playlists` accept an optional
+  `X-Device-Id` header: the listing is narrowed to the playlists created with
+  that id, and created playlists are stamped with it.
+- Omitted header (curl, smoke checks, tests) or a blank value → unscoped view:
+  every playlist. Other endpoints ignore the header.
+- This is per-device UX isolation, **not authentication**: the id is advisory
+  and any caller can send any value.
+
 **Append a song**
 
 ```json

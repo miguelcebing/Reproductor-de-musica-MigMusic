@@ -1,7 +1,8 @@
 # Estrategia y reporte de pruebas (F11)
 
 > Fuente de verdad de calidad: `AGEND.md` (`TEST-001..004`) y `skills/SKILL6.md`.
-> Actualizado: 2026-10-01 (OAuth, música local tras F5 y Framer Motion).
+> Actualizado: 2026-10-01 (OAuth, música local tras F5, Framer Motion y las
+> tres correcciones UX: diálogo Spotify, skip ±5 s y aislamiento por dispositivo).
 
 ## 1. Pirámide y herramientas (`TEST-001`)
 
@@ -37,11 +38,11 @@ playlists vía API en cada test.
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **97.06 %** |
+| Cobertura global backend | ≥ 80 % | **97.08 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **317** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **80** (8 archivos) |
-| Tests E2E (Playwright) | — | **9** (5 specs: smoke, maestro, drag & drop, persistencia local, axe) |
+| Tests backend | — | **327** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **88** (9 archivos) |
+| Tests E2E (Playwright) | — | **12** (8 specs: smoke, maestro, drag & drop, persistencia local, axe, diálogo Spotify, bordes del transporte, aislamiento por dispositivo) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
 
@@ -108,6 +109,20 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   (`play() failed because the user didn't interact with the document first`).
   Corregido con `isAutoplayBlocked`: se carga en pausa, se muestra el aviso
   informativo `autoplayBlocked` y se sincroniza el backend a `playing=false`.
+- **Botón "Agregar" del diálogo Spotify fuera de pantalla**: con una página
+  llena de resultados el diálogo crecía más que la ventana y el botón de
+  acción quedaba bajo el pliegue. Corregido con `max-height: min(90vh, 90dvh)`
+  + cuerpo con scroll y acciones fijas (`Queue.module.css`), y el botón
+  muestra el pendiente (`Agregar (n)`); E2E `spotify-dialog.spec.ts`.
+- **Siguiente/previous "mueren" en los bordes**: los botones se deshabilitaban
+  al llegar al final/inicio y el siguiente clic no explicaba nada. Ahora
+  siempre están habilitados y el clic en el borde muestra un toast
+  informativo (`player.atEnd`/`player.atStart`) sin cortar la música;
+  el seek de ±5 s sustituye al salto de 10 s (`transport-edges.spec.ts`).
+- **Playlists sin separar por equipo**: cada equipo veía las listas creadas
+  por el resto. Aislamiento por `X-Device-Id` (`UX-010`): solo playlists
+  (el reproductor sigue siendo global), sin cabecera ⇒ vista completa para
+  no romper E2E/smoke; E2E `device-isolation.spec.ts` con dos contextos.
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -115,10 +130,11 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    cuenta Premium real → queda para la demo manual (SKILL6 §"Manual guiado"). Sin ella,
    la pestaña Spotify se prueba con dobles.
 2. **E2E contra repositorio in-memory**: `DATABASE_URL=""` evita tocar datos reales; la
-   fidelidad SQL la dan los tests de contrato con `pgserver` (8 tests).
+   fidelidad SQL la dan los tests de contrato con `pgserver` (11 tests, incluido el
+   aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 80 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 88 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
