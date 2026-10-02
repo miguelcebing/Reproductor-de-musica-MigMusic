@@ -6,13 +6,16 @@ refreshed by the application layer; the client itself stays stateless.
 Failure policy (``SKILL3``):
 - timeout 10 s per attempt,
 - one retry with backoff on 429/5xx, honouring ``Retry-After`` up to 3 s,
-- 401 raised as :class:`SpotifyAuthError` so the caller can reconnect,
+- 401 replayed once with a freshly refreshed token before it is raised as
+  :class:`SpotifyAuthError` so the caller can reconnect,
 - everything else raised as :class:`SpotifyApiError` with the upstream status.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -27,6 +30,14 @@ from migmusic.infrastructure.spotify.errors import (
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 _MAX_ATTEMPTS = 2
 _MAX_RETRY_AFTER = 3.0
+
+TokenRefresher = Callable[[], Awaitable[str | None]]
+
+# Set per request by ``require_spotify_token``; consulted exactly once when
+# Spotify answers 401 so the call can be replayed with a fresh token.
+token_refresher: ContextVar[TokenRefresher | None] = ContextVar(
+    "spotify_token_refresher", default=None
+)
 # `/v1/search` answers 400 "Invalid limit" for anything above 10 results
 # (verified against the live API on 2026-10-01 with a user token).
 _SEARCH_LIMIT_MAX = 10
@@ -208,7 +219,9 @@ class SpotifyApiClient:
         headers = {"authorization": f"Bearer {token}", "accept": "application/json"}
 
         last_error: SpotifyApiError | None = None
-        for attempt in range(_MAX_ATTEMPTS):
+        auth_retried = False
+        # +1: the extra pass replays the request after a token refresh.
+        for attempt in range(_MAX_ATTEMPTS + 1):
             try:
                 response = await self._http.request(
                     method,
@@ -226,6 +239,14 @@ class SpotifyApiClient:
                 raise last_error from exc
             except httpx.RequestError as exc:
                 raise SpotifyApiError(f"Spotify unreachable: {exc}", status_code=502) from exc
+
+            if response.status_code == 401 and not auth_retried:
+                auth_retried = True
+                refresh = token_refresher.get()
+                renewed = await refresh() if refresh else None
+                if renewed:
+                    headers["authorization"] = f"Bearer {renewed}"
+                    continue
 
             if response.status_code in _RETRYABLE_STATUS:
                 last_error = self._status_error(response)

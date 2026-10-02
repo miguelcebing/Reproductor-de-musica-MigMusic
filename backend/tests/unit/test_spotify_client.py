@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from migmusic.infrastructure.spotify.errors import SpotifyApiError, SpotifyAuthError
-from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
+from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient, token_refresher
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -102,6 +102,80 @@ def test_a_rejected_token_is_an_auth_error() -> None:
 
     with pytest.raises(SpotifyAuthError):
         asyncio.run(_client(handler).search_tracks("token", "night", limit=5))
+
+
+def test_a_rejected_token_is_replayed_with_a_refreshed_one() -> None:
+    """One 401 refreshes the token and replays the call instead of failing."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["authorization"])
+        if request.headers["authorization"] == "Bearer token":
+            return httpx.Response(401, json={"error": {"status": 401, "message": "expired"}})
+        return httpx.Response(200, json={"tracks": {"items": []}})
+
+    async def refresher() -> str | None:
+        return "renewed"
+
+    async def run() -> list[dict[str, object]]:
+        token_refresher.set(refresher)
+        try:
+            return await _client(handler).search_tracks("token", "night", limit=5)
+        finally:
+            token_refresher.set(None)
+
+    songs = asyncio.run(run())
+
+    assert seen == ["Bearer token", "Bearer renewed"]
+    assert songs == []
+
+
+def test_a_refresh_that_fails_keeps_the_original_auth_error() -> None:
+    """When no new token can be had the 401 surfaces without a second call."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(401, json={"error": {"status": 401, "message": "expired"}})
+
+    async def refresher() -> str | None:
+        return None
+
+    async def run() -> None:
+        token_refresher.set(refresher)
+        try:
+            await _client(handler).search_tracks("token", "night", limit=5)
+        finally:
+            token_refresher.set(None)
+
+    with pytest.raises(SpotifyAuthError):
+        asyncio.run(run())
+
+    assert len(calls) == 1
+
+
+def test_a_second_401_is_raised_instead_of_looping() -> None:
+    """The refresh replay happens at most once per request."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(401, json={"error": {"status": 401, "message": "expired"}})
+
+    async def refresher() -> str | None:
+        return "renewed"
+
+    async def run() -> None:
+        token_refresher.set(refresher)
+        try:
+            await _client(handler).search_tracks("token", "night", limit=5)
+        finally:
+            token_refresher.set(None)
+
+    with pytest.raises(SpotifyAuthError):
+        asyncio.run(run())
+
+    assert len(calls) == 2
 
 
 def test_server_errors_become_a_gateway_error() -> None:

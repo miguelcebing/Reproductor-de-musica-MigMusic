@@ -103,6 +103,21 @@ class SpotifyAuthService:
             expires_in=max(1, int(refreshed.expires_at - time.time())),
         )
 
+    async def force_refresh(self, session_id: str) -> str | None:
+        """Refresh now: Spotify rejected a token our clock still trusted.
+
+        Returns the new access token, or ``None`` when the bundle is gone or
+        the refresh failed — the caller then surfaces the original ``401``.
+        """
+        bundle = await self._tokens.get(session_id)
+        if bundle is None:
+            return None
+        refreshed = await self._refresh(session_id, bundle)
+        if refreshed is None:
+            return None
+        await self._store(session_id, refreshed)
+        return refreshed.access_token
+
     async def is_authenticated(self, session_id: str) -> bool:
         """Whether the session currently holds tokens (without refreshing)."""
         return await self._tokens.get(session_id) is not None

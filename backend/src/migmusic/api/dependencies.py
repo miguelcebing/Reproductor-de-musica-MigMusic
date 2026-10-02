@@ -14,7 +14,7 @@ from migmusic.api.spotify_session import read_session_id
 from migmusic.application.services import PlaybackService, PlaylistService
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.domain.ports.music_provider import MusicProvider
-from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
+from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient, token_refresher
 
 
 def get_playlist_service(request: Request) -> PlaylistService:
@@ -63,11 +63,14 @@ async def require_spotify_token(
     """Resolve a fresh access token or answer ``401`` so the UI reconnects."""
     session_id = read_session_id(request)
     token = await service.valid_access_token(session_id) if session_id else None
-    if token is None:
+    if token is None or session_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Spotify is not connected; sign in first",
         )
+    # Let the Web API client renew this session's token when a 401 arrives
+    # despite the proactive refresh (clock skew, early invalidation).
+    token_refresher.set(lambda: service.force_refresh(session_id))
     return token.access_token
 
 
