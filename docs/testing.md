@@ -35,14 +35,14 @@ La suite E2E es hermética: no necesita `.env`, arranca Vite (5173) y Uvicorn (8
 fuerza `DATABASE_URL=""` (repositorio in-memory, nunca toca una base real) y resetea los
 playlists vía API en cada test.
 
-## 3. Estado actual (2026-10-01)
+## 3. Estado actual (2026-10-02)
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
 | Cobertura global backend | ≥ 80 % | **97.13 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
 | Tests backend | — | **334** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **108** (10 archivos) |
+| Tests frontend (Vitest) | — | **110** (10 archivos) |
 | Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -70,7 +70,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 | Responsive mobile/tablet/laptop/desktop | Breakpoints 640/1024/1440 (F4) + E2E en Pixel 7 | ✅ |
 | Accesibilidad (teclado, foco, ARIA, contraste) | E2E `a11y.spec.ts`: axe sin violaciones + focus-trap verificado (25 Tab) | ✅ |
 | Pruebas pasando con cobertura `TEST-002` | Tabla §3 | ✅ |
-| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200 directo y por proxy, preflight 200 con ACAO correcta + credenciales, Spotify acepta la Redirect URI, Render y Vercel auto-desplegaron, `keep-alive.yml` cada 10 min) | ✅ |
+| Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200 directo y por proxy, preflight 200 con ACAO correcta + credenciales, Spotify acepta la Redirect URI, Render y Vercel auto-desplegaron, `keep-alive.yml` cada 5 min) | ✅ |
 | ≥2 funcionalidades adicionales aprobadas e implementadas | `FEAT-001-b/c/d/e` (favoritos, búsqueda, repeat, drag & drop) — 4 de 2 | ✅ |
 | Documentación actualizada | README, `docs/architecture.md`, `docs/api.md`, ADR-001..006, este documento | ✅ |
 
@@ -182,6 +182,22 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   controllers). Unit: `apiClient.test.ts` (timeout con fake timers, timer
   limpio tras el éxito, `failureMessage` es/en) + "PlaybackController
   resilience" (copia localizada en el toast).
+- **Respuesta lenta a los botones en producción (frío + parpadeo)**: el
+  backend de Render free se dormía entre pings porque el cron de
+  `keep-alive.yml` (`*/10`) solo disparó 2 de ~50 runs esperados en 8 h —
+  GitHub descarta jobs programados bajo carga, peor en la hora en punto
+  (verificado con `GET /actions/runs?event=schedule` → `total_count: 2`;
+  medido en frío: health 8,6 s directo y 25 s por el proxy). Ahora el cron
+  corre cada 5 min desplazado (`2-59/5 * * * *`, nunca en :00; editar el
+  archivo re-registra el schedule) y `App.tsx` hace ping a `/api/health`
+  cada 10 min mientras la pestaña está abierta (Render duerme a los 15).
+  Además, un `report` en vuelo iniciado antes del clic se aplicaba después
+  del parche optimista y devolvía la UI a la canción vieja mientras la
+  nueva ya sonaba: `send()` reserva la secuencia al parchear
+  (`lastAppliedSeq = seq`) y `togglePlaying()` reserva antes de
+  `await player.play()`, así toda respuesta anterior al clic se descarta.
+  Unit "PlaybackController optimistic UI" (+2: canción que no retrocede y
+  flip que aguanta durante el arranque de `play()`).
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -193,7 +209,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 108 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 110 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

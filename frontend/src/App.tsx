@@ -103,6 +103,16 @@ export function App(): React.JSX.Element {
     applyDocumentSettings(theme, language);
   }, [theme, language]);
 
+  // Keep Render awake while the tab is open: its free tier sleeps after
+  // 15 min without traffic, and the next press would pay the cold start.
+  useEffect(() => {
+    const ping = () => {
+      void fetch("/api/health", { cache: "no-store" }).catch(() => undefined);
+    };
+    const timer = setInterval(ping, 10 * 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Initial load: rebuild the local object URLs *before* the queue is read, so
   // `blob:` artwork URLs that died on reload are replaced, and tracks whose
   // bytes are gone are reported instead of failing silently (`LOCAL-006`).

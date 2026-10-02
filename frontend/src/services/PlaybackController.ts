@@ -204,6 +204,9 @@ export class PlaybackController {
     // and rolls both the store and the player back if something refuses.
     const snapshot = current;
     usePlaybackStore.getState().setPlayback({ ...snapshot, playing: willPlay });
+    // The flip owns the clock before `play()` is even awaited: an answer from
+    // before the click must not put the old `playing` back on screen.
+    this.lastAppliedSeq = ++this.requestSeq;
 
     let player = this.player;
     if (willPlay) {
@@ -330,8 +333,11 @@ export class PlaybackController {
     const seq = ++this.requestSeq;
     const store = usePlaybackStore.getState();
     const snapshot = optimistic ? (rollbackTo ?? store.playback) : null;
-    if (snapshot && optimistic && rollbackTo === undefined) {
-      store.setPlayback({ ...snapshot, ...optimistic });
+    if (snapshot && optimistic) {
+      if (rollbackTo === undefined) store.setPlayback({ ...snapshot, ...optimistic });
+      // The patch owns the clock from here: an answer started before this
+      // click (a slow `report` still in flight) must not undo it.
+      this.lastAppliedSeq = seq;
     }
     try {
       let state: PlaybackState;

@@ -717,4 +717,59 @@ describe("PlaybackController optimistic UI", () => {
     await inFlight;
     expect(usePlaybackStore.getState().playback?.repeat).toBe("all");
   });
+
+  it("drops an in-flight answer that would undo the optimistic song change", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    const staleSeek = hang();
+    api.seek.mockReturnValue(staleSeek.promise);
+    const next = hang();
+    api.next.mockReturnValue(next.promise);
+
+    const seekInFlight = controller.seek(42); // seq 1: still in flight
+    const nextInFlight = controller.next(); // seq 2: patches to song 2
+
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+
+    staleSeek.release(makeState({ index: 0, position: 42 })); // truth from before the click
+    await seekInFlight;
+
+    // The stale answer must not put song 1 back on screen while the new one
+    // is already playing (the flash users saw after pressing "next").
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+
+    next.release(makeState({ index: 1, song: makeSong("local:2"), position: 0 }));
+    await nextInFlight;
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+  });
+
+  it("keeps the flipped state while the player is still starting", async () => {
+    const state = makeState({ playing: false });
+    usePlaybackStore.getState().setPlayback(state);
+    let releasePlay!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releasePlay = resolve;
+    });
+    const { controller, api, factory } = makeController(makeApi(), makeFactory({ gatePlay: gate }));
+    await controller.onTrackChange(state.song!); // attaches paused
+
+    const staleSeek = hang();
+    api.seek.mockReturnValue(staleSeek.promise);
+    const seekInFlight = controller.seek(42); // seq 1: in flight before the click
+    const toggle = controller.togglePlaying(); // flips + reserves while `play()` is gated
+
+    staleSeek.release(makeState({ playing: false, position: 42 }));
+    await seekInFlight;
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true); // not undone
+
+    releasePlay();
+    await toggle;
+    expect(factory.players[0].playCalls).toBeGreaterThan(0);
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true);
+    await controller.onTrackChange(null);
+  });
 });
