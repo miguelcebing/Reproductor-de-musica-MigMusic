@@ -170,10 +170,18 @@ export const AddTrackDialog = memo(function AddTrackDialog({
               }
             >
               <TabList className={styles.tabs}>
-                <Tab id="local" data-testid="tab-local">
+                <Tab
+                  id="local"
+                  className={`${styles.tab} ${tab === "local" ? styles.tabActive : ""}`}
+                  data-testid="tab-local"
+                >
                   {t("dialog.tabLocal")}
                 </Tab>
-                <Tab id="spotify" data-testid="tab-spotify">
+                <Tab
+                  id="spotify"
+                  className={`${styles.tab} ${tab === "spotify" ? styles.tabActive : ""}`}
+                  data-testid="tab-spotify"
+                >
                   {t("dialog.tabSpotify")}
                 </Tab>
               </TabList>

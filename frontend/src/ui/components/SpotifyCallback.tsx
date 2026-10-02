@@ -6,9 +6,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@heroui/react";
+
 import { useT } from "../../i18n/useT";
 import type { AuthController } from "../../services/AuthController";
-import styles from "./Queue.module.css";
+import styles from "./Feedback.module.css";
 
 export interface SpotifyCallbackProps {
   readonly code: string;
@@ -50,27 +52,29 @@ export function SpotifyCallback({
   }, [auth, code, state, goHome]);
 
   return (
-    <main className={styles.dialog} data-testid="spotify-callback">
-      <h1 className={styles.dialogTitle}>{t("spotify.working")}</h1>
-      {error ? (
-        <>
-          <p className={styles.error} role="alert">
-            {t("spotify.failed", { message: error })}
-          </p>
-          <div className={styles.dialogActions}>
-            <button
-              type="button"
-              className={`${styles.button} ${styles.buttonPrimary}`}
-              onClick={() => goHome("/")}
-              data-testid="callback-home"
-            >
-              {t("dialog.cancel")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <p className={styles.hint}>{t("spotify.searching")}</p>
-      )}
+    <main className={styles.callback} data-testid="spotify-callback">
+      <section className={styles.callbackCard}>
+        <h1 className={styles.callbackTitle}>{t("spotify.working")}</h1>
+        {error ? (
+          <>
+            <p className={styles.callbackError} role="alert">
+              {t("spotify.failed", { message: error })}
+            </p>
+            <div className={styles.callbackActions}>
+              <Button
+                type="button"
+                variant="primary"
+                onPress={() => goHome("/")}
+                data-testid="callback-home"
+              >
+                {t("dialog.cancel")}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className={styles.callbackHint}>{t("spotify.searching")}</p>
+        )}
+      </section>
     </main>
   );
 }

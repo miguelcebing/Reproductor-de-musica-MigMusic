@@ -1,4 +1,4 @@
-/* Feedback surfaces: empty states and toasts (UX-004). */
+/* Feedback surfaces: empty states, toasts and the OAuth screen (`UX-004`). */
 
 .empty {
   display: flex;
@@ -21,22 +21,24 @@
   font-size: var(--font-size-sm);
 }
 
+/* Nebula outline (VIS-013): the glyph is decoration, the violet ring is what
+   makes the empty slot read as a place waiting for a track. */
 .disc {
   width: 72px;
   height: 72px;
   border-radius: var(--radius-full);
-  border: 2px dashed var(--color-border);
+  border: 2px dashed color-mix(in srgb, var(--color-accent) 55%, transparent);
   display: grid;
   place-items: center;
   font-size: var(--font-size-xl);
+  color: var(--color-accent-text);
+  box-shadow: 0 0 28px -12px var(--color-accent);
 }
 
+/* Only spacing: the action itself is a HeroUI `primary` button, so it picks up
+   the accent-strong fill, the focus ring and the hover states from the bridge. */
 .emptyAction {
   margin-top: var(--space-2);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
 }
 
 .toasts {
@@ -46,7 +48,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  z-index: 60;
+  /* HeroUI paints modal-level overlays at `--z-index-overlay` (100000): a
+     toast raised while the add dialog is open has to clear that, otherwise
+     the feedback lands behind the backdrop where nobody can read it. */
+  z-index: var(--z-index-toast);
+  /* The stack parks over the bottom-right corner of the queue card, where the
+     row action buttons live: it must not swallow clicks meant for the list.
+     `pointer-events` inherits, so only the close control stays interactive. */
+  pointer-events: none;
   max-width: min(360px, calc(100vw - var(--space-8)));
 }
 
@@ -55,20 +64,29 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, transparent);
+  /* Left rail carries the kind; the glass body keeps the stack light over the
+     bento grid (VIS-013). */
+  border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-md);
+  background: color-mix(in srgb, var(--color-surface-raised) 92%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    var(--shadow-md),
+    0 0 28px -18px var(--color-accent);
+  color: var(--color-text);
   font-size: var(--font-size-sm);
   animation: mm-fade-in var(--motion-base) var(--ease-out);
 }
 
 .toastError {
-  border-color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  border-left-color: var(--color-danger);
 }
 
 .toastSuccess {
-  border-color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  border-left-color: var(--color-success);
 }
 
 .toastClose {
@@ -80,4 +98,68 @@
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+  transition: var(--transition-colors);
+  /* Re-enables the one control the stack gives back to the pointer. */
+  pointer-events: auto;
+}
+
+.toastClose:hover {
+  color: var(--color-text);
+}
+
+/* --- OAuth callback screen (`F6`) ------------------------------------------ */
+
+/* Spotify parks the browser on `/callback`; this screen is the whole app for a
+   moment, so it carries its own nebula backdrop instead of the AppShell. */
+.callback {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+  background:
+    radial-gradient(
+      80% 55% at 50% -10%,
+      color-mix(in srgb, var(--color-accent) 20%, transparent),
+      transparent 70%
+    ),
+    var(--color-bg);
+}
+
+.callbackCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(460px, 100%);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, transparent);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow:
+    0 32px 80px -32px rgb(0 0 0 / 75%),
+    0 0 60px -28px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.callbackTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.callbackError {
+  margin: 0;
+  color: var(--color-danger-text);
+  font-size: var(--font-size-sm);
+}
+
+.callbackHint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.callbackActions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
 }

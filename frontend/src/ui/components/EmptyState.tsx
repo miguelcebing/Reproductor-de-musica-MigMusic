@@ -1,5 +1,7 @@
 /** Illustrated empty states (`UX-004`). */
 
+import { Button } from "@heroui/react";
+
 import styles from "./Feedback.module.css";
 
 export interface EmptyStateProps {
@@ -23,15 +25,15 @@ export function EmptyState({ title, body, action }: EmptyStateProps): React.JSX.
       <p className={styles.emptyTitle}>{title}</p>
       <p className={styles.emptyBody}>{body}</p>
       {action && (
-        <button
-          type="button"
-          className={`${styles.button} ${styles.buttonPrimary} ${styles.emptyAction}`}
-          onClick={action.onClick}
+        <Button
+          variant="primary"
+          className={styles.emptyAction}
+          onPress={action.onClick}
           data-testid="empty-action"
         >
           {action.icon}
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   );
