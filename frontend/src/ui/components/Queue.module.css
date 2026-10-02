@@ -349,7 +349,10 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  margin-top: var(--space-3);
+  margin-top: 0;
+  /* Standalone bento tile: a long list must not stretch the whole row. */
+  max-height: 40vh;
+  overflow: auto;
 }
 
 .node {

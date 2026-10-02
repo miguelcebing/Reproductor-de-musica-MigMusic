@@ -7,6 +7,7 @@ import type { Language } from "../../i18n/messages";
 import type { Theme } from "../../state/settingsStore";
 import { SpaceBackdrop } from "../background/SpaceBackdrop";
 import { ToastContainer } from "../components/ToastContainer";
+import { cn } from "../utils/cn";
 import type { Toast } from "../../state/toastStore";
 import styles from "./AppShell.module.css";
 
@@ -74,7 +75,9 @@ export function AppShell({
         </div>
       </header>
 
-      <main className={styles.main}>{children}</main>
+      <main className={cn(styles.main, !nodesVisible && styles.mainNoNodes)}>
+        {children}
+      </main>
 
       <ToastContainer toasts={toasts} onDismiss={onDismissToast} />
     </div>
