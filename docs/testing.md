@@ -191,6 +191,13 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   corre cada 5 min desplazado (`2-59/5 * * * *`, nunca en :00; editar el
   archivo re-registra el schedule) y `App.tsx` hace ping a `/api/health`
   cada 10 min mientras la pestaña está abierta (Render duerme a los 15).
+  Observación tras el re-registro (`f51cb79`, 01:45 UTC): los 6 slots
+  siguientes (`:47`…`:12`, 01:47–02:12 UTC) tampoco dispararon → el cron
+  de GitHub queda como capa de mejores esfuerzos y **la defensa principal
+  contra el frío es el ping del cliente** mientras la pestaña está abierta
+  (el arranque ya despierta el backend por sí solo); como capa externa
+  independiente de GitHub sigue recomendándose UptimeRobot (HANDOFF,
+  pendiente de cuenta del usuario).
   Además, un `report` en vuelo iniciado antes del clic se aplicaba después
   del parche optimista y devolvía la UI a la canción vieja mientras la
   nueva ya sonaba: `send()` reserva la secuencia al parchear
