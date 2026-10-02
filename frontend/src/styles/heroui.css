@@ -44,8 +44,8 @@
 
   --border: var(--color-border);
   --separator: var(--color-border);
-  --focus: var(--color-primary);
-  --link: var(--color-primary-text);
+  --focus: var(--color-accent-text);
+  --link: var(--color-accent-text);
 
   --backdrop: rgb(4 6 12 / 72%);
 
@@ -85,8 +85,8 @@
 
   --border: var(--color-border);
   --separator: var(--color-border);
-  --focus: var(--color-primary-text);
-  --link: var(--color-primary-text);
+  --focus: var(--color-accent-text);
+  --link: var(--color-accent-text);
 
   --backdrop: rgb(19 26 44 / 45%);
 

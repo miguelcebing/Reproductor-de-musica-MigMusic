@@ -86,6 +86,8 @@
   /* Nebula glows + backdrop layers */
   --glow-primary: 0 0 0 1px rgb(30 107 255 / 22%), 0 10px 40px rgb(30 107 255 / 16%);
   --glow-accent: 0 0 0 1px rgb(168 85 247 / 26%), 0 10px 40px rgb(168 85 247 / 18%);
+  /* Peak of the breathing halo on a playing cover (VIS-013). */
+  --glow-accent-strong: 0 0 0 1px rgb(168 85 247 / 52%), 0 18px 64px rgb(168 85 247 / 34%);
   --nebula-1: rgb(30 107 255 / 26%);
   --nebula-2: rgb(168 85 247 / 22%);
   --nebula-3: rgb(52 211 153 / 12%);
@@ -122,6 +124,7 @@
 
   --glow-primary: 0 0 0 1px rgb(30 107 255 / 18%), 0 10px 40px rgb(30 107 255 / 12%);
   --glow-accent: 0 0 0 1px rgb(168 85 247 / 20%), 0 10px 40px rgb(168 85 247 / 14%);
+  --glow-accent-strong: 0 0 0 1px rgb(168 85 247 / 36%), 0 16px 56px rgb(168 85 247 / 20%);
   --nebula-1: rgb(30 107 255 / 16%);
   --nebula-2: rgb(168 85 247 / 14%);
   --nebula-3: rgb(52 211 153 / 10%);
@@ -147,7 +150,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-accent-text);
   outline-offset: 2px;
 }
 

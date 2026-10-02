@@ -1,4 +1,9 @@
-/* Player zone: cover, now playing, transport bar and volume. */
+/* Player zone: cover, now playing, transport bar and volume.
+
+   VIS-013: the tile speaks in nebula violet (`--color-accent*`), so the
+   play button, the progress rail and the active toggles share one hue with
+   the glowing cover. Surfaces come from HeroUI's `.button` base; this file
+   only adds the spatial layer on top of it. */
 
 .player {
   display: flex;
@@ -18,6 +23,7 @@
   overflow: hidden;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
+  box-shadow: var(--glow-accent);
   display: grid;
   place-items: center;
   color: var(--color-text-muted);
@@ -30,8 +36,21 @@
   object-fit: cover;
 }
 
+/* The halo breathes instead of scaling the disc: same cue, no layout work. */
 .coverPlaying {
-  animation: mm-pulse 3.2s var(--ease-out) infinite;
+  animation:
+    mm-crossfade var(--motion-base) var(--ease-out),
+    mm-cover-glow 4s var(--ease-out) infinite;
+}
+
+@keyframes mm-cover-glow {
+  0%,
+  100% {
+    box-shadow: var(--glow-accent);
+  }
+  50% {
+    box-shadow: var(--glow-accent-strong);
+  }
 }
 
 .discHole {
@@ -81,10 +100,11 @@
 
 .progressTrack {
   position: relative;
-  height: 8px;
+  height: 10px;
   border-radius: var(--radius-full);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 45%);
   cursor: pointer;
   touch-action: none;
 }
@@ -98,18 +118,22 @@
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: var(--radius-full);
-  background: var(--color-primary);
+  background: linear-gradient(90deg, var(--color-accent-strong), var(--color-accent));
+  box-shadow: 0 0 14px -3px color-mix(in srgb, var(--color-accent) 75%, transparent);
   transition: width var(--motion-fast) linear;
 }
 
 .progressKnob {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: var(--radius-full);
-  background: var(--color-primary-contrast);
-  border: 2px solid var(--color-primary);
+  background: var(--color-accent);
+  border: 2px solid var(--color-primary-contrast);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 24%, transparent),
+    var(--glow-accent);
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease-out);
@@ -138,40 +162,34 @@
   gap: var(--space-2);
 }
 
+/* Spatial layer over HeroUI's `.button` base: the base already owns the
+   surface, hover, focus ring and disabled state. */
 .iconButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--color-text);
+  padding-inline: var(--space-2);
   font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
 }
 
 .iconButton:hover:not(:disabled) {
-  background: var(--color-surface-raised);
-  border-color: var(--color-border);
+  transform: scale(1.06);
 }
 
 .iconButton:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
-.iconButton:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
+/* Shuffle / repeat on-toggles: a violet chip with its own halo. */
 .iconButtonActive {
-  color: var(--color-primary-text);
-  border-color: var(--color-primary);
-  background: var(--color-surface-raised);
+  color: var(--color-accent-text);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 55%, transparent),
+    0 0 18px -6px var(--color-accent);
+}
+
+.iconButtonActive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
 }
 
 /* ±N s seek labels: the number is the instruction, not the arrow. */
@@ -181,10 +199,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Play button: HeroUI `primary` paints `--accent` (VIS-013). It only ever
+   carries a glyph, so white-on-violet never needs body-text contrast. */
 .primary {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-primary-contrast);
   min-width: 56px;
   min-height: 56px;
   border-radius: var(--radius-full);
@@ -192,12 +209,11 @@
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--color-primary-strong);
-  border-color: var(--color-primary-strong);
+  transform: scale(1.06);
 }
 
-.ripple {
-  animation: mm-ripple var(--motion-base) var(--ease-out);
+.primary:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 /* --- Volume --------------------------------------------------------------- */
@@ -209,10 +225,73 @@
   width: min(280px, 100%);
 }
 
+/* Explicit track and thumb: the UA's native range ignores `color-scheme`
+   here and rendered a light rail under the dark theme. */
 .volumeSlider {
   flex: 1;
-  accent-color: var(--color-primary);
+  min-width: 0;
   height: 44px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.volumeSlider:focus-visible {
+  outline: none;
+}
+
+.volumeSlider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+.volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  border: 2px solid var(--color-primary-contrast);
+  box-shadow: var(--glow-accent);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.volumeSlider:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+.volumeSlider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 45%, transparent),
+    var(--glow-accent);
+}
+
+.volumeSlider::-moz-range-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+.volumeSlider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  border: 2px solid var(--color-primary-contrast);
+  box-shadow: var(--glow-accent);
+}
+
+.volumeSlider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (min-width: 640px) {
