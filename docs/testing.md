@@ -42,7 +42,7 @@ playlists vía API en cada test.
 | Cobertura global backend | ≥ 80 % | **97.13 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
 | Tests backend | — | **334** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **96** (9 archivos) |
+| Tests frontend (Vitest) | — | **103** (10 archivos) |
 | Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -141,10 +141,12 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   reseteaba la selección mientras el backend seguía reproduciendo otra lista;
   ahora se sincroniza `activeId` con `playback.playlist_id` si existe.
 - **UI optimista con rollback**: play/pause, seek, ±5 s y siguiente/anterior
-  actualizan el store al entrar (y la canción se precarga en el reproductor
-  para que suene sin RTT); si la API falla, el estado previo se restaura —
-  salvo cuando la respuesta es un `no_active_playback` ya recuperado.
-  Unit "PlaybackController optimistic UI" (5 tests).
+  actualizan el store al entrar (el play/pause gira el botón **antes** de que
+  el reproductor arranque, con rollback si `play()`/`pause()` falla, y la
+  canción se precarga en el reproductor para que suene sin RTT); si la API
+  falla, el estado previo se restaura — salvo cuando la respuesta es un
+  `no_active_playback` ya recuperado. Unit "PlaybackController optimistic
+  UI" (6 tests).
 - **`timeupdate` re-renderizaba toda la app (≈4 Hz)**: cada tick recomponía
   el árbol de `App`. El transporte ahora se suscribe por campos (selectors de
   zustand), `position` se cuantiza a segundos enteros (la UI muestra mm:ss),
@@ -156,6 +158,20 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   fija `auto-advance.spec.ts` con WAVs de 1 s: la segunda pista arranca
   sola y, en la cola con `repeat=off`, la reproducción se detiene sin
   perder la canción visible.
+- **`Spotify player did not report a device id` y transporte "sin vida"**:
+  `connect()` del SDK esperaba el evento `ready` con un sondeo de 2 s; si no
+  llegaba, `this.player` quedaba apuntando a una instancia sin `_deviceId` y
+  el siguiente `ensureConnected` creaba una segunda instancia (fuga), con los
+  controles saliendo sin `device_id` o colgados hasta agotar el reintento.
+  Ahora el `ready` es event-driven con tope de 10 s (`READY_TIMEOUT_MS`), se
+  desconecta el player al fallar, una guarda de `generation` descarta el
+  `connect()` cancelado por un `disconnect()` concurrente y los errores
+  fatales del SDK (`initialization_error`/`authentication_error`/
+  `account_error`) rechazan en el acto en vez de seguir esperando. Además
+  `load()` ya no pausa al final (el `attachPlayer` decide play/pause justo
+  después) y `play()` no reenvía si ya suena: dos roundtrips SDK menos por
+  clic en el transporte. Unit `spotifySdk.test.ts` (6 tests) +
+  `SpotifyPlayer.test.ts` actualizados.
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -167,7 +183,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 96 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 103 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

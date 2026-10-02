@@ -91,6 +91,8 @@ declare global {
 
 const SDK_SCRIPT_URL = "https://sdk.scdn.co/spotify-player.js";
 const SDK_TIMEOUT_MS = 10_000;
+/** `ready` usually lands right after connecting; give slow networks a real chance. */
+export const READY_TIMEOUT_MS = 10_000;
 
 let sdkLoading: Promise<void> | null = null;
 
@@ -156,6 +158,8 @@ export class WebPlaybackSession implements SpotifySdkSession {
   private player: RawPlayer | null = null;
   private _deviceId = "";
   private connecting: Promise<void> | null = null;
+  /** Bumped by `disconnect` so an in-flight `connect` never adopts a dead player. */
+  private generation = 0;
 
   constructor(getToken: () => Promise<string>) {
     this.getToken = getToken;
@@ -167,16 +171,17 @@ export class WebPlaybackSession implements SpotifySdkSession {
 
   async ensureConnected(): Promise<void> {
     if (this.player && this._deviceId) return;
-    this.connecting ??= this.connect();
+    const attempt = (this.connecting ??= this.connect());
     try {
-      await this.connecting;
+      await attempt;
     } catch (cause) {
-      this.connecting = null;
+      if (this.connecting === attempt) this.connecting = null;
       throw cause;
     }
   }
 
   disconnect(): void {
+    this.generation += 1;
     this.player?.disconnect();
     this.player = null;
     this._deviceId = "";
@@ -220,6 +225,7 @@ export class WebPlaybackSession implements SpotifySdkSession {
   }
 
   private async connect(): Promise<void> {
+    const generation = this.generation;
     await loadSpotifySdk();
     const api = window.Spotify;
     if (!api?.Player) throw new Error("Spotify Web Playback SDK is unavailable");
@@ -242,23 +248,31 @@ export class WebPlaybackSession implements SpotifySdkSession {
       },
     });
 
-    player.addListener("ready", (data) => {
-      this._deviceId = data.device_id;
+    // `ready` is an event, not a schedule: wait for it (bounded) instead of
+    // polling, so a slow device registration is not mistaken for a failure.
+    let readyDevice: (deviceId: string) => void = () => undefined;
+    let readyFailed: (cause: Error) => void = () => undefined;
+    const ready = new Promise<string>((resolve, reject) => {
+      readyDevice = resolve;
+      readyFailed = reject;
     });
+    void ready.catch(() => undefined); // a late failure must not go unhandled
+
+    player.addListener("ready", (data) => readyDevice(data.device_id));
     player.addListener("player_state_changed", (state) => {
       const mapped = mapState(state);
       this.stateListeners.forEach((listener) => listener(mapped));
     });
-    for (const event of [
-      "initialization_error",
-      "authentication_error",
-      "account_error",
-      "playback_error",
-    ] as const) {
+    for (const event of ["initialization_error", "authentication_error", "account_error"] as const) {
       player.addListener(event, (data) => {
-        this.notifyError(data.message ?? `Spotify ${event.replace("_", " ")}`);
+        const message = data.message ?? `Spotify ${event.replace("_", " ")}`;
+        this.notifyError(message);
+        readyFailed(new Error(message));
       });
     }
+    player.addListener("playback_error", (data) => {
+      this.notifyError(data.message ?? "Spotify playback error");
+    });
     player.addListener("not_ready", (data) => {
       this.notifyError(data.message ?? "Spotify device disconnected");
     });
@@ -268,14 +282,24 @@ export class WebPlaybackSession implements SpotifySdkSession {
       player.disconnect();
       throw new Error("Spotify player could not connect");
     }
-    this.player = player;
 
-    // `ready` usually fires right after connecting; wait briefly for the id.
-    for (let attempt = 0; attempt < 40 && !this._deviceId; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (!this._deviceId) {
-      throw new Error("Spotify player did not report a device id");
+    const timer = setTimeout(() => {
+      readyFailed(new Error("Spotify player did not report a device id"));
+    }, READY_TIMEOUT_MS);
+    try {
+      const deviceId = await ready;
+      if (generation !== this.generation) {
+        throw new Error("Spotify player connection was cancelled");
+      }
+      this.player = player;
+      this._deviceId = deviceId;
+    } catch (cause) {
+      // Tear the half-open player down: keeping it would leak a second SDK
+      // instance on the next attempt and leave `deviceId` empty forever.
+      player.disconnect();
+      throw cause;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

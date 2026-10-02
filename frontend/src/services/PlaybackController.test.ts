@@ -74,6 +74,7 @@ class FakePlayer implements AudioPlayer {
     private readonly failLoad = false,
     private readonly failMessage = "boom",
     private readonly failPlay: { message: string; name?: string } | null = null,
+    private readonly gatePlay: Promise<void> | null = null,
   ) {}
 
   async load(source: string, options?: { startTime?: number }): Promise<void> {
@@ -85,6 +86,7 @@ class FakePlayer implements AudioPlayer {
 
   async play(): Promise<void> {
     this.playCalls += 1;
+    if (this.gatePlay) await this.gatePlay;
     if (this.failPlay) {
       const error = new Error(this.failPlay.message);
       if (this.failPlay.name) error.name = this.failPlay.name;
@@ -132,6 +134,7 @@ function makeFactory(options?: {
   failLoad?: boolean;
   failMessage?: string;
   failPlay?: { message: string; name?: string };
+  gatePlay?: Promise<void>;
 }) {
   const players: FakePlayer[] = [];
   const createPlayer = vi.fn((source: AudioSource) => {
@@ -140,6 +143,7 @@ function makeFactory(options?: {
       options?.failLoad === true,
       options?.failMessage,
       options?.failPlay ?? null,
+      options?.gatePlay ?? null,
     );
     players.push(player);
     return player;
@@ -659,6 +663,29 @@ describe("PlaybackController optimistic UI", () => {
     expect(usePlaybackStore.getState().playback?.playing).toBe(true); // restored
     expect(factory.players[0].isPlaying).toBe(true); // the audio was resumed too
     expect(useToastStore.getState().toasts).toHaveLength(1);
+    await controller.onTrackChange(null);
+  });
+
+  it("answers the play click before the player has started the audio", async () => {
+    const state = makeState({ playing: false });
+    usePlaybackStore.getState().setPlayback(state);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { controller, api, factory } = makeController(makeApi(), makeFactory({ gatePlay: gate }));
+    await controller.onTrackChange(state.song!); // attaches paused
+
+    const inFlight = controller.togglePlaying();
+
+    // The store already says "playing" while `play()` is stuck on the gate.
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true);
+
+    release();
+    await inFlight;
+    expect(factory.players[0].playCalls).toBeGreaterThan(0);
+    expect(api.report).toHaveBeenCalledWith(undefined, true);
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true);
     await controller.onTrackChange(null);
   });
 

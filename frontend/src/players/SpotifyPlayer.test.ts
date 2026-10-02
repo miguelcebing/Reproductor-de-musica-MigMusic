@@ -103,8 +103,9 @@ describe("SpotifyPlayer", () => {
       positionMs: 30_000,
     });
     expect(player.source).toBe("spotify:track:4uLU6hMCjMI75M1A2tKUQC");
-    // Autoplay policy: track is loaded but paused, waiting for user gesture
-    expect(player.isPlaying).toBe(false);
+    // The proxy queued the track playing; the controller decides right after
+    // load whether it should keep going (no pause/resume dance in between).
+    expect(player.isPlaying).toBe(true);
     expect(player.duration).toBe(200);
     player.destroy();
   });
@@ -141,11 +142,11 @@ describe("SpotifyPlayer", () => {
     player.on("play", () => events.push("play"));
     await player.load("spotify:track:a");
 
-    // Initial pause after load (autoplay policy)
-    expect(session.pauseCalls).toBe(1);
+    // Load no longer pauses: the device starts and the controller decides.
+    expect(session.pauseCalls).toBe(0);
 
     player.pause();
-    expect(session.pauseCalls).toBe(2);
+    expect(session.pauseCalls).toBe(1);
     await player.play();
     expect(session.resumed).toBe(1);
     expect(events).toEqual(["pause", "play"]);

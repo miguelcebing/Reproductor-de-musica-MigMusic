@@ -80,25 +80,24 @@ export class SpotifyPlayer implements AudioPlayer {
     return this._muted;
   }
 
-/** Connect the SDK, queue `source` and wait for it to be ready (paused).
+  /** Connect the SDK, queue `source` and wait until the device reports it.
 
     * `source` may be a raw Spotify track id or a full `spotify:track:…` URI;
-    * the SDK always receives the URI form.
+    * the SDK always receives the URI form. The proxy's `play` starts the
+    * device; the controller decides right after load whether to keep playing,
+    * so no pause/resume round trip is wasted in between (`PERF`).
     */
-   async load(source: string, options?: { startTime?: number }): Promise<void> {
-     this.destroyed = false;
-     this.endedEmitted = false;
-     this._source = toTrackUri(source);
-     await this.session.ensureConnected();
-     this.subscribe();
-     const positionMs = Math.max(0, Math.round((options?.startTime ?? 0) * 1000));
-     // Autoplay policy: queue track but stay paused, wait for user gesture
-     await this.control.play([this._source], this.session.deviceId, positionMs);
-     await this.awaitTrack(this._source);
-     // Pause immediately after track is loaded - autoplay policy
-     await this.pause();
-     this.startTicker();
-   }
+  async load(source: string, options?: { startTime?: number }): Promise<void> {
+    this.destroyed = false;
+    this.endedEmitted = false;
+    this._source = toTrackUri(source);
+    await this.session.ensureConnected();
+    this.subscribe();
+    const positionMs = Math.max(0, Math.round((options?.startTime ?? 0) * 1000));
+    await this.control.play([this._source], this.session.deviceId, positionMs);
+    await this.awaitTrack(this._source);
+    this.startTicker();
+  }
 
   async play(): Promise<void> {
     // A pause may still be in flight (fire-and-forget in `pause()`); resume
@@ -107,6 +106,7 @@ export class SpotifyPlayer implements AudioPlayer {
       await this.pendingPause;
       this.pendingPause = null;
     }
+    if (this.isPlaying) return; // already running: spare the SDK round trip
     await this.session.resume();
   }
 

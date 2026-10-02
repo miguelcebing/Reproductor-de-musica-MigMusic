@@ -191,7 +191,7 @@ export class PlaybackController {
     );
   }
 
-  /** Play or pause the real audio, then report to backend. */
+  /** Flip the transport on the click itself; the answer (and player) confirm. */
   async togglePlaying(): Promise<PlaybackState | null> {
     // This method is only reachable from a click/keypress, so it *is the
     // gesture the autoplay policy waits for (the first press must not no-op).
@@ -200,23 +200,37 @@ export class PlaybackController {
     if (!current?.song) return null;
 
     const willPlay = !current.playing;
-    if (willPlay && !this.player) {
-      // The track ended at the tail (or the page reloaded): rebuild the player.
-      await this.onTrackChange(current.song);
-      if (!this.player) return null; // load failed; the toast already says why
-    }
+    // The button answers the click immediately; the report below confirms it
+    // and rolls both the store and the player back if something refuses.
+    const snapshot = current;
+    usePlaybackStore.getState().setPlayback({ ...snapshot, playing: willPlay });
 
+    let player = this.player;
     if (willPlay) {
+      if (!player) {
+        // The track ended at the tail (or the page reloaded): rebuild the player.
+        await this.onTrackChange(current.song);
+        player = this.player;
+        if (!player) {
+          usePlaybackStore.getState().setPlayback(snapshot); // load failed; the toast already says why
+          return null;
+        }
+      }
       try {
-        await this.player?.play();
+        await player.play();
       } catch (cause) {
+        usePlaybackStore.getState().setPlayback(snapshot);
         this.fail(cause);
         return null;
       }
     } else {
-      this.player?.pause();
+      player?.pause();
     }
-    return this.send(() => this.api.report(undefined, willPlay), { playing: willPlay });
+    return this.send(
+      () => this.api.report(undefined, willPlay),
+      { playing: willPlay },
+      snapshot,
+    );
   }
 
   async setRepeat(repeat: RepeatMode): Promise<PlaybackState | null> {
@@ -300,19 +314,25 @@ export class PlaybackController {
    *
    * `optimistic` lands in the store immediately, so the UI reacts to the click
    * instead of to the round trip; a failed request restores the previous state
-   * (and the live player). Answers apply in initiation order: a response older
-   * than one already applied is dropped, so a slow `report` can never undo a
-   * `next`. A `no_active_playback` answer (the backend lost its context on
-   * restart) rebuilds it with a `select` and retries once before giving up.
+   * (and the live player). When the caller patched the store itself (to flip
+   * it before the player even reacted), it passes the pre-patch state as
+   * `rollbackTo` so the failure path still restores the truth. Answers apply
+   * in initiation order: a response older than one already applied is dropped,
+   * so a slow `report` can never undo a `next`. A `no_active_playback` answer
+   * (the backend lost its context on restart) rebuilds it with a `select` and
+   * retries once before giving up.
    */
   private async send(
     request: () => Promise<PlaybackState>,
     optimistic?: Partial<PlaybackState>,
+    rollbackTo?: PlaybackState,
   ): Promise<PlaybackState | null> {
     const seq = ++this.requestSeq;
     const store = usePlaybackStore.getState();
-    const snapshot = optimistic && store.playback ? store.playback : null;
-    if (snapshot && optimistic) store.setPlayback({ ...snapshot, ...optimistic });
+    const snapshot = optimistic ? (rollbackTo ?? store.playback) : null;
+    if (snapshot && optimistic && rollbackTo === undefined) {
+      store.setPlayback({ ...snapshot, ...optimistic });
+    }
     try {
       let state: PlaybackState;
       try {
