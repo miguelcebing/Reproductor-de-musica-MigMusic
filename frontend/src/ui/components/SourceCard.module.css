@@ -84,8 +84,8 @@
 }
 
 .action:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  box-shadow: var(--glow-primary);
+  border-color: var(--color-accent);
+  box-shadow: var(--glow-accent);
 }
 
 .action:disabled {
