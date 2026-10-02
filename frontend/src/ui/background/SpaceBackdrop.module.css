@@ -1,0 +1,112 @@
+/* Decorative space backdrop (VIS-001). Fixed, non-interactive and aria-hidden;
+   only CSS gradients and box-shadow-free spans, so it costs no layout. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* --- Nebulae ---------------------------------------------------------------- */
+
+.nebula {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.9;
+  will-change: transform;
+}
+
+.nebulaOne {
+  top: -18vh;
+  left: -12vw;
+  width: 62vw;
+  height: 62vw;
+  background: radial-gradient(circle at 35% 35%, var(--nebula-1) 0%, transparent 68%);
+  animation: mm-nebula-a 46s var(--ease-out) infinite alternate;
+}
+
+.nebulaTwo {
+  right: -16vw;
+  top: 22vh;
+  width: 54vw;
+  height: 54vw;
+  background: radial-gradient(circle at 60% 40%, var(--nebula-2) 0%, transparent 70%);
+  animation: mm-nebula-b 58s var(--ease-out) infinite alternate;
+}
+
+.nebulaThree {
+  left: 28vw;
+  bottom: -24vh;
+  width: 46vw;
+  height: 46vw;
+  background: radial-gradient(circle at 50% 50%, var(--nebula-3) 0%, transparent 72%);
+  animation: mm-nebula-c 64s var(--ease-out) infinite alternate;
+}
+
+/* --- Stars ------------------------------------------------------------------ */
+
+.stars {
+  position: absolute;
+  inset: 0;
+}
+
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--star-color);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--star-color) 45%, transparent);
+  animation-name: mm-twinkle;
+  animation-timing-function: var(--ease-out);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* --- Vignette: keeps the edges calm so cards stay the focus ----------------- */
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 85% at 50% 12%,
+    transparent 38%,
+    color-mix(in srgb, var(--color-bg) 78%, transparent) 100%
+  );
+}
+
+@keyframes mm-nebula-a {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6vw, 4vh, 0) scale(1.14);
+  }
+}
+
+@keyframes mm-nebula-b {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.06);
+  }
+  to {
+    transform: translate3d(-5vw, -6vh, 0) scale(1);
+  }
+}
+
+@keyframes mm-nebula-c {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-4vw, -3vh, 0) scale(1.18);
+  }
+}
+
+@keyframes mm-twinkle {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 0.95;
+  }
+}

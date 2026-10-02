@@ -5,7 +5,10 @@ import type { ReactNode } from "react";
 import { useT } from "../../i18n/useT";
 import type { Language } from "../../i18n/messages";
 import type { Theme } from "../../state/settingsStore";
+import { SpaceBackdrop } from "../background/SpaceBackdrop";
 import { ToastContainer } from "../components/ToastContainer";
+import { ProgressiveBlur } from "../skiper/progressive-blur";
+import { cn } from "../utils/cn";
 import type { Toast } from "../../state/toastStore";
 import styles from "./AppShell.module.css";
 
@@ -36,8 +39,17 @@ export function AppShell({
 
   return (
     <div className={styles.shell}>
+      <SpaceBackdrop />
       <header className={styles.header}>
-        <div>
+        {/* Dissolves the page into the sticky bar: flat at the top edge, glass
+            at the bottom. Sits behind the header content on purpose. */}
+        <ProgressiveBlur
+          position="top"
+          backgroundColor="var(--color-bg)"
+          height="100%"
+          blurAmount="6px"
+        />
+        <div className={styles.brandWrap}>
           <p className={styles.brand}>
             MigMusic <span className={styles.tagline}>{t("app.tagline")}</span>
           </p>
@@ -72,7 +84,9 @@ export function AppShell({
         </div>
       </header>
 
-      <main className={styles.main}>{children}</main>
+      <main className={cn(styles.main, !nodesVisible && styles.mainNoNodes)}>
+        {children}
+      </main>
 
       <ToastContainer toasts={toasts} onDismiss={onDismissToast} />
     </div>

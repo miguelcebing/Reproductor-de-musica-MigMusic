@@ -249,6 +249,70 @@ def test_logout_deletes_the_stored_tokens() -> None:
     asyncio.run(run())
 
 
+def test_force_refresh_renews_a_token_spotify_rejected() -> None:
+    """Even inside the safety margin a rejected token can be forced to refresh."""
+    store = InMemoryTokenStore()
+    service = _service(store, _token_payload(access_token="at-new", refresh_token="rt-2"))
+
+    async def run() -> None:
+        await store.set(
+            "session-1",
+            TokenBundle(
+                access_token="at-rejected",
+                refresh_token="rt-1",
+                expires_at=time.time() + 3600,  # clock says it is still valid
+                scope="streaming",
+            ),
+        )
+        token = await service.force_refresh("session-1")
+
+        assert token == "at-new"
+        bundle = await store.get("session-1")
+        assert bundle is not None
+        assert bundle.access_token == "at-new"
+        assert bundle.refresh_token == "rt-2"
+
+    asyncio.run(run())
+
+
+def test_force_refresh_without_a_session_returns_none() -> None:
+    """An unknown session simply has nothing to refresh."""
+    service = _service(InMemoryTokenStore())
+
+    async def run() -> None:
+        assert await service.force_refresh("unknown") is None
+
+    asyncio.run(run())
+
+
+def test_force_refresh_forgets_a_revoked_session() -> None:
+    """``invalid_grant`` still deletes the bundle so the UI reconnects."""
+    store = InMemoryTokenStore()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = SpotifyAuthService(SpotifyOAuth(CONFIG), store, client)
+
+    async def run() -> None:
+        await store.set(
+            "session-1",
+            TokenBundle(
+                access_token="at-stale",
+                refresh_token="rt-revoked",
+                expires_at=time.time() + 3600,
+                scope="streaming",
+            ),
+        )
+        token = await service.force_refresh("session-1")
+
+        assert token is None
+        assert await store.get("session-1") is None
+
+    asyncio.run(run())
+
+
 def test_token_store_locks_concurrent_writes() -> None:
     """The in-memory store serialises writes so sessions never interleave."""
     store = InMemoryTokenStore()

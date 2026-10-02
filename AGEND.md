@@ -480,8 +480,8 @@ VIS-001:
   DependsOn: [CONS-001]
   Question: "¿Qué estilo visual quieres para MigMusic? (moderno, futurista, minimalista, neón, glassmorphism, retro, oscuro tipo reproductor musical, otro)"
   Guidance: "Ofrecer 2–3 combinaciones concretas con una breve descripción de cómo se vería cada una."
-  Answer: "D - Retro/vinilo"
-  DecidedOn: 2026-09-28
+  Answer: "E - Espacio + bento grid (sustituye a \"D - Retro/vinilo\" de 2026-09-28; rediseño completo en VIS-013)"
+  DecidedOn: 2026-10-02
 
 VIS-002:
   Status: CONFIRMED
@@ -511,13 +511,13 @@ VIS-004:
   DecidedOn: 2026-09-28
 
 VIS-005:
-  Status: REJECTED
+  Status: CONFIRMED
   Priority: NORMAL
   DependsOn: [VIS-003]
   Question: "¿Quieres usar gradientes? ¿Fijos o que cambien según la portada de la canción?"
   Guidance: "Gradientes dinámicos por portada requieren extraer color dominante (costo técnico moderado)."
-  Answer: "Sin gradientes (propuesta de paleta anterior rechazada)"
-  DecidedOn: 2026-09-28
+  Answer: "Gradientes fijos (nebulosa y campo estelar del fondo espacial), nunca dinámicos por portada; levanta el rechazo \"Sin gradientes\" de 2026-09-28 (ver VIS-013)"
+  DecidedOn: 2026-10-02
 
 VIS-006:
   Status: CONFIRMED
@@ -580,8 +580,17 @@ VIS-012:
   DependsOn: [VIS-001]
   Question: "¿Cómo quieres distribuir la interfaz? (sidebar, barra inferior, reproductor central, layout tipo dashboard, otro)"
   Guidance: "Mostrar un esquema ASCII de cada opción y cómo se adapta a mobile."
-  Answer: "B - Reproductor central + lista debajo"
-  DecidedOn: 2026-09-28
+  Answer: "B - Reproductor central + lista debajo (2026-09-28) → rediseñado a grid bento de tiles (reproductor, cola y fuentes) conservando ese orden en móvil apilado; ver VIS-013"
+  DecidedOn: 2026-10-02
+
+VIS-013:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [VIS-001, VIS-005, VIS-012, FRONT-001]
+  Question: "¿Apruebas el rediseño completo del frontend con estilo espacial + bento grid y el stack de UI asociado?"
+  Guidance: "Tailwind v4 + HeroUI v3 (componentes), Vengence UI (border beam y perspective grid) y Skiper UI (progressive blur de la cabecera), solo planes gratuitos. Acento violeta nebulosa #A855F7; los botones primarios con texto usan #7C3AAD para cumplir contraste AA. Skiper UI exige atribución en la versión gratuita: conservada en la cabecera de `src/ui/skiper/progressive-blur.tsx` y registrada aquí."
+  Answer: "Si - aprobado: espacio + bento, violeta nebulosa, librerias gratuitas con atribucion a Skiper UI"
+  DecidedOn: 2026-10-02
 ```
 
 ### R3 — UX Questions
@@ -1355,7 +1364,7 @@ El agente **NO** escribe código de aplicación (más allá de exploración o pr
 - [x] **Backend:** `BACK-001` confirmada (Python).
 - [x] **Spotify:** `SPOTIFY-001`…`SPOTIFY-005` confirmadas.
 - [x] **Reproducción local:** `LOCAL-001`, `LOCAL-006` confirmadas.
-- [x] **Diseño principal:** `VIS-001`, `VIS-006`, `VIS-012` confirmadas.
+- [x] **Diseño principal:** `VIS-001`, `VIS-006`, `VIS-012`, `VIS-013` confirmadas.
 - [x] **Estrategia de playlist:** `PLAYLIST-001`, `PLAYLIST-009` confirmadas.
 - [x] **Lista doblemente enlazada:** ubicación (`ARCH-001`) y comportamiento en extremos (`PLAYLIST-009`) confirmados.
 - [x] **Deployment:** `DEPLOY-001`, `DEPLOY-002` confirmadas.
@@ -1590,6 +1599,11 @@ Convención de IDs nuevos: `<PREFIJO>-<número>` siguiente disponible, o sufijo 
 | 2026-10-02 | FLAP-FIX | Siguiente/anterior sonaba la canción nueva ~2 s y volvía a la vieja (feedback tras SPEED-FIX, junto al toast de timeout): (1) el `report` de 1 s disparado después del clic llevaba secuencia mayor y, si el `next` seguía colgado, el backend respondía con la canción anterior y la aplicación íntegra revertía store + audio, (2) en timeout el `rollback(snapshot)` restauraba la vieja a ciegas aunque el comando hubiera aterrizado tarde ⇒ `commit()` abre una ventana de identidad (`intentSeq`) que descarta toda respuesta que cambie de canción hasta que el transporte asiente (con `guardBelow` para las respuestas que corrían dentro de la ventana) y los fallos de desenlace desconocido (`timeout`/`network_error`) conservan el estado optimista —el siguiente `report` reconcilia con la verdad del backend— en lugar de hacer rollback | Backend sin cambios; frontend: lint/tsc/114 tests/build, E2E: 14/14; unit optimistic UI +4; docs `testing.md` §3/§5 |
 | 2026-10-02 | WARM-FIX | Feedback tras FLAP-FIX (toast de timeout en "Agregar música", latencia medida y correos de fallo de Vercel): (1) un segundo proyecto Vercel `frontend` (alias `frontend-miguelceb.vercel.app`, 0 dominios custom en la cuenta) estaba conectado al mismo repo y fallaba en cada push ⇒ `vercel project rm frontend` — solo queda `migmusic`, (2) Render free seguía durmiéndose (cron de GitHub 0/6 tras re-registrar; medido: proxy 0,7-3 s y frío 8-25 s > timeout de 10 s) ⇒ self-ping propio cada 10 min desde un task en el lifespan (`infrastructure/keep_alive.py` sobre `RENDER_BACKEND_URL`, cancelado en el shutdown), (3) cada operación SQL abría una conexión TCP+TLS nueva a Neon (+100-500 ms por llamada) ⇒ pool `psycopg-pool` (min 0 / max 5, commit/rollback por bloque) en `SqlPlaylistRepository` y `SqlTokenStore` con `close()` en el shutdown y en los fixtures de integración, (4) el 504/502 del proxy Vercel seguía revirtiendo siguiente/anterior ⇒ `isUnknownOutcome` trata `status >= 500` como desenlace desconocido (conserva el optimismo; una negativa real 4xx sigue revirtiendo, corrigiendo el "500 sí revierte" de la ronda 4); decisión: sin bypass del proxy Vercel (la sesión es cookie HttpOnly ligada al host) | Plan aprobado por el usuario (incluye borrar `frontend`); backend: ruff/mypy/338 tests/97.05%, frontend: lint/tsc/116 tests/build, E2E: 14/14; unit `test_keep_alive.py` +4 y optimistic UI +2; docs `testing.md` §3/§5 |
 | 2026-10-02 | CURSOR-FIX | Siguiente/anterior sonaba la canción nueva ~2 s y volvía a la primera, solo en producción (feedback tras WARM-FIX): causa real en el backend — `PlaybackService` nunca persistía el cursor de la DLL y `SqlPlaylistRepository.find_by_id` reconstruye la playlist en cada lectura (sin columna de cursor, `ADR-004`), así que el `report` ~1 s después del clic devolvía el índice 0 (A) y revertía store + audio; la ventana `intentSeq` de FLAP-FIX no podía cubrirlo porque ese report se emite **después** de que el transporte asiente; invisible a toda la suite porque in-memory devuelve el mismo objeto ⇒ `_cursors: dict[str, int]` en el servicio con restore en `_find()` (guarda `0 <= cursor < size`) y registro en los 3 puntos de mutación (`select`, `_sync_order_to_cursor`, `_play_order_position`); sin cambios de frontend (los guards de `send()` ya existen y bastan) | Plan `.opencode/plans/playback-next-prev-cursor.md` aprobado; backend: ruff/format/mypy/pytest **345**/97.02 %, frontend sin cambios (116 tests / E2E 14); tests nuevos `test_playback_service.py` +7 con `_RebuildingRepository` (reproduce la semántica SQL) |
+| 2026-10-02 | VIS-013 | Rediseño completo del frontend con estilo **espacial + bento grid**: Tailwind v4 + HeroUI v3 (modales, pestañas, botones, toasts), Vengence UI (border beam, perspective grid) y Skiper UI (progressive blur de la cabecera), solo planes gratuitos; acento violeta nebulosa `#A855F7` con `#7C3AAD` cuando hay texto encima; backdrop fijo de nebulosas y campo estelar | Sustituye el stack de estilo anterior; **atribución a Skiper UI exigida por su licencia gratuita** (cabecera de `src/ui/skiper/progressive-blur.tsx` + esta entrada); gates: lint/tsc/116 Vitest/build y E2E 14/14 con axe WCAG 2.1 A/AA en 0 violaciones |
+| 2026-10-02 | VIS-001 | El estilo deja de ser "D - Retro/vinilo" y pasa a "E - Espacio + bento grid" | Anula la línea VIS-001 del 2026-09-28; define los tokens, la atmósfera y las microinteracciones de toda la UI (ver VIS-013) |
+| 2026-10-02 | VIS-005 | Se levanta el rechazo de gradientes: se usan **gradientes fijos** (nebulosa y campo estelar) | Anula la línea VIS-005 del 2026-09-28; sigue prohibido el gradiente dinámico por portada, así que no cambia COST de extracción de color |
+| 2026-10-02 | VIS-012 | El layout "reproductor central + lista debajo" se rediseña a **grid bento** de tiles (reproductor, cola y fuentes) | Reinterpreta la opción B sin romperla: en móvil apilado el orden sigue siendo reproductor arriba y lista debajo (ver VIS-013) |
+| 2026-10-02 | SPOTIFY-004 | Diagnóstico Spotify (Fase 1) antes del merge: el flujo es **Authorization Code + PKCE S256 correcto** y las dos URIs de redirect responden 302 verificado en vivo (dev `http://127.0.0.1:5173/callback`, prod `https://migmusic.vercel.app/api/auth/callback`); único gap de código: un **401 de la Web API no disparaba refresh** (solo el proactivo de 60 s) ⇒ `SpotifyAuthService.force_refresh()` + `token_refresher` (ContextVar fijado por `require_spotify_token`) para **reintentar una sola vez** con token nuevo antes de devolver 401, sin tocar routers ni frontend; higiene: `HANDOFF.md` (secretos en claro, sin trackear) añadido a `.gitignore` y `SPOTIFY_SCOPES` documentado en `.env.example` | Plan aprobado por el usuario (mostró el diff antes de aplicarlo); backend: ruff/format/mypy/**pytest 351**/97.06 %, tests nuevos `test_spotify_client.py` +3 y `test_spotify_auth_service.py` +3; no verificable desde el repo (declarado): estado del Dashboard de Spotify (URIs, Development mode/User Management) y cuenta Premium |
 
 ## Validación de entrega de este AGEND.md
 

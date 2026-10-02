@@ -27,11 +27,13 @@ import { PlayerControls } from "./ui/components/PlayerControls";
 import { VolumeControl } from "./ui/components/VolumeControl";
 import { TrackList } from "./ui/components/TrackList";
 import { PlaylistBar } from "./ui/components/PlaylistBar";
+import { SourceCard } from "./ui/components/SourceCard";
 import { AddTrackDialog } from "./ui/components/AddTrackDialog";
 import { LinkedListView } from "./ui/components/LinkedListView";
 import { SpotifyCallback } from "./ui/components/SpotifyCallback";
 import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
+import { BorderBeam } from "./ui/vengence/border-beam";
 import playerStyles from "./ui/components/Player.module.css";
 
 const EMPTY_SONGS: readonly Song[] = [];
@@ -365,7 +367,11 @@ export function App(): React.JSX.Element {
       onToggleNodes={handleToggleNodes}
       onDismissToast={dismissToast}
     >
-      <section className={shellStyles.card} aria-label={t("player.play")}>
+      <section
+        className={`${shellStyles.card} ${shellStyles.playerCard}`}
+        aria-label={t("player.play")}
+      >
+        <BorderBeam colorFrom="#7c3aed" colorTo="#a855f7" />
         <div className={playerStyles.player}>
           <CoverArt
             artworkUrl={song?.artwork_url ?? null}
@@ -399,7 +405,7 @@ export function App(): React.JSX.Element {
         </div>
       </section>
 
-      <section className={shellStyles.card}>
+      <section className={`${shellStyles.card} ${shellStyles.queueCard}`}>
         <PlaylistBar
           playlists={playlists}
           activeId={activeId}
@@ -421,8 +427,31 @@ export function App(): React.JSX.Element {
           onFind={handleFindTrack}
           onAddMusic={handleOpenAddDialog}
         />
-        {nodesVisible && <LinkedListView songs={songs} currentIndex={currentIndex} />}
       </section>
+
+      <section
+        className={`${shellStyles.card} ${shellStyles.sourceCard}`}
+        aria-label={t("source.title")}
+      >
+        <SourceCard
+          trackCount={songs.length}
+          canAdd={activeId !== null}
+          spotifyConnected={spotifyStatus === "linked"}
+          onAddMusic={handleOpenAddDialog}
+          onSpotifyConnect={handleSpotifyConnect}
+          onSpotifyDisconnect={handleSpotifyDisconnect}
+        />
+      </section>
+
+      {nodesVisible && (
+        <section
+          className={`${shellStyles.card} ${shellStyles.nodesCard}`}
+          aria-label={t("nodes.title")}
+        >
+          <h2 className={shellStyles.cardTitle}>{t("nodes.title")}</h2>
+          <LinkedListView songs={songs} currentIndex={currentIndex} />
+        </section>
+      )}
 
       <AddTrackDialog
         open={dialogOpen}

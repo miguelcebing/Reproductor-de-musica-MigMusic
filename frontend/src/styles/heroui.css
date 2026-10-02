@@ -1,0 +1,110 @@
+/* Tailwind CSS v4 + HeroUI v3 bootstrap, bridged to the MigMusic design tokens.
+   `@heroui/styles` already pulls in `tailwindcss` (preflight + theme layers),
+   the HeroUI component layer and its own default light/dark theme.
+   Everything below is unlayered on purpose: unlayered declarations beat
+   `@layer base`, so our palette wins over HeroUI's stock variables while
+   HeroUI components keep resolving them through `var(...)`. */
+
+@import "@heroui/styles";
+
+/* Tailwind's stock `dark:` variant follows the OS preference. MigMusic switches
+   theme through `data-theme` on <html>, so re-point the variant at it: any
+   `dark:` utility coming from a vendored component then tracks the real theme. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* --- Bridge: HeroUI semantic tokens -> MigMusic palette -------------------- */
+
+:root,
+[data-theme="dark"] {
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+
+  --surface: var(--color-surface);
+  --surface-foreground: var(--color-text);
+  --surface-secondary: var(--color-surface-raised);
+  --surface-tertiary: var(--color-surface-raised);
+
+  --overlay: var(--color-surface);
+  --overlay-foreground: var(--color-text);
+
+  --muted: var(--color-text-muted);
+
+  --default: var(--color-surface-raised);
+  --default-foreground: var(--color-text);
+
+  --field-background: var(--color-surface);
+  --field-foreground: var(--color-text);
+  --field-placeholder: var(--color-text-muted);
+
+  /* VIS-013: violeta nebulosa as the spatial accent. */
+  --accent: var(--color-accent);
+  --accent-foreground: #ffffff;
+
+  --success: var(--color-success);
+  --success-foreground: var(--color-bg);
+  --warning: var(--color-warning);
+  --warning-foreground: var(--color-bg);
+  --danger: var(--color-danger);
+  --danger-foreground: var(--color-bg);
+
+  --border: var(--color-border);
+  --separator: var(--color-border);
+  --focus: var(--color-accent-text);
+  --link: var(--color-accent-text);
+
+  --backdrop: rgb(4 6 12 / 72%);
+
+  --radius: var(--radius-md);
+}
+
+[data-theme="light"] {
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+
+  --surface: var(--color-surface);
+  --surface-foreground: var(--color-text);
+  --surface-secondary: var(--color-surface-raised);
+  --surface-tertiary: var(--color-surface-raised);
+
+  --overlay: var(--color-surface);
+  --overlay-foreground: var(--color-text);
+
+  --muted: var(--color-text-muted);
+
+  --default: var(--color-surface-raised);
+  --default-foreground: var(--color-text);
+
+  --field-background: var(--color-surface);
+  --field-foreground: var(--color-text);
+  --field-placeholder: var(--color-text-muted);
+
+  --accent: var(--color-accent);
+  --accent-foreground: #ffffff;
+
+  --success: var(--color-success);
+  --success-foreground: var(--color-bg);
+  --warning: var(--color-warning);
+  --warning-foreground: var(--color-bg);
+  --danger: var(--color-danger);
+  --danger-foreground: var(--color-bg);
+
+  --border: var(--color-border);
+  --separator: var(--color-border);
+  --focus: var(--color-accent-text);
+  --link: var(--color-accent-text);
+
+  --backdrop: rgb(19 26 44 / 45%);
+
+  --radius: var(--radius-md);
+}
+
+/* VIS-013: HeroUI paints its primary button on `--accent` with a white label,
+   and `#a855f7` only reaches 3.95:1 there — below the 4.5:1 body-text bar.
+   Filled violet *labels* use the strong token (5.7:1), mirroring
+   `.buttonPrimary` in the app stylesheets; icon-only primaries (the play
+   button) keep the light accent because a glyph only needs 3:1. */
+.button--primary:not(.button--icon-only) {
+  --button-bg: var(--color-accent-strong);
+  --button-bg-hover: color-mix(in srgb, var(--color-accent-strong) 84%, black);
+  --button-bg-pressed: color-mix(in srgb, var(--color-accent-strong) 72%, black);
+}

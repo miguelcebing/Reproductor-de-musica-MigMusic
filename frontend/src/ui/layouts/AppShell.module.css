@@ -1,22 +1,35 @@
-/* Layout shell: mobile-first, player centred above the queue (VIS-012). */
+/* Layout shell: sticky glass header over a responsive bento grid (VIS-012).
+   The grid areas only kick in at >=1024px; below that cards flow 1-up (mobile)
+   or 2-up with full-width player and queue (tablet). */
 
 .shell {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  gap: var(--space-4);
 }
 
+/* --- Header ----------------------------------------------------------------- */
+
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: var(--color-surface);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--color-border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+}
+
+/* The progressive blur is an absolutely positioned <div> child, so the header's
+   own children opt into the stacking layer above it explicitly instead of
+   through a `> div` rule, which would capture the blur itself. */
+.brandWrap {
+  position: relative;
+  z-index: 1;
 }
 
 .brand {
@@ -39,6 +52,8 @@
 }
 
 .headerActions {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: var(--space-2);
   align-items: center;
@@ -49,58 +64,139 @@
   min-height: 44px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  background: var(--glass-bg-strong);
   color: var(--color-text);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: var(--transition-colors);
+  transition:
+    var(--transition-colors),
+    box-shadow var(--motion-base) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .headerActions button:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
+  box-shadow: var(--glow-accent);
 }
 
+.headerActions button:active {
+  transform: scale(0.94);
+}
+
+.headerActions button[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+  box-shadow: var(--glow-accent);
+}
+
+/* --- Bento grid ------------------------------------------------------------- */
+
 .main {
+  position: relative;
+  z-index: 1;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
+  display: grid;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
   padding: var(--space-4);
 }
 
+.card {
+  min-width: 0;
+  background: var(--glass-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Blur is reserved for the two hero tiles: it is the expensive part of a
+   glass surface, and the smaller tiles already read as glass through their
+   translucency alone. The player tile also hosts the orbiting border beam,
+   so it has to be the positioning context for it. */
+.playerCard {
+  position: relative;
+}
+
+.playerCard,
+.queueCard {
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+/* Small uppercase tile label, shared by the secondary cards. */
+.cardTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 @media (min-width: 640px) {
   .main {
+    gap: var(--space-6);
     max-width: 880px;
     padding: var(--space-6);
-    gap: var(--space-8);
   }
-}
 
-@media (min-width: 1024px) {
-  .main {
-    max-width: 1040px;
-  }
-}
-
-@media (min-width: 1440px) {
-  .main {
-    max-width: 1180px;
-  }
-}
-
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
-}
-
-@media (min-width: 640px) {
   .card {
     padding: var(--space-6);
+  }
+}
+
+/* Tablet: two columns, player and queue span the full row. */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playerCard,
+  .queueCard {
+    grid-column: 1 / -1;
+  }
+
+  .mainNoNodes .sourceCard {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Desktop: the asymmetric bento. DOM order (player, queue, source, nodes)
+   already matches the visual reading order, so focus order stays sane. */
+@media (min-width: 1024px) {
+  .main {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6);
+    max-width: 1180px;
+    padding: var(--space-8) var(--space-6);
+  }
+
+  .playerCard {
+    grid-column: 1 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  .queueCard {
+    grid-column: 3 / span 2;
+    grid-row: 1 / span 3;
+  }
+
+  .sourceCard {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .nodesCard {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .mainNoNodes .sourceCard {
+    grid-column: 1 / span 2;
   }
 }

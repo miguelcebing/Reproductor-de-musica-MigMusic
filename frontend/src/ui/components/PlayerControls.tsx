@@ -54,6 +54,7 @@ export const PlayerControls = memo(function PlayerControls({
         label={t("player.backward", { seconds: skipSeconds })}
         onClick={() => onSkip("backward")}
         disabled={disabled}
+        withLabel
         testId="skip-backward"
       >
         <span className={styles.skipLabel}>{`-${skipSeconds} s`}</span>
@@ -102,6 +103,7 @@ export const PlayerControls = memo(function PlayerControls({
         label={t("player.forward", { seconds: skipSeconds })}
         onClick={() => onSkip("forward")}
         disabled={disabled}
+        withLabel
         testId="skip-forward"
       >
         <span className={styles.skipLabel}>{`+${skipSeconds} s`}</span>

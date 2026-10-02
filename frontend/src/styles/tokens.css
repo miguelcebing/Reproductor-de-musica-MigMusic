@@ -1,5 +1,6 @@
-/* Design tokens (VIS-003 / VIS-004 / VIS-005 / VIS-006).
-   Dark retro/vinilo theme: no gradients, subtle motion only. */
+/* Design tokens (VIS-003 / VIS-004 / VIS-005 / VIS-006 / VIS-013).
+   Espacial + bento theme: controlled deep gradients, glass surfaces, subtle
+   motion only. Palette unchanged except the VIS-013 nebula accent. */
 
 :root {
   color-scheme: dark;
@@ -24,6 +25,12 @@
   --color-primary-text: #5b93ff;
   --color-danger-text: #ef5f6b;
 
+  /* VIS-013: nebula accent. `--color-accent-text` stays AA on both themes;
+     solid violet surfaces must not carry small body text. */
+  --color-accent: #a855f7;
+  --color-accent-text: #c084fc;
+  --color-accent-strong: #7c3aed;
+
   /* Typography */
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
@@ -34,6 +41,7 @@
   --font-size-lg: 1.25rem;
   --font-size-xl: 1.75rem;
   --font-size-2xl: 2.25rem;
+  --font-size-3xl: 3rem;
 
   /* Spacing scale */
   --space-1: 0.25rem;
@@ -44,10 +52,12 @@
   --space-8: 2rem;
   --space-12: 3rem;
 
-  /* Radii */
+  /* Radii (bento corners: sm/md for controls, xl/2xl for cards) */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --radius-full: 999px;
 
   /* Motion (VIS-006: subtle, and disabled when the user asks for reduced motion) */
@@ -63,6 +73,26 @@
   /* Elevation */
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
   --shadow-md: 0 6px 20px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 55%);
+
+  /* Glass surfaces (VIS-005 reopened: controlled deep gradients allowed).
+     Always layered on an opaque-enough base so text keeps WCAG AA. */
+  --glass-bg: rgb(18 23 36 / 74%);
+  --glass-bg-strong: rgb(18 23 36 / 90%);
+  --glass-border: rgb(255 255 255 / 10%);
+  --glass-highlight: rgb(255 255 255 / 6%);
+  --glass-blur: 16px;
+
+  /* Nebula glows + backdrop layers */
+  --glow-primary: 0 0 0 1px rgb(30 107 255 / 22%), 0 10px 40px rgb(30 107 255 / 16%);
+  --glow-accent: 0 0 0 1px rgb(168 85 247 / 26%), 0 10px 40px rgb(168 85 247 / 18%);
+  /* Peak of the breathing halo on a playing cover (VIS-013). */
+  --glow-accent-strong: 0 0 0 1px rgb(168 85 247 / 52%), 0 18px 64px rgb(168 85 247 / 34%);
+  --nebula-1: rgb(30 107 255 / 26%);
+  --nebula-2: rgb(168 85 247 / 22%);
+  --nebula-3: rgb(52 211 153 / 12%);
+  --star-color: rgb(232 236 247);
+  --star-opacity: 0.7;
 }
 
 [data-theme="light"] {
@@ -78,9 +108,28 @@
 
   --color-primary-text: #3730a3;
   --color-danger-text: #c0273a;
+  --color-accent-text: #6d28d9;
 
   --shadow-sm: 0 1px 2px rgb(19 26 44 / 10%);
   --shadow-md: 0 6px 20px rgb(19 26 44 / 14%);
+  --shadow-lg: 0 24px 60px rgb(19 26 44 / 18%);
+
+  /* Same spatial treatment, rebalanced for a light canvas (opacity lowered
+     so every surface still clears WCAG AA against --color-text). */
+  --glass-bg: rgb(255 255 255 / 76%);
+  --glass-bg-strong: rgb(255 255 255 / 93%);
+  --glass-border: rgb(19 26 44 / 8%);
+  --glass-highlight: rgb(255 255 255 / 70%);
+  --glass-blur: 14px;
+
+  --glow-primary: 0 0 0 1px rgb(30 107 255 / 18%), 0 10px 40px rgb(30 107 255 / 12%);
+  --glow-accent: 0 0 0 1px rgb(168 85 247 / 20%), 0 10px 40px rgb(168 85 247 / 14%);
+  --glow-accent-strong: 0 0 0 1px rgb(168 85 247 / 36%), 0 16px 56px rgb(168 85 247 / 20%);
+  --nebula-1: rgb(30 107 255 / 16%);
+  --nebula-2: rgb(168 85 247 / 14%);
+  --nebula-3: rgb(52 211 153 / 10%);
+  --star-color: rgb(19 26 44);
+  --star-opacity: 0.28;
 }
 
 *,
@@ -101,7 +150,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-accent-text);
   outline-offset: 2px;
 }
 

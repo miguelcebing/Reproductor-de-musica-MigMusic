@@ -1,0 +1,110 @@
+/* Source tile: two compact rows stacked on a narrow bento cell. The tile also
+   carries a Vengeance perspective grid as a floor texture, so it owns the
+   stacking context and keeps its own content above the decoration. */
+
+.source {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.rows {
+  position: relative;
+  z-index: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+
+.dot[data-on="true"] {
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.labels {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action {
+  grid-column: 1 / -1;
+  min-height: 40px;
+  width: 100%;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition:
+    var(--transition-colors),
+    box-shadow var(--motion-base) var(--ease-out);
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  box-shadow: var(--glow-accent);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
