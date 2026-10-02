@@ -623,3 +623,145 @@ def _shuffle_order(repository: InMemoryPlaylistRepository, playlist: Playlist) -
     for _ in range(playlist.size - 1):
         order.append(service.next().index)
     return order
+
+
+# ------------------------------------------------- cursor survives rebuilds
+# The SQL adapter rebuilds the playlist on every read (ADR-004), which resets
+# the DLL cursor to the head; these tests reproduce that with fresh copies so
+# the bug (next snapped back to the first song) is visible outside Postgres.
+
+
+class _RebuildingRepository(InMemoryPlaylistRepository):
+    """Like the SQL adapter: ``find_by_id`` returns a rebuilt copy each time."""
+
+    def __init__(self, store: InMemoryPlaylistRepository) -> None:
+        """Share another adapter's data while losing the DLL cursor on read."""
+        self._items = store._items
+        self._owners = store._owners
+        self._lock = store._lock
+
+    def find_by_id(self, playlist_id: str) -> Playlist | None:
+        playlist = super().find_by_id(playlist_id)
+        if playlist is None:
+            return None
+        return Playlist(playlist.name, playlist_id=playlist.id, songs=playlist.to_list())
+
+
+def _rebuilding_service(repository: InMemoryPlaylistRepository) -> PlaybackService:
+    """Playback wired to a repository whose reads lose the DLL cursor."""
+    return PlaybackService(_RebuildingRepository(repository), rng=random.Random(0))
+
+
+def test_next_survives_a_repository_that_rebuilds_the_playlist(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Walking forward must not snap back to the first song on every read."""
+    playlist = seed_playlist(count=3)
+    songs = playlist.to_list()
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+
+    first = service.next()
+    second = service.next()
+
+    assert first.index == 1 and first.song == songs[1]
+    assert second.index == 2 and second.song == songs[2]
+
+
+def test_report_after_next_keeps_the_new_song(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The delayed player report used to revert playback to the first song."""
+    playlist = seed_playlist(count=3)
+    songs = playlist.to_list()
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+    service.next()
+
+    state = service.report(position=1.5, playing=True)
+
+    assert state.index == 1
+    assert state.song == songs[1]
+    assert state.position == 1.5
+
+
+def test_previous_walks_backwards_across_rebuilds(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Stepping back keeps its place instead of jumping to the head."""
+    playlist = seed_playlist(count=3)
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+    service.next()
+    service.next()
+
+    assert service.previous().index == 1
+    assert service.previous().index == 0
+    assert service.previous().index == 0  # repeat off: stays at the head
+    assert service.state().available_previous is False
+
+
+def test_select_and_report_stay_on_the_selected_index(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """Clicking a song in the UI keeps that song across subsequent reads."""
+    playlist = seed_playlist(count=3)
+    songs = playlist.to_list()
+    service = _rebuilding_service(repository)
+
+    selected = service.select(playlist.id, 2)
+    reported = service.report(position=10.0, playing=True)
+
+    assert selected.index == 2 and selected.song == songs[2]
+    assert reported.index == 2 and reported.song == songs[2]
+
+
+def test_tail_edge_survives_rebuilds(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The last song reports no next and refuses to advance after rebuilds."""
+    playlist = seed_playlist(count=3)
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+    service.next()
+    service.next()
+
+    at_tail = service.state()
+    stuck = service.next()
+
+    assert at_tail.index == 2 and at_tail.available_next is False
+    assert stuck.index == 2 and stuck.playing is False
+
+
+def test_a_shrunk_playlist_falls_back_to_the_head(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """A stored cursor beyond the new size is ignored instead of raising."""
+    playlist = seed_playlist(count=3)
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+    service.next()
+    service.next()  # cursor sits at index 2
+    songs = playlist.to_list()
+    repository.save(Playlist(playlist.name, playlist_id=playlist.id, songs=songs[:1]))
+
+    state = service.state()
+
+    assert state.size == 1
+    assert state.index == 0
+
+
+def test_shuffle_order_survives_rebuilds(
+    repository: InMemoryPlaylistRepository, seed_playlist: Callable[..., Playlist]
+) -> None:
+    """The permutation keeps advancing through fresh copies of the playlist."""
+    playlist = seed_playlist(count=5)
+    service = _rebuilding_service(repository)
+    service.open(playlist.id)
+    service.set_modes(shuffle=True)
+
+    order = [service.state().index]
+    for _ in range(4):
+        order.append(service.next().index)
+
+    assert sorted(order) == list(range(5))

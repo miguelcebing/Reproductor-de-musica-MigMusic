@@ -57,6 +57,7 @@ class PlaybackService:
         self._order_index = 0
         self._position = 0.0
         self._playing = False
+        self._cursors: dict[str, int] = {}
 
     @property
     def skip_seconds(self) -> float:
@@ -89,6 +90,7 @@ class PlaybackService:
         self._ensure_order(playlist)
         self._order_index = self._order.index(index)
         playlist.move_to(index)
+        self._remember_cursor(playlist)
         self._position = 0.0
         self._playing = True
         return self.state()
@@ -259,7 +261,17 @@ class PlaybackService:
         playlist = self._repository.find_by_id(playlist_id)
         if playlist is None:
             raise PlaylistNotFoundError(playlist_id)
+        # The SQL adapter rebuilds the list on every read (ADR-004), so its
+        # cursor always comes back at the head; restore ours before anyone reads.
+        cursor = self._cursors.get(playlist_id)
+        if cursor is not None and 0 <= cursor < playlist.size:
+            playlist.move_to(cursor)
         return playlist
+
+    def _remember_cursor(self, playlist: Playlist) -> None:
+        """Persist where the cursor sits so the next read starts there."""
+        if playlist.current_index is not None:
+            self._cursors[playlist.id] = playlist.current_index
 
     def _edges(self, playlist: Playlist, index: int | None) -> tuple[bool, bool]:
         """Whether the cursor sits at the head and at the tail of the play order."""
@@ -310,6 +322,7 @@ class PlaybackService:
         """Select ``_order[order_index]`` as the song being played."""
         self._order_index = order_index
         playlist.move_to(self._order[order_index])
+        self._remember_cursor(playlist)
         self._position = 0.0
         self._playing = True
 
@@ -317,6 +330,7 @@ class PlaybackService:
         """Follow the list cursor back into the playback order (shuffle off)."""
         index = playlist.current_index
         self._order_index = index if index is not None else 0
+        self._remember_cursor(playlist)
 
     def _ensure_order(self, playlist: Playlist) -> None:
         """Rebuild the playback order when the playlist identity or size changed."""
