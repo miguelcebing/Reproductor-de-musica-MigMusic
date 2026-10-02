@@ -39,10 +39,10 @@ playlists vía API en cada test.
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **97.13 %** |
+| Cobertura global backend | ≥ 80 % | **97.05 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **334** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **114** (10 archivos) |
+| Tests backend | — | **338** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **116** (10 archivos) |
 | Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -219,10 +219,34 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   (`timeout`/`network_error`) conserva el estado optimista en lugar de
   hacer rollback: el siguiente `report` reconcilia con la verdad del
   backend (que el comando haya aterrizado o no), con el toast de timeout
-  explicando el fallo. Unit "PlaybackController optimistic UI" (+4: report
-  con estado viejo durante la ventana, report tardío que aterriza tras la
-  respuesta, timeout que conserva la canción nueva, error del servidor que
-  sí hace rollback).
+   explicando el fallo. Unit "PlaybackController optimistic UI" (+4: report
+   con estado viejo durante la ventana, report tardío que aterriza tras la
+   respuesta, timeout que conserva la canción nueva, error del servidor que
+   sí hace rollback).
+- **Correos de fallo de Vercel, lentitud de "Agregar música" y 5xx que
+  seguía revirtiendo** (feedback tras FLAP-FIX): (1) un segundo proyecto
+  Vercel `frontend` (alias `frontend-miguelceb.vercel.app`, 0 dominios
+  custom en la cuenta) estaba conectado al mismo repo y fallaba en cada
+  push con `Deployment has failed` ⇒ `vercel project rm frontend`; solo
+  queda el productivo `migmusic`, (2) el frío de Render free seguía
+  llegando al usuario (el cron de GitHub sigue muerto: 0/6 tras
+  re-registro, y el ping de `App.tsx` solo ayuda con la pestaña abierta)
+  ⇒ el backend hace su propio ping cada 10 min a
+  `RENDER_BACKEND_URL/api/health` desde un task en el lifespan
+  (`infrastructure/keep_alive.py`, cancelado en el shutdown), (3) cada
+  operación SQL abría una conexión TCP+TLS nueva a Neon (+100-500 ms por
+  llamada; el `/playlists` directo promediaba 1,2 s) ⇒ pool
+  `psycopg-pool` (min 0 / max 5, commit/rollback por bloque) en
+  `SqlPlaylistRepository` y `SqlTokenStore`, con `close()` en el shutdown
+  y en los fixtures de integración, (4) el 504/502 del proxy Vercel aún
+  hacía rollback a ciegas en el transporte ⇒ `isUnknownOutcome` trata
+  `status >= 500` como desenlace desconocido y conserva el optimismo (una
+  negativa real es 4xx y sigue revirtiendo: el test del "servidor
+  rechaza" pasó de 500 a 400, con 504 y 500 nuevos que conservan).
+  Sin bypass del proxy Vercel: la sesión es cookie HttpOnly `mig_session`
+  ligada al host, de modo que el tráfico sigue por el proxy. Unit
+  `test_keep_alive.py` +4 (URL, pinger, bucle que sobrevive fallos) y
+  optimistic UI +2 ⇒ backend **338**, frontend **116**.
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -234,7 +258,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 114 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 116 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

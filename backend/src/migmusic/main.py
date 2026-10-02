@@ -9,8 +9,9 @@ module in tests does not require a fully configured environment.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 import httpx
@@ -25,6 +26,12 @@ from migmusic.application.services.spotify_auth_service import SpotifyAuthServic
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
 from migmusic.domain.ports.playlist_repository import PlaylistRepository
 from migmusic.domain.ports.token_store import TokenStore
+from migmusic.infrastructure.keep_alive import (
+    KEEP_ALIVE_INTERVAL_S,
+    keep_alive_loop,
+    keep_alive_url,
+    make_pinger,
+)
 from migmusic.infrastructure.persistence import (
     InMemoryPlaylistRepository,
     SqlPlaylistRepository,
@@ -47,8 +54,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     http_client = httpx.AsyncClient()
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Free-tier Render sleeps after 15 idle minutes; a self-ping on the
+        # public URL keeps the instance warm (dev/tests have no base URL).
+        keep_alive_task: asyncio.Task[None] | None = None
+        if config.render_backend_url:
+            keep_alive_task = asyncio.create_task(
+                keep_alive_loop(make_pinger(http_client, config.render_backend_url)),
+                name="keep-alive",
+            )
+            logger.info(
+                "keep_alive_started",
+                extra={
+                    "interval_s": KEEP_ALIVE_INTERVAL_S,
+                    "target": keep_alive_url(config.render_backend_url),
+                },
+            )
         yield
+        if keep_alive_task is not None:
+            keep_alive_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await keep_alive_task
+        for adapter in (app.state.playlist_repository, app.state.spotify_token_store):
+            if isinstance(adapter, SqlPlaylistRepository | SqlTokenStore):
+                adapter.close()
         await http_client.aclose()
 
     app = FastAPI(

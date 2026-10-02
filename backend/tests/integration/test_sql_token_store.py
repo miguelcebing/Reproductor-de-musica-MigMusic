@@ -9,6 +9,7 @@ like the playlist repository contract tests.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 
 import psycopg
 import pytest
@@ -24,12 +25,13 @@ pytestmark = [
 
 
 @pytest.fixture
-def token_store() -> SqlTokenStore:
+def token_store() -> Iterator[SqlTokenStore]:
     """Fresh schema rows per test, then an adapter over them."""
     store = SqlTokenStore(_DSN)
     with psycopg.connect(_DSN) as connection:
         connection.execute("TRUNCATE spotify_tokens")
-    return store
+    yield store
+    store.close()
 
 
 def _bundle(*, access_token: str = "access-token-1") -> TokenBundle:
@@ -81,6 +83,7 @@ async def test_tokens_survive_a_new_process(token_store: SqlTokenStore) -> None:
     restarted = SqlTokenStore(_DSN)
 
     assert await restarted.get("session-1") == bundle
+    restarted.close()
 
 
 def test_empty_dsn_is_rejected() -> None:

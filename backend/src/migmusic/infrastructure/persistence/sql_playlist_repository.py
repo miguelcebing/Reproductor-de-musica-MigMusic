@@ -19,6 +19,7 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.domain.entities.playlist import Playlist
@@ -93,15 +94,30 @@ def _row_to_song(row: Mapping[str, Any]) -> Song:
 
 
 class SqlPlaylistRepository(PlaylistRepository):
-    """Database-backed repository; one short transaction per operation."""
+    """Database-backed repository; one short transaction per operation.
+
+    Connections come from a small pool: opening a fresh TCP+TLS handshake to
+    Neon on every request added hundreds of milliseconds to each call.
+    """
 
     def __init__(self, dsn: str) -> None:
-        """Store the connection string and create the schema on first use."""
+        """Create the connection pool and the schema on first use."""
         if not dsn.strip():
             raise ValueError("database DSN must not be empty")
-        self._dsn = dsn
+        self._pool = ConnectionPool[psycopg.Connection[dict[str, Any]]](
+            conninfo=dsn,
+            min_size=0,
+            max_size=5,
+            kwargs={"row_factory": dict_row},
+            name="playlists",
+            open=True,
+        )
         with self._connection() as connection:
             connection.execute(_SCHEMA)
+
+    def close(self) -> None:
+        """Shut the pool down (application shutdown, test teardown)."""
+        self._pool.close()
 
     # ----------------------------------------------------------------- write
 
@@ -226,16 +242,9 @@ class SqlPlaylistRepository(PlaylistRepository):
 
     @contextmanager
     def _connection(self) -> Iterator[psycopg.Connection[dict[str, Any]]]:
-        """Yield a connection that commits on success and always closes."""
-        connection = psycopg.connect(self._dsn, row_factory=dict_row)
-        try:
+        """Yield a pooled connection: commit/rollback follow the block."""
+        with self._pool.connection() as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 __all__ = ["SqlPlaylistRepository"]

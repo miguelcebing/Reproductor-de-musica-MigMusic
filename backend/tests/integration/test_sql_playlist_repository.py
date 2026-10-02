@@ -34,6 +34,7 @@ def sql_repository() -> Iterator[SqlPlaylistRepository]:
     with psycopg.connect(_DSN) as connection:
         connection.execute("TRUNCATE playlists, songs")
     yield repository
+    repository.close()
 
 
 def _raw_songs(playlist_id: str) -> list[dict[str, Any]]:
@@ -196,5 +197,7 @@ def test_schema_adds_owner_id_to_a_pre_existing_table() -> None:
 
     repository = SqlPlaylistRepository(_DSN)  # runs the idempotent schema
     repository.save(Playlist("Migrated"), owner_id="device-a")
+    names = [p.name for p in repository.list_all(owner_id="device-a")]
+    repository.close()
 
-    assert [p.name for p in repository.list_all(owner_id="device-a")] == ["Migrated"]
+    assert names == ["Migrated"]

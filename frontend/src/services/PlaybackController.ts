@@ -35,10 +35,11 @@ function isNoActivePlayback(cause: unknown): boolean {
   return cause instanceof ApiError && cause.code === "no_active_playback";
 }
 
-/** No answer arrived: the command may still land on the backend after us. */
+/** The answer never arrived (timeout, drop, gateway 5xx): still in flight. */
 function isUnknownOutcome(cause: unknown): boolean {
   return (
-    cause instanceof ApiError && (cause.code === "timeout" || cause.code === "network_error")
+    cause instanceof ApiError &&
+    (cause.code === "timeout" || cause.code === "network_error" || cause.status >= 500)
   );
 }
 
@@ -348,9 +349,10 @@ export class PlaybackController {
    * backend state from *before* the skip must not flash the old song back.
    * A `no_active_playback` answer (the backend lost its context on restart)
    * rebuilds it with a `select` and retries once before giving up. When a
-   * guarded command fails with an unknown outcome (timeout/connection drop)
-   * the optimistic state is kept instead of rolled back — the command may
-   * still land late, and the next report reconciles either way.
+    * guarded command fails with an unknown outcome (timeout, connection
+    * drop, gateway 5xx) the optimistic state is kept instead of rolled
+    * back — the command may still land late, and the next report
+    * reconciles either way.
    */
   private async send(
     request: () => Promise<PlaybackState>,

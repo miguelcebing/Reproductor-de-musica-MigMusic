@@ -866,13 +866,49 @@ describe("PlaybackController optimistic UI", () => {
       makeState({ index: 0, next_index: 1, previous_index: null }),
     );
     const { controller, api } = makeController();
-    api.next.mockRejectedValue(new ApiError(500, "internal_error", "boom"));
+    api.next.mockRejectedValue(new ApiError(400, "bad_request", "boom"));
 
     const result = await controller.next();
 
     expect(result).toBeNull();
     expect(usePlaybackStore.getState().playback?.index).toBe(0);
     expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:1");
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].text).toContain("boom");
+  });
+
+  it("keeps the new song when the gateway fails with a 5xx", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    api.next.mockRejectedValue(new ApiError(504, "gateway_timeout", "gateway timeout"));
+
+    const result = await controller.next();
+
+    expect(result).toBeNull();
+    // A 504 from the router is an unknown outcome, not a refusal: the skip
+    // may still land, so a rollback here would flash the old song back.
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].text).toContain("gateway timeout");
+  });
+
+  it("keeps the new song when the backend fails with a 5xx", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    api.next.mockRejectedValue(new ApiError(500, "internal_error", "boom"));
+
+    const result = await controller.next();
+
+    expect(result).toBeNull();
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
     const toasts = useToastStore.getState().toasts;
     expect(toasts).toHaveLength(1);
     expect(toasts[0].text).toContain("boom");

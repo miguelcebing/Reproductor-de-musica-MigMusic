@@ -23,6 +23,7 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from migmusic.domain.ports.token_store import TokenBundle, TokenStore
 
@@ -51,15 +52,31 @@ ON CONFLICT (session_id) DO UPDATE SET
 
 
 class SqlTokenStore(TokenStore):
-    """Database-backed token store; one short transaction per operation."""
+    """Database-backed token store; one short transaction per operation.
+
+    Connections come from a small pool: the token lookup rides on every
+    Spotify search, and a fresh TCP+TLS handshake to Neon per call showed up
+    as hundreds of milliseconds of avoidable latency.
+    """
 
     def __init__(self, dsn: str) -> None:
-        """Store the connection string and create the schema on startup."""
+        """Create the connection pool and the schema on startup."""
         if not dsn.strip():
             raise ValueError("database DSN must not be empty")
-        self._dsn = dsn
-        with psycopg.connect(dsn) as connection:
+        self._pool = ConnectionPool[psycopg.Connection[dict[str, Any]]](
+            conninfo=dsn,
+            min_size=0,
+            max_size=5,
+            kwargs={"row_factory": dict_row},
+            name="spotify_tokens",
+            open=True,
+        )
+        with self._connection() as connection:
             connection.execute(_SCHEMA)
+
+    def close(self) -> None:
+        """Shut the pool down (application shutdown, test teardown)."""
+        self._pool.close()
 
     async def get(self, session_id: str) -> TokenBundle | None:
         """Return the stored bundle for ``session_id``, or ``None``."""
@@ -112,16 +129,9 @@ class SqlTokenStore(TokenStore):
 
     @contextmanager
     def _connection(self) -> Iterator[psycopg.Connection[dict[str, Any]]]:
-        """Yield a connection that commits on success and always closes."""
-        connection = psycopg.connect(self._dsn, row_factory=dict_row)
-        try:
+        """Yield a pooled connection: commit/rollback follow the block."""
+        with self._pool.connection() as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 __all__ = ["SqlTokenStore"]
