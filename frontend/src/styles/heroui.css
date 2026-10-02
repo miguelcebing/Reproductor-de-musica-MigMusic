@@ -97,3 +97,12 @@
 
   --radius: var(--radius-md);
 }
+
+/* VIS-013: HeroUI paints its primary button on `--accent` with a white label,
+   and `#a855f7` only reaches 3.95:1 there. Filled violet surfaces use the
+   strong token (5.7:1), mirroring `.buttonPrimary` in the app stylesheets. */
+.button--primary {
+  --button-bg: var(--color-accent-strong);
+  --button-bg-hover: color-mix(in srgb, var(--color-accent-strong) 84%, black);
+  --button-bg-pressed: color-mix(in srgb, var(--color-accent-strong) 72%, black);
+}
