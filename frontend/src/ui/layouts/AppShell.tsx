@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useT } from "../../i18n/useT";
 import type { Language } from "../../i18n/messages";
 import type { Theme } from "../../state/settingsStore";
+import { SpaceBackdrop } from "../background/SpaceBackdrop";
 import { ToastContainer } from "../components/ToastContainer";
 import type { Toast } from "../../state/toastStore";
 import styles from "./AppShell.module.css";
@@ -36,6 +37,7 @@ export function AppShell({
 
   return (
     <div className={styles.shell}>
+      <SpaceBackdrop />
       <header className={styles.header}>
         <div>
           <p className={styles.brand}>
