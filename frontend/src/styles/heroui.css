@@ -99,9 +99,11 @@
 }
 
 /* VIS-013: HeroUI paints its primary button on `--accent` with a white label,
-   and `#a855f7` only reaches 3.95:1 there. Filled violet surfaces use the
-   strong token (5.7:1), mirroring `.buttonPrimary` in the app stylesheets. */
-.button--primary {
+   and `#a855f7` only reaches 3.95:1 there — below the 4.5:1 body-text bar.
+   Filled violet *labels* use the strong token (5.7:1), mirroring
+   `.buttonPrimary` in the app stylesheets; icon-only primaries (the play
+   button) keep the light accent because a glyph only needs 3:1. */
+.button--primary:not(.button--icon-only) {
   --button-bg: var(--color-accent-strong);
   --button-bg-hover: color-mix(in srgb, var(--color-accent-strong) 84%, black);
   --button-bg-pressed: color-mix(in srgb, var(--color-accent-strong) 72%, black);
