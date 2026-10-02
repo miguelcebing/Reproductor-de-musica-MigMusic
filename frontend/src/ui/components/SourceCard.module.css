@@ -1,13 +1,27 @@
-/* Source tile: two compact rows stacked on a narrow bento cell. */
+/* Source tile: two compact rows stacked on a narrow bento cell. The tile also
+   carries a Vengeance perspective grid as a floor texture, so it owns the
+   stacking context and keeps its own content above the decoration. */
 
 .source {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
 }
 
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
 .title {
+  position: relative;
+  z-index: 1;
   margin: 0;
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -17,6 +31,8 @@
 }
 
 .rows {
+  position: relative;
+  z-index: 1;
   list-style: none;
   margin: 0;
   padding: 0;

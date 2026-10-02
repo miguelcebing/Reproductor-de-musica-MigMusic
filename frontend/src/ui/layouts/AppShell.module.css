@@ -106,7 +106,12 @@
 
 /* Blur is reserved for the two hero tiles: it is the expensive part of a
    glass surface, and the smaller tiles already read as glass through their
-   translucency alone. */
+   translucency alone. The player tile also hosts the orbiting border beam,
+   so it has to be the positioning context for it. */
+.playerCard {
+  position: relative;
+}
+
 .playerCard,
 .queueCard {
   -webkit-backdrop-filter: blur(var(--glass-blur));

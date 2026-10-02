@@ -1,0 +1,20 @@
+/* Keyframes and the border mask shipped with Vengeance UI's `border-beam`.
+   The registry source relies on Next.js `styled-jsx` for the animation and on
+   Tailwind `!important` prefixes for the mask, neither of which exists here:
+   the mask shorthand would otherwise reset `mask-composite` back to `add` and
+   the beam would escape the card instead of riding its border. */
+
+@keyframes border-beam {
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+.mm-border-beam {
+  border: calc(var(--border-width) * 1px) solid transparent;
+  -webkit-mask-image: linear-gradient(transparent, transparent), linear-gradient(white, white);
+  mask-image: linear-gradient(transparent, transparent), linear-gradient(white, white);
+  -webkit-mask-clip: padding-box, border-box;
+  mask-clip: padding-box, border-box;
+  mask-composite: intersect;
+}

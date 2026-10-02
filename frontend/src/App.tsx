@@ -33,6 +33,7 @@ import { LinkedListView } from "./ui/components/LinkedListView";
 import { SpotifyCallback } from "./ui/components/SpotifyCallback";
 import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
+import { BorderBeam } from "./ui/vengeence/border-beam";
 import playerStyles from "./ui/components/Player.module.css";
 
 const EMPTY_SONGS: readonly Song[] = [];
@@ -370,6 +371,7 @@ export function App(): React.JSX.Element {
         className={`${shellStyles.card} ${shellStyles.playerCard}`}
         aria-label={t("player.play")}
       >
+        <BorderBeam colorFrom="#7c3aed" colorTo="#a855f7" />
         <div className={playerStyles.player}>
           <CoverArt
             artworkUrl={song?.artwork_url ?? null}

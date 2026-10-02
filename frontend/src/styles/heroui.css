@@ -7,6 +7,11 @@
 
 @import "@heroui/styles";
 
+/* Tailwind's stock `dark:` variant follows the OS preference. MigMusic switches
+   theme through `data-theme` on <html>, so re-point the variant at it: any
+   `dark:` utility coming from a vendored component then tracks the real theme. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* --- Bridge: HeroUI semantic tokens -> MigMusic palette -------------------- */
 
 :root,

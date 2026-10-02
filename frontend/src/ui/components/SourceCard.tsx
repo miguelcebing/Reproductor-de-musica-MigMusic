@@ -3,6 +3,7 @@
     is a second entry point, not a second source of truth. */
 
 import { useT } from "../../i18n/useT";
+import { PerspectiveGrid } from "../vengeence/perspective-grid";
 import styles from "./SourceCard.module.css";
 
 export interface SourceCardProps {
@@ -26,6 +27,9 @@ export function SourceCard({
 
   return (
     <div className={styles.source} data-testid="source-card">
+      <div className={styles.scene} aria-hidden="true">
+        <PerspectiveGrid gridSize={20} />
+      </div>
       <h2 className={styles.title}>{t("source.title")}</h2>
       <ul className={styles.rows}>
         <li className={styles.row}>
