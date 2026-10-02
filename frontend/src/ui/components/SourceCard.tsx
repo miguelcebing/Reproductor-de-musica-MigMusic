@@ -3,7 +3,7 @@
     is a second entry point, not a second source of truth. */
 
 import { useT } from "../../i18n/useT";
-import { PerspectiveGrid } from "../vengeence/perspective-grid";
+import { PerspectiveGrid } from "../vengence/perspective-grid";
 import styles from "./SourceCard.module.css";
 
 export interface SourceCardProps {

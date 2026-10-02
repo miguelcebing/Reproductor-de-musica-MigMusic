@@ -33,7 +33,7 @@ import { LinkedListView } from "./ui/components/LinkedListView";
 import { SpotifyCallback } from "./ui/components/SpotifyCallback";
 import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
-import { BorderBeam } from "./ui/vengeence/border-beam";
+import { BorderBeam } from "./ui/vengence/border-beam";
 import playerStyles from "./ui/components/Player.module.css";
 
 const EMPTY_SONGS: readonly Song[] = [];
