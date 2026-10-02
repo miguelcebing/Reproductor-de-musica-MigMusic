@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { MotionConfig } from "framer-motion";
 
 import { App } from "./App";
+import "./styles/heroui.css";
 import "./styles/tokens.css";
 import "./ui/animations/presets.css";
 

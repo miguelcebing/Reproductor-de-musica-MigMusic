@@ -1,0 +1,94 @@
+/* Tailwind CSS v4 + HeroUI v3 bootstrap, bridged to the MigMusic design tokens.
+   `@heroui/styles` already pulls in `tailwindcss` (preflight + theme layers),
+   the HeroUI component layer and its own default light/dark theme.
+   Everything below is unlayered on purpose: unlayered declarations beat
+   `@layer base`, so our palette wins over HeroUI's stock variables while
+   HeroUI components keep resolving them through `var(...)`. */
+
+@import "@heroui/styles";
+
+/* --- Bridge: HeroUI semantic tokens -> MigMusic palette -------------------- */
+
+:root,
+[data-theme="dark"] {
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+
+  --surface: var(--color-surface);
+  --surface-foreground: var(--color-text);
+  --surface-secondary: var(--color-surface-raised);
+  --surface-tertiary: var(--color-surface-raised);
+
+  --overlay: var(--color-surface);
+  --overlay-foreground: var(--color-text);
+
+  --muted: var(--color-text-muted);
+
+  --default: var(--color-surface-raised);
+  --default-foreground: var(--color-text);
+
+  --field-background: var(--color-surface);
+  --field-foreground: var(--color-text);
+  --field-placeholder: var(--color-text-muted);
+
+  /* VIS-013: violeta nebulosa as the spatial accent. */
+  --accent: var(--color-accent);
+  --accent-foreground: #ffffff;
+
+  --success: var(--color-success);
+  --success-foreground: var(--color-bg);
+  --warning: var(--color-warning);
+  --warning-foreground: var(--color-bg);
+  --danger: var(--color-danger);
+  --danger-foreground: var(--color-bg);
+
+  --border: var(--color-border);
+  --separator: var(--color-border);
+  --focus: var(--color-primary);
+  --link: var(--color-primary-text);
+
+  --backdrop: rgb(4 6 12 / 72%);
+
+  --radius: var(--radius-md);
+}
+
+[data-theme="light"] {
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+
+  --surface: var(--color-surface);
+  --surface-foreground: var(--color-text);
+  --surface-secondary: var(--color-surface-raised);
+  --surface-tertiary: var(--color-surface-raised);
+
+  --overlay: var(--color-surface);
+  --overlay-foreground: var(--color-text);
+
+  --muted: var(--color-text-muted);
+
+  --default: var(--color-surface-raised);
+  --default-foreground: var(--color-text);
+
+  --field-background: var(--color-surface);
+  --field-foreground: var(--color-text);
+  --field-placeholder: var(--color-text-muted);
+
+  --accent: var(--color-accent);
+  --accent-foreground: #ffffff;
+
+  --success: var(--color-success);
+  --success-foreground: var(--color-bg);
+  --warning: var(--color-warning);
+  --warning-foreground: var(--color-bg);
+  --danger: var(--color-danger);
+  --danger-foreground: var(--color-bg);
+
+  --border: var(--color-border);
+  --separator: var(--color-border);
+  --focus: var(--color-primary-text);
+  --link: var(--color-primary-text);
+
+  --backdrop: rgb(19 26 44 / 45%);
+
+  --radius: var(--radius-md);
+}

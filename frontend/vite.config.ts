@@ -1,10 +1,18 @@
+import { fileURLToPath, URL } from "node:url";
+
 import { defineConfig } from "vitest/config";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 
 // The backend is proxied in development so the browser only ever talks to one
 // origin, mirroring the production setup where Vercel rewrites /api/*.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,
