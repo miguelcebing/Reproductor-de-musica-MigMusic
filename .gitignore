@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Handoff notes with live credentials (never commit)
+HANDOFF.md
+
 # --- Python (backend) ---
 __pycache__/
 *.py[cod]
