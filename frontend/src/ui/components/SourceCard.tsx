@@ -8,7 +8,6 @@ import styles from "./SourceCard.module.css";
 
 export interface SourceCardProps {
   readonly trackCount: number;
-  readonly canAdd: boolean;
   readonly spotifyConnected: boolean;
   readonly onAddMusic: () => void;
   readonly onSpotifyConnect: () => void;
@@ -17,7 +16,6 @@ export interface SourceCardProps {
 
 export function SourceCard({
   trackCount,
-  canAdd,
   spotifyConnected,
   onAddMusic,
   onSpotifyConnect,
@@ -42,7 +40,6 @@ export function SourceCard({
             type="button"
             className={styles.action}
             onClick={onAddMusic}
-            disabled={!canAdd}
             data-testid="source-add"
           >
             {t("dialog.addTitle")}

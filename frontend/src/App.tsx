@@ -195,21 +195,48 @@ export function App(): React.JSX.Element {
 
   const handleDeletePlaylist = useCallback(
     (id: string) => {
-      void controllers.playlists.remove(id);
+      void controllers.playlists.remove(id).then(() => {
+        // Dropping the active playlist clears `activeId` even when others
+        // remain; re-select one so the bar and the add button keep working.
+        const store = usePlaylistStore.getState();
+        if (store.activeId === null && store.playlists.length > 0) {
+          store.setActiveId(store.playlists[0].id);
+        }
+      });
     },
     [controllers],
   );
 
   const handleOpenAddDialog = useCallback(() => {
-    if (activeId) setDialogOpen(true);
-  }, [activeId]);
+    setDialogOpen(true);
+  }, []);
+
+  /** Active playlist for a submit; picks the first one or creates a default. */
+  const ensureActivePlaylist = useCallback(async (): Promise<string | null> => {
+    const store = usePlaylistStore.getState();
+    const current =
+      store.activeId !== null && store.playlists.some((item) => item.id === store.activeId)
+        ? store.activeId
+        : null;
+    if (current) return current;
+    const first = store.playlists[0];
+    if (first) {
+      store.setActiveId(first.id);
+      return first.id;
+    }
+    const created = await controllers.playlists.create(t("playlists.defaultName"));
+    return created?.id ?? null;
+  }, [controllers, t]);
 
   const handleSubmitTracks = useCallback(
     (files: File[], position: TrackPosition) => {
-      if (!activeId) return;
-      void controllers.playlists.addLocalTracks(activeId, files, position);
+      void (async () => {
+        const id = await ensureActivePlaylist();
+        if (!id) return;
+        await controllers.playlists.addLocalTracks(id, files, position);
+      })();
     },
-    [activeId, controllers],
+    [ensureActivePlaylist, controllers],
   );
 
   const handlePlayTrack = useCallback(
@@ -323,10 +350,13 @@ export function App(): React.JSX.Element {
 
   const handleSubmitSpotify = useCallback(
     (songs: readonly Song[], position: TrackPosition) => {
-      if (!activeId) return;
-      void controllers.playlists.addSongs(activeId, songs, position);
+      void (async () => {
+        const id = await ensureActivePlaylist();
+        if (!id) return;
+        await controllers.playlists.addSongs(id, songs, position);
+      })();
     },
-    [activeId, controllers],
+    [ensureActivePlaylist, controllers],
   );
 
   const handleToggleTheme = useCallback(() => {
@@ -435,7 +465,6 @@ export function App(): React.JSX.Element {
       >
         <SourceCard
           trackCount={songs.length}
-          canAdd={activeId !== null}
           spotifyConnected={spotifyStatus === "linked"}
           onAddMusic={handleOpenAddDialog}
           onSpotifyConnect={handleSpotifyConnect}

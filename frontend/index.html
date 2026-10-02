@@ -8,6 +8,11 @@
       content="MigMusic - reproductor de música con lista doblemente enlazada"
     />
     <title>MigMusic</title>
+    <!-- The Spotify Web Playback SDK throws on load unless this callback
+         exists; it only tells the SDK someone is listening. -->
+    <script>
+      window.onSpotifyWebPlaybackSDKReady = function () {};
+    </script>
   </head>
   <body>
     <div id="root"></div>
