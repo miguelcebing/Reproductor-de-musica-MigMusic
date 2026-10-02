@@ -24,6 +24,14 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* The progressive blur is an absolutely positioned <div> child, so the header's
+   own children opt into the stacking layer above it explicitly instead of
+   through a `> div` rule, which would capture the blur itself. */
+.brandWrap {
+  position: relative;
+  z-index: 1;
+}
+
 .brand {
   display: flex;
   flex-direction: column;
@@ -44,6 +52,8 @@
 }
 
 .headerActions {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: var(--space-2);
   align-items: center;
