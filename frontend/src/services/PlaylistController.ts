@@ -4,7 +4,7 @@
  * method and read the store, they never build URLs or handle errors.
  */
 
-import { ApiError, ApiClient } from "./apiClient";
+import { ApiError, ApiClient, failureMessage } from "./apiClient";
 import { localSongFromFile } from "./localTracks";
 import type { Playlist, Song, SongInput, TrackPosition } from "../domain/types";
 import { usePlaylistStore } from "../state/playlistStore";
@@ -234,13 +234,7 @@ export class PlaylistController {
   }
 
   private fail(cause: unknown, fallback: MessageKey): void {
-    const message =
-      cause instanceof ApiError
-        ? cause.message
-        : cause instanceof Error
-          ? cause.message
-          : String(cause);
-    this.toast("error", fallback, { message });
+    this.toast("error", fallback, { message: failureMessage(cause, this.language()) });
   }
 
   private toast(kind: "info" | "success" | "error", key: MessageKey, params?: Record<string, string | number>): void {

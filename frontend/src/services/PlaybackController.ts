@@ -7,7 +7,7 @@
  * two sources never play at once (`RF-12`).
  */
 
-import { ApiClient, ApiError } from "./apiClient";
+import { ApiClient, ApiError, failureMessage } from "./apiClient";
 import { createPlayerForSource, type PlayerFactoryOptions } from "../players/PlayerFactory";
 import type { AudioPlayer } from "../players/AudioPlayer";
 import type { AudioSource, PlaybackState, RepeatMode, SkipDirection, Song } from "../domain/types";
@@ -591,7 +591,7 @@ export class PlaybackController {
   }
 
   private fail(cause: unknown): void {
-    const message = cause instanceof Error ? cause.message : String(cause);
+    const message = failureMessage(cause, this.language());
     useToastStore
       .getState()
       .push("error", translate(this.language(), "toast.error", { message }));

@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiClient, apiUrl, resolveApiBaseUrl, type FetchLike } from "./apiClient";
+import {
+  ApiClient,
+  ApiError,
+  apiUrl,
+  failureMessage,
+  REQUEST_TIMEOUT_MS,
+  resolveApiBaseUrl,
+  type FetchLike,
+} from "./apiClient";
 
 describe("resolveApiBaseUrl", () => {
   it("appends /api to the given origin", () => {
@@ -249,5 +257,71 @@ describe("ApiClient device scope header", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("ApiClient request timeout", () => {
+  const origin = "https://migmusic.example";
+
+  it("aborts a hanging request and reports the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl: FetchLike = (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        });
+      const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+      const outcome = api.getPlayback().catch((cause: unknown) => cause);
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+      const error = await outcome;
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({ status: 0, code: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the abort timer once the answer lands", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const fetchImpl: FetchLike = (_url, init) => {
+        signal = init?.signal ?? undefined;
+        return Promise.resolve(
+          new Response(JSON.stringify({ authenticated: true }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      };
+      const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+      await api.spotifyStatus();
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * 2);
+
+      expect(signal?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("failureMessage", () => {
+  it("localises the timeout copy", () => {
+    const error = new ApiError(0, "timeout", "request timed out");
+    expect(failureMessage(error, "es")).toBe("El servidor tardó demasiado en responder");
+    expect(failureMessage(error, "en")).toBe("The server took too long to respond");
+  });
+
+  it("keeps every other message untouched", () => {
+    expect(failureMessage(new ApiError(404, "not_found", "No song matches"), "es")).toBe(
+      "No song matches",
+    );
+    expect(failureMessage(new Error("offline"), "es")).toBe("offline");
+    expect(failureMessage("plain text", "es")).toBe("plain text");
   });
 });

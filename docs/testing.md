@@ -42,7 +42,7 @@ playlists vía API en cada test.
 | Cobertura global backend | ≥ 80 % | **97.13 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
 | Tests backend | — | **334** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **103** (10 archivos) |
+| Tests frontend (Vitest) | — | **108** (10 archivos) |
 | Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -172,6 +172,16 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   después) y `play()` no reenvía si ya suena: dos roundtrips SDK menos por
   clic en el transporte. Unit `spotifySdk.test.ts` (6 tests) +
   `SpotifyPlayer.test.ts` actualizados.
+- **Botón mudo cuando el backend no contesta**: `apiClient` no tenía timeout,
+  así que una petición sin respuesta (Render free se duerme) dejaba el botón
+  colgado hasta que el navegador se rendía, sin explicación visible. Ahora
+  cada petición aborta a los 10 s (`REQUEST_TIMEOUT_MS`, `AbortController`) y
+  el fallo llega como `ApiError code="timeout"` → toast localizado
+  `toast.timeout` ("El servidor tardó demasiado en responder") con rollback
+  optimista en el transporte (`failureMessage` compartido por los cuatro
+  controllers). Unit: `apiClient.test.ts` (timeout con fake timers, timer
+  limpio tras el éxito, `failureMessage` es/en) + "PlaybackController
+  resilience" (copia localizada en el toast).
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -183,7 +193,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 103 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 108 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.

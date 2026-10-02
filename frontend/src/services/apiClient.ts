@@ -19,7 +19,11 @@ import type {
   SpotifyPlaylist,
   SpotifyPlayerState,
 } from "../domain/types";
+import { translate, type Language } from "../i18n/messages";
 import { getDeviceId } from "./deviceId";
+
+/** Nothing in this API legitimately takes longer; a hung button is worse. */
+export const REQUEST_TIMEOUT_MS = 10_000;
 
 /** Development uses the Vite proxy; production goes through Vercel's /api rewrite. */
 export function resolveApiBaseUrl(origin: string): string {
@@ -52,6 +56,14 @@ export class ApiError extends Error {
 
 /** Anything shaped like `fetch`, so tests never touch the network. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** Human-readable text for a failure; the timeout gets a localised copy. */
+export function failureMessage(cause: unknown, language: Language): string {
+  if (cause instanceof ApiError && cause.code === "timeout") {
+    return translate(language, "toast.timeout");
+  }
+  return cause instanceof Error ? cause.message : String(cause);
+}
 
 const defaultFetch: FetchLike = (url, init) => fetch(url, init);
 
@@ -282,24 +294,33 @@ export class ApiClient {
       (init.headers as Record<string, string>)["content-type"] = "application/json";
     }
 
-    let response: Response;
+    // A sleeping backend (Render free) must surface as a fast, clear toast
+    // instead of a button that stays silent until the browser gives up.
+    const controller = new AbortController();
+    init.signal = controller.signal;
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      response = await this.request(apiUrl(this.base, path), init);
+      const response = await this.request(apiUrl(this.base, path), init);
+      if (!response.ok) {
+        throw await ApiClient.toError(response);
+      }
+      if (response.status === 204) {
+        return undefined as T;
+      }
+      return (await response.json()) as T;
     } catch (cause) {
+      if (controller.signal.aborted) {
+        throw new ApiError(0, "timeout", "request timed out");
+      }
+      if (cause instanceof ApiError) throw cause;
       throw new ApiError(
         0,
         "network_error",
         cause instanceof Error ? cause.message : "network request failed",
       );
+    } finally {
+      clearTimeout(timer);
     }
-
-    if (!response.ok) {
-      throw await ApiClient.toError(response);
-    }
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    return (await response.json()) as T;
   }
 
   private static async toError(response: Response): Promise<ApiError> {

@@ -4,7 +4,7 @@
  * read `useSpotifyStore` (`SKILL5`, POO).
  */
 
-import { ApiClient, ApiError } from "./apiClient";
+import { ApiClient, failureMessage } from "./apiClient";
 import type { Song, SpotifyPlaylist } from "../domain/types";
 import { useSpotifyStore } from "../state/spotifyStore";
 import { useToastStore } from "../state/toastStore";
@@ -60,8 +60,7 @@ export class SpotifyController {
   }
 
   private fail(cause: unknown): void {
-    const message = cause instanceof ApiError || cause instanceof Error ? cause.message : String(cause);
-    this.toast("error", "toast.error", { message });
+    this.toast("error", "toast.error", { message: failureMessage(cause, this.language()) });
   }
 
   private toast(

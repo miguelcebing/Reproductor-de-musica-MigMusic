@@ -568,6 +568,20 @@ describe("PlaybackController resilience", () => {
     expect(toasts[0].kind).toBe("error");
     expect(toasts[0].text).toContain("no playlist is being played");
   });
+
+  it("shows the localised timeout copy when a transport call hangs", async () => {
+    usePlaybackStore.getState().setPlayback(makeState());
+    const { controller, api } = makeController();
+    api.next.mockRejectedValue(new ApiError(0, "timeout", "request timed out"));
+
+    const result = await controller.next();
+
+    expect(result).toBeNull();
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].kind).toBe("error");
+    expect(toasts[0].text).toContain("The server took too long to respond");
+  });
 });
 
 describe("PlaybackController optimistic UI", () => {

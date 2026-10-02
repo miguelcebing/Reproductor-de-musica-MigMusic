@@ -5,7 +5,7 @@
  * owns the navigation into the OAuth flow.
  */
 
-import { ApiClient, ApiError } from "./apiClient";
+import { ApiClient, failureMessage } from "./apiClient";
 import { useAuthStore } from "../state/authStore";
 import { useToastStore } from "../state/toastStore";
 import { translate, type Language, type MessageKey } from "../i18n/messages";
@@ -20,11 +20,6 @@ export interface AuthControllerOptions {
 export interface CallbackOutcome {
   readonly ok: boolean;
   readonly message?: string;
-}
-
-function describe(cause: unknown): string {
-  if (cause instanceof ApiError || cause instanceof Error) return cause.message;
-  return String(cause);
 }
 
 export class AuthController {
@@ -69,7 +64,7 @@ export class AuthController {
       return { ok: true };
     } catch (cause) {
       this.setLinked(false);
-      const message = describe(cause);
+      const message = failureMessage(cause, this.language());
       this.fail(cause, "toast.error");
       return { ok: false, message };
     }
@@ -91,7 +86,7 @@ export class AuthController {
   }
 
   private fail(cause: unknown, fallback: MessageKey): void {
-    this.toast("error", fallback, { message: describe(cause) });
+    this.toast("error", fallback, { message: failureMessage(cause, this.language()) });
   }
 
   private toast(kind: "success" | "error", key: MessageKey, params?: Record<string, string | number>): void {
