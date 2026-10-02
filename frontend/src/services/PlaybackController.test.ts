@@ -772,4 +772,109 @@ describe("PlaybackController optimistic UI", () => {
     expect(usePlaybackStore.getState().playback?.playing).toBe(true);
     await controller.onTrackChange(null);
   });
+
+  it("a report answered with the old state cannot bring the old song back", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null, position: 0 }),
+    );
+    const { controller, api, factory } = makeController();
+    await controller.onTrackChange(makeState().song!);
+    const next = hang();
+    api.next.mockReturnValue(next.promise);
+    // The backend has not processed the skip yet, so it still answers song 1.
+    api.report.mockResolvedValue(makeState({ index: 0, song: makeSong("local:1"), position: 5 }));
+
+    vi.useFakeTimers();
+    try {
+      const inFlight = controller.next(); // optimistic: song 2, intent in flight
+      expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+
+      factory.players[0].emit("timeupdate", { currentTime: 5 });
+      await vi.advanceTimersByTimeAsync(1000); // scheduleReport fires ~1s after the click
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(api.report).toHaveBeenCalledWith(5, true);
+      // The stale answer was dropped: the queue still shows the clicked song.
+      expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+      expect(usePlaybackStore.getState().playback?.index).toBe(1);
+
+      next.release(makeState({ index: 1, song: makeSong("local:2"), position: 0 }));
+      await inFlight;
+      expect(usePlaybackStore.getState().playback?.index).toBe(1);
+      expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+    } finally {
+      vi.useRealTimers();
+    }
+    await controller.onTrackChange(null);
+  });
+
+  it("ignores a report that raced the skip and lands after it", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null, position: 0 }),
+    );
+    const { controller, api, factory } = makeController();
+    await controller.onTrackChange(makeState().song!);
+    const next = hang();
+    api.next.mockReturnValue(next.promise);
+    const report = hang();
+    api.report.mockReturnValue(report.promise);
+
+    vi.useFakeTimers();
+    try {
+      const inFlight = controller.next();
+      factory.players[0].emit("timeupdate", { currentTime: 5 });
+      await vi.advanceTimersByTimeAsync(1000); // report (seq 2) joins the window
+      expect(api.report).toHaveBeenCalled();
+
+      next.release(makeState({ index: 1, song: makeSong("local:2"), position: 0 }));
+      await inFlight; // settles the intent; the report predates it
+      expect(usePlaybackStore.getState().playback?.index).toBe(1);
+
+      report.release(makeState({ index: 0, song: makeSong("local:1"), position: 5 }));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(usePlaybackStore.getState().playback?.index).toBe(1);
+      expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+    } finally {
+      vi.useRealTimers();
+    }
+    await controller.onTrackChange(null);
+  });
+
+  it("keeps the new song on screen when the answer times out", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    api.next.mockRejectedValue(new ApiError(0, "timeout", "request timed out"));
+
+    const result = await controller.next();
+
+    expect(result).toBeNull();
+    // The skip may still land on the backend: the next report reconciles,
+    // while a rollback here would flash the old song back mid-playback.
+    expect(usePlaybackStore.getState().playback?.index).toBe(1);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:2");
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].text).toContain("The server took too long to respond");
+  });
+
+  it("restores the old song when the server refuses the skip", async () => {
+    usePlaybackStore.getState().setPlayback(
+      makeState({ index: 0, next_index: 1, previous_index: null }),
+    );
+    const { controller, api } = makeController();
+    api.next.mockRejectedValue(new ApiError(500, "internal_error", "boom"));
+
+    const result = await controller.next();
+
+    expect(result).toBeNull();
+    expect(usePlaybackStore.getState().playback?.index).toBe(0);
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:1");
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].text).toContain("boom");
+  });
 });

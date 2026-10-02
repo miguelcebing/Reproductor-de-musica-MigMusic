@@ -35,6 +35,23 @@ function isNoActivePlayback(cause: unknown): boolean {
   return cause instanceof ApiError && cause.code === "no_active_playback";
 }
 
+/** No answer arrived: the command may still land on the backend after us. */
+function isUnknownOutcome(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError && (cause.code === "timeout" || cause.code === "network_error")
+  );
+}
+
+/** Whether two states point at the same song in the same queue slot. */
+function sameIdentity(a: PlaybackState, b: PlaybackState | null): boolean {
+  if (!b) return false;
+  return (
+    a.playlist_id === b.playlist_id &&
+    (a.song?.id ?? null) === (b.song?.id ?? null) &&
+    a.index === b.index
+  );
+}
+
 export interface PlaybackControllerOptions {
   readonly language: () => Language;
   /** Injectable factory (tests); defaults to the source-aware `PlayerFactory`. */
@@ -65,6 +82,10 @@ export class PlaybackController {
   /** Newest request started; responses older than `lastAppliedSeq` are stale. */
   private requestSeq = 0;
   private lastAppliedSeq = 0;
+  /** Transport command in flight; until it settles no answer may move the song. */
+  private intentSeq: number | null = null;
+  /** Answers initiated at or before this seq predate a settled transport move. */
+  private guardBelow = 0;
 
   constructor(api: ApiClient, options: PlaybackControllerOptions) {
     this.api = api;
@@ -307,7 +328,7 @@ export class PlaybackController {
     optimistic?: Partial<PlaybackState>,
   ): Promise<PlaybackState | null> {
     const before = this.identity();
-    const state = await this.send(request, optimistic);
+    const state = await this.send(request, optimistic, undefined, true);
     if (state) await this.syncAfterState(state, before);
     return state;
   }
@@ -321,14 +342,21 @@ export class PlaybackController {
    * it before the player even reacted), it passes the pre-patch state as
    * `rollbackTo` so the failure path still restores the truth. Answers apply
    * in initiation order: a response older than one already applied is dropped,
-   * so a slow `report` can never undo a `next`. A `no_active_playback` answer
-   * (the backend lost its context on restart) rebuilds it with a `select` and
-   * retries once before giving up.
+   * so a slow `report` can never undo a `next`. While a transport command is
+   * pending — and for answers that raced into its window — a response
+   * pointing at a different song is dropped too: a `report` answered with the
+   * backend state from *before* the skip must not flash the old song back.
+   * A `no_active_playback` answer (the backend lost its context on restart)
+   * rebuilds it with a `select` and retries once before giving up. When a
+   * guarded command fails with an unknown outcome (timeout/connection drop)
+   * the optimistic state is kept instead of rolled back — the command may
+   * still land late, and the next report reconciles either way.
    */
   private async send(
     request: () => Promise<PlaybackState>,
     optimistic?: Partial<PlaybackState>,
     rollbackTo?: PlaybackState,
+    transport = false,
   ): Promise<PlaybackState | null> {
     const seq = ++this.requestSeq;
     const store = usePlaybackStore.getState();
@@ -339,6 +367,7 @@ export class PlaybackController {
       // click (a slow `report` still in flight) must not undo it.
       this.lastAppliedSeq = seq;
     }
+    if (transport) this.intentSeq = seq;
     try {
       let state: PlaybackState;
       try {
@@ -347,16 +376,34 @@ export class PlaybackController {
         if (!isNoActivePlayback(cause) || !(await this.rebuildContext())) throw cause;
         state = await request();
       }
-      if (seq < this.lastAppliedSeq) return null; // a newer answer already won
+      const differs = !sameIdentity(state, usePlaybackStore.getState().playback);
+      const foreign = this.intentSeq !== null && this.intentSeq !== seq;
+      if (differs && (foreign || seq <= this.guardBelow)) return null; // pre-command truth
+      if (seq < this.lastAppliedSeq) {
+        this.settleIntent(seq);
+        return null; // a newer answer already won
+      }
       this.lastAppliedSeq = seq;
       usePlaybackStore.getState().setPlayback(state);
+      this.settleIntent(seq);
       return state;
     } catch (cause) {
+      this.settleIntent(seq);
       if (seq >= this.lastAppliedSeq) {
-        if (snapshot && optimistic) this.rollback(snapshot, optimistic);
+        if (snapshot && optimistic && !(transport && isUnknownOutcome(cause))) {
+          this.rollback(snapshot, optimistic);
+        }
         this.fail(cause);
       }
       return null;
+    }
+  }
+
+  /** A transport answer is in: later answers may change the song again. */
+  private settleIntent(seq: number): void {
+    if (this.intentSeq === seq) {
+      this.intentSeq = null;
+      this.guardBelow = this.requestSeq;
     }
   }
 

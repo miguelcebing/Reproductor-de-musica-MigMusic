@@ -42,7 +42,7 @@ playlists vía API en cada test.
 | Cobertura global backend | ≥ 80 % | **97.13 %** |
 | Cobertura `domain/` | ≥ 95 % | **100 %** |
 | Tests backend | — | **334** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **110** (10 archivos) |
+| Tests frontend (Vitest) | — | **114** (10 archivos) |
 | Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
@@ -205,6 +205,24 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
   `await player.play()`, así toda respuesta anterior al clic se descarta.
   Unit "PlaybackController optimistic UI" (+2: canción que no retrocede y
   flip que aguanta durante el arranque de `play()`).
+- **Siguiente/anterior sonaba la canción nueva ~2 s y volvía a la vieja**:
+  dos vías en `PlaybackController.send`. (1) El `report` de 1 s disparado
+  *después* del clic (secuencia mayor) se procesaba en el backend antes de
+  que el `next` colgado llegara, devolvía la canción anterior y se aplicaba
+  íntegra: la UI y el audio volvían a la vieja. (2) En timeout, el
+  `rollback(snapshot)` restauraba la vieja a ciegas aunque el comando
+  hubiera aterrizado tarde. Ahora cada `commit()` (next/previous/select/
+  seek/skip/finished) abre una ventana de identidad (`intentSeq`): hasta que
+  su respuesta asiente, cualquier respuesta —propia o ajena— que apunte a
+  otra canción se descarta (y las que corrían dentro de la ventana se
+  protegen con `guardBelow` al asentar), y un fallo de desenlace desconocido
+  (`timeout`/`network_error`) conserva el estado optimista en lugar de
+  hacer rollback: el siguiente `report` reconcilia con la verdad del
+  backend (que el comando haya aterrizado o no), con el toast de timeout
+  explicando el fallo. Unit "PlaybackController optimistic UI" (+4: report
+  con estado viejo durante la ventana, report tardío que aterriza tras la
+  respuesta, timeout que conserva la canción nueva, error del servidor que
+  sí hace rollback).
 
 ## 6. Limitaciones conocidas (sin ocultarlas)
 
@@ -216,7 +234,7 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
    aislamiento por `owner_id`).
 3. **Audio real**: el E2E comprueba el ciclo completo sobre un `<audio>` con WAV generado
    y autoplay habilitado por flag de Chromium; la audición por altavoces es manual (demo).
-4. **Cobertura de frontend sin gate**: los 110 tests de Vitest no tienen umbral de
+4. **Cobertura de frontend sin gate**: los 114 tests de Vitest no tienen umbral de
    cobertura en CI (el `TEST-002` confirmado aplica al backend).
 5. **Auditoría de dependencias**: `npm audit`/`pip-audit` no están como job de CI
    (SKILL6 lo recomienda); ejecutar manualmente antes de publicar.
