@@ -14,6 +14,8 @@ export interface PlaylistBarProps {
   readonly onRename: (id: string, name: string) => void;
   readonly onDelete: (id: string) => void;
   readonly onAddMusic: () => void;
+  /** Quick entry point to the YouTube Music tab. */
+  readonly onAddYouTube?: () => void;
 }
 
 export const PlaylistBar = memo(function PlaylistBar({
@@ -24,6 +26,7 @@ export const PlaylistBar = memo(function PlaylistBar({
   onRename,
   onDelete,
   onAddMusic,
+  onAddYouTube,
 }: PlaylistBarProps): React.JSX.Element {
   const t = useT();
   const [name, setName] = useState("");
@@ -91,6 +94,18 @@ export const PlaylistBar = memo(function PlaylistBar({
       >
         {t("playlists.delete")}
       </button>
+
+      {onAddYouTube && (
+        <button
+          type="button"
+          className={styles.button}
+          onClick={onAddYouTube}
+          data-testid="add-youtube"
+          title={t("source.youtube")}
+        >
+          {t("source.youtube")}
+        </button>
+      )}
 
       <button
         type="button"

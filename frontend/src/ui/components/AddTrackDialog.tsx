@@ -32,6 +32,8 @@ export type { TrackPosition };
 
 export interface AddTrackDialogProps {
   readonly open: boolean;
+  /** Tab the dialog opens on; lets a source button jump straight to it. */
+  readonly initialTab?: "local" | "spotify" | "youtube";
   readonly songsLength: number;
   readonly spotifyConnected: boolean;
   readonly spotifyLoading: boolean;
@@ -51,6 +53,7 @@ export interface AddTrackDialogProps {
 
 export const AddTrackDialog = memo(function AddTrackDialog({
   open,
+  initialTab = "local",
   songsLength,
   spotifyConnected,
   spotifyLoading,
@@ -87,15 +90,19 @@ export const AddTrackDialog = memo(function AddTrackDialog({
     setSelected(new Set());
   }, [spotifyResults, youtubeResults]);
 
+  // Opening jumps to the requested source tab; closing resets everything.
   useEffect(() => {
-    if (open) return;
+    if (open) {
+      setTab(initialTab);
+      return;
+    }
     setQuery("");
     setSearched(false);
     setSelected(new Set());
     setError(null);
     setFiles([]);
     setTab("local");
-  }, [open]);
+  }, [open, initialTab]);
 
   const maxIndex = Math.max(0, songsLength - 1);
   const boundedIndex = Math.min(index, maxIndex);

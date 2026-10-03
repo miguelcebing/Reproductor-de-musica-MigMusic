@@ -10,7 +10,8 @@ export interface SourceCardProps {
   readonly trackCount: number;
   readonly spotifyConnected: boolean;
   readonly youtubeAvailable?: boolean;
-  readonly onAddMusic: () => void;
+  /** Open the add dialog focused on a given source tab. */
+  readonly onAddFrom: (source: "local" | "spotify" | "youtube") => void;
   readonly onSpotifyConnect: () => void;
   readonly onSpotifyDisconnect: () => void;
 }
@@ -19,7 +20,7 @@ export function SourceCard({
   trackCount,
   spotifyConnected,
   youtubeAvailable = false,
-  onAddMusic,
+  onAddFrom,
   onSpotifyConnect,
   onSpotifyDisconnect,
 }: SourceCardProps): React.JSX.Element {
@@ -41,7 +42,7 @@ export function SourceCard({
           <button
             type="button"
             className={styles.action}
-            onClick={onAddMusic}
+            onClick={() => onAddFrom("local")}
             data-testid="source-add"
           >
             {t("dialog.addTitle")}
@@ -75,7 +76,7 @@ export function SourceCard({
           <button
             type="button"
             className={styles.action}
-            onClick={onAddMusic}
+            onClick={() => onAddFrom("youtube")}
             data-testid="source-youtube"
           >
             {t("dialog.addTitle")}

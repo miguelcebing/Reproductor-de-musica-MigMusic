@@ -86,6 +86,8 @@ export function App(): React.JSX.Element {
   // UI state
   const [nodesVisible, setNodesVisible] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Which tab the dialog opens on, so a source button jumps straight there.
+  const [dialogTab, setDialogTab] = useState<"local" | "spotify" | "youtube">("local");
 
   // OAuth landing page (`F6`): decided once, before the first paint
   const callback = useMemo(
@@ -213,8 +215,17 @@ export function App(): React.JSX.Element {
   );
 
   const handleOpenAddDialog = useCallback(() => {
+    setDialogTab("local");
     setDialogOpen(true);
   }, []);
+
+  const handleOpenDialogWithSource = useCallback(
+    (source: "local" | "spotify" | "youtube") => {
+      setDialogTab(source);
+      setDialogOpen(true);
+    },
+    [],
+  );
 
   /** Active playlist for a submit; picks the first one or creates a default. */
   const ensureActivePlaylist = useCallback(async (): Promise<string | null> => {
@@ -467,6 +478,7 @@ export function App(): React.JSX.Element {
           onRename={handleRenamePlaylist}
           onDelete={handleDeletePlaylist}
           onAddMusic={handleOpenAddDialog}
+          onAddYouTube={() => handleOpenDialogWithSource("youtube")}
         />
         <TrackList
           songs={songs}
@@ -490,7 +502,7 @@ export function App(): React.JSX.Element {
           trackCount={songs.length}
           spotifyConnected={spotifyStatus === "linked"}
           youtubeAvailable
-          onAddMusic={handleOpenAddDialog}
+          onAddFrom={handleOpenDialogWithSource}
           onSpotifyConnect={handleSpotifyConnect}
           onSpotifyDisconnect={handleSpotifyDisconnect}
         />
@@ -508,6 +520,7 @@ export function App(): React.JSX.Element {
 
       <AddTrackDialog
         open={dialogOpen}
+        initialTab={dialogTab}
         songsLength={songs.length}
         spotifyConnected={spotifyStatus === "linked"}
         spotifyLoading={spotifyLoading}
