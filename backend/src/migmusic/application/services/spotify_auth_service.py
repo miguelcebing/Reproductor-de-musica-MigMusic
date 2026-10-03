@@ -127,11 +127,18 @@ class SpotifyAuthService:
         await self._tokens.delete(session_id)
 
     async def _store(self, session_id: str, tokens: TokenResponse) -> None:
+        # A refresh response may omit `refresh_token`; keep the existing one
+        # instead of overwriting it with an empty string (which would force a
+        # fresh sign-in on the next refresh).
+        refresh_token = tokens.refresh_token
+        if not refresh_token:
+            existing = await self._tokens.get(session_id)
+            refresh_token = existing.refresh_token if existing is not None else ""
         await self._tokens.set(
             session_id,
             TokenBundle(
                 access_token=tokens.access_token,
-                refresh_token=tokens.refresh_token,
+                refresh_token=refresh_token,
                 expires_at=tokens.expires_at,
                 scope=tokens.scope,
             ),

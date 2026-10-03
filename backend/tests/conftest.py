@@ -66,11 +66,15 @@ def settings() -> Settings:
     return Settings(_env_file=None)
 
 
+TEST_DEVICE_ID = "test-device"
+
+
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
-    """ASGI test client against a freshly built application."""
+    """ASGI test client whose default headers carry the required device id."""
     app = create_app(settings)
     with TestClient(app) as test_client:
+        test_client.headers.update({"X-Device-Id": TEST_DEVICE_ID})
         yield test_client
 
 
@@ -125,11 +129,13 @@ def seed_playlist(
 
     from migmusic.domain import Playlist
 
-    def _seed(*, name: str = "Queue", count: int = 3, duration: float = 180.0) -> Playlist:
+    def _seed(
+        *, name: str = "Queue", count: int = 3, duration: float = 180.0, owner_id: str = "device-a"
+    ) -> Playlist:
         playlist = Playlist(name)
         for _ in range(count):
             playlist.add(make_song(duration=duration))
-        repository.save(playlist)
+        repository.save(playlist, owner_id=owner_id)
         return playlist
 
     return _seed

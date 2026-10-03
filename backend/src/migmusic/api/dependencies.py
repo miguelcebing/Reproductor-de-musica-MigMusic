@@ -12,9 +12,14 @@ from fastapi import Depends, HTTPException, Request, status
 
 from migmusic.api.spotify_session import read_session_id
 from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.domain.ports.music_provider import MusicProvider
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient, token_refresher
+from migmusic.infrastructure.spotify.spotify_music_provider import (
+    SpotifyMusicProvider,
+    current_access_token,
+)
 
 
 def get_playlist_service(request: Request) -> PlaylistService:
@@ -42,18 +47,29 @@ def get_music_provider(request: Request) -> MusicProvider:
     return cast(MusicProvider, request.app.state.music_provider)
 
 
+def get_music_provider_registry(request: Request) -> MusicProviderRegistry:
+    """Return the source→provider registry built by the composition root."""
+    return cast(MusicProviderRegistry, request.app.state.music_providers)
+
+
 DEVICE_ID_HEADER = "x-device-id"
 
 
-def get_device_id(request: Request) -> str | None:
-    """Optional device scope: ``X-Device-Id`` narrows playlist visibility.
+def require_device_id(request: Request) -> str:
+    """Require the caller's anonymous device id: ``X-Device-Id``.
 
-    Missing or blank means "unscoped" (``None``): the caller sees every
-    playlist. This is UX isolation for local lists, not authentication — the
-    header is advisory and cheap to omit in tooling and curl checks.
+    Every playlist and playback call is scoped to this id, so a missing or
+    blank header is rejected (400) instead of silently falling back to an
+    unscoped view that would expose other devices' data. This is UX isolation
+    between devices, not authentication.
     """
     value = request.headers.get(DEVICE_ID_HEADER, "").strip()
-    return value or None
+    if not value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Device-Id header is required",
+        )
+    return value
 
 
 async def require_spotify_token(
@@ -71,13 +87,25 @@ async def require_spotify_token(
     # Let the Web API client renew this session's token when a 401 arrives
     # despite the proactive refresh (clock skew, early invalidation).
     token_refresher.set(lambda: service.force_refresh(session_id))
+    # Expose the token to the provider through the request-scoped context so
+    # the MusicProvider contract stays free of Spotify-specific parameters.
+    current_access_token.set(token.access_token)
     return token.access_token
 
 
 PlaylistServiceDep = Annotated[PlaylistService, Depends(get_playlist_service)]
 PlaybackServiceDep = Annotated[PlaybackService, Depends(get_playback_service)]
-DeviceIdDep = Annotated[str | None, Depends(get_device_id)]
+DeviceIdDep = Annotated[str, Depends(require_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]
 MusicProviderDep = Annotated[MusicProvider, Depends(get_music_provider)]
+MusicProviderRegistryDep = Annotated[MusicProviderRegistry, Depends(get_music_provider_registry)]
+
+
+def get_spotify_provider(request: Request) -> SpotifyMusicProvider:
+    """Return the Spotify adapter typed for its Spotify-only extras."""
+    return cast(SpotifyMusicProvider, request.app.state.music_provider)
+
+
+SpotifyProviderDep = Annotated[SpotifyMusicProvider, Depends(get_spotify_provider)]
 SpotifyTokenDep = Annotated[str, Depends(require_spotify_token)]

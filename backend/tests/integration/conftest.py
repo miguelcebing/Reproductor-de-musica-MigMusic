@@ -142,7 +142,11 @@ def seed_token(app: Any, session_id: str, *, expires_in: float = 3600.0) -> None
 
 @pytest.fixture
 def create_playlist(client: TestClient) -> Callable[..., PlaylistPayload]:
-    """Create a playlist over HTTP and return its payload."""
+    """Create a playlist over HTTP and return its payload.
+
+    The client sends ``X-Device-Id`` by default, so the playlist is owned by
+    the test device.
+    """
 
     def _create(name: str = "Queue") -> PlaylistPayload:
         response = client.post("/api/playlists", json={"name": name})

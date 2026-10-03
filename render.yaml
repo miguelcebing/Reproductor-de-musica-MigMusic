@@ -28,6 +28,13 @@ services:
         value: https://migmusic.vercel.app/api/auth/callback
       - key: RENDER_BACKEND_URL
         value: https://migmusic-api.onrender.com
+      # YouTube Music (keyless, unofficial): metadata only, no secrets.
+      - key: YOUTUBE_MUSIC_ENABLED
+        value: "true"
+      - key: YOUTUBE_MUSIC_LANGUAGE
+        value: en
+      - key: YOUTUBE_MUSIC_TIMEOUT_SECONDS
+        value: "8"
       # Generated once by Render and kept out of the repository (DEPLOY-005).
       - key: SESSION_SECRET_KEY
         generateValue: true

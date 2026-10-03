@@ -9,7 +9,9 @@ import styles from "./SourceCard.module.css";
 export interface SourceCardProps {
   readonly trackCount: number;
   readonly spotifyConnected: boolean;
-  readonly onAddMusic: () => void;
+  readonly youtubeAvailable?: boolean;
+  /** Open the add dialog focused on a given source tab. */
+  readonly onAddFrom: (source: "local" | "spotify" | "youtube") => void;
   readonly onSpotifyConnect: () => void;
   readonly onSpotifyDisconnect: () => void;
 }
@@ -17,7 +19,8 @@ export interface SourceCardProps {
 export function SourceCard({
   trackCount,
   spotifyConnected,
-  onAddMusic,
+  youtubeAvailable = false,
+  onAddFrom,
   onSpotifyConnect,
   onSpotifyDisconnect,
 }: SourceCardProps): React.JSX.Element {
@@ -39,7 +42,7 @@ export function SourceCard({
           <button
             type="button"
             className={styles.action}
-            onClick={onAddMusic}
+            onClick={() => onAddFrom("local")}
             data-testid="source-add"
           >
             {t("dialog.addTitle")}
@@ -60,6 +63,23 @@ export function SourceCard({
             data-testid="source-spotify"
           >
             {t(spotifyConnected ? "spotify.disconnect" : "spotify.connect")}
+          </button>
+        </li>
+        <li className={styles.row}>
+          <span className={styles.dot} data-on={String(youtubeAvailable)} aria-hidden="true" />
+          <span className={styles.labels}>
+            <span className={styles.name}>{t("source.youtube")}</span>
+            <span className={styles.meta}>
+              {t(youtubeAvailable ? "spotify.connected" : "youtube.notConfigured")}
+            </span>
+          </span>
+          <button
+            type="button"
+            className={styles.action}
+            onClick={() => onAddFrom("youtube")}
+            data-testid="source-youtube"
+          >
+            {t("dialog.addTitle")}
           </button>
         </li>
       </ul>

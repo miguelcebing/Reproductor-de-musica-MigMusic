@@ -28,6 +28,15 @@
   `SqlPlaylistRepository` (PostgreSQL, `DB-002`) in production, or
   `InMemoryPlaylistRepository` in development and tests — both behind the same
   `PlaylistRepository` port.
+- **Every playlist and playback request requires an `X-Device-Id` header.** The
+  value is an anonymous per-browser UUID that the frontend mints and stores in
+  `localStorage`. All queries and writes are scoped to it; a missing or blank
+  header is answered `400`. A playlist that exists but belongs to another device
+  is reported as `404` (never `403`), so foreign ids are not enumerable. This is
+  UX isolation between devices, not authentication: clearing browser storage or
+  switching devices loses access to that device's playlists.
+- `POST /api/testing/reset` wipes every playlist and is mounted only when
+  `APP_ENV != production` (the E2E suite uses it); production never exposes it.
 
 ## Endpoints
 
@@ -209,6 +218,28 @@ browser. `SongOut` is the same shape as in *Playlists*, with
   ADR-005) propagates with `Retry-After` honoured once by the client.
 - `5xx` from Spotify surface as `502/503`; `404`/`409` keep their status so
   "no active device" stays distinguishable.
+
+---
+
+### YouTube Music (`F8`)
+
+Metadata-only, **keyless** source backed by the unofficial `ytmusicapi`
+(`YOUTUBE_MUSIC_ENABLED=true`, no OAuth, no cookies). Results use the same
+`SongOut` shape with `source: "youtube"` and `id` equal to the YouTube
+`videoId`. Audio is **never** resolved server-side: the browser plays it
+through the official YouTube IFrame player using that `videoId`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/youtube/search` | `?q=…&limit=1..50` → `SongOut[]`. |
+
+**Notes**
+
+- The route is only mounted when `YOUTUBE_MUSIC_ENABLED=true`; otherwise the
+  frontend hides the YouTube tab.
+- Search results are cached in-process for 5 minutes; a failed call answers
+  `502/504` and never breaks Spotify or local playback.
+- Lyrics for YouTube tracks use the watch-playlist browse id (see `F9`).
 
 ---
 

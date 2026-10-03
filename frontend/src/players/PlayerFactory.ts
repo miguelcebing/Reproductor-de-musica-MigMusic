@@ -9,6 +9,7 @@ import type { AudioPlayer } from "./AudioPlayer";
 import { LocalAudioPlayer } from "./LocalAudioPlayer";
 import { SpotifyPlayer, type SpotifyPlaybackControl } from "./SpotifyPlayer";
 import { WebPlaybackSession, type SpotifySdkSession } from "./spotifySdk";
+import { YouTubePlayer } from "./YouTubePlayer";
 import type { ApiClient } from "../services/apiClient";
 
 export interface PlayerFactoryOptions {
@@ -19,7 +20,7 @@ export interface PlayerFactoryOptions {
 let shared: { api: ApiClient; session: SpotifySdkSession } | null = null;
 
 export function createPlayerForSource(
-  source: "local" | "spotify",
+  source: "local" | "spotify" | "youtube",
   options?: PlayerFactoryOptions,
 ): AudioPlayer {
   switch (source) {
@@ -30,6 +31,9 @@ export function createPlayerForSource(
       if (!api) throw new Error("SpotifyPlayer requires an ApiClient");
       return new SpotifyPlayer({ control: playbackControlFor(api), session: sessionFor(api) });
     }
+    case "youtube":
+      // Played through YouTube's official IFrame player using the videoId.
+      return new YouTubePlayer();
     default:
       throw new Error(`Unknown source: ${source}`);
   }

@@ -7,6 +7,7 @@ import { PlaylistController } from "./services/PlaylistController";
 import { PlaybackController } from "./services/PlaybackController";
 import { AuthController } from "./services/AuthController";
 import { SpotifyController } from "./services/SpotifyController";
+import { YouTubeController } from "./services/YouTubeController";
 import { readCallbackParams } from "./services/callbackParams";
 import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
 import { REPEAT_CYCLE } from "./ui/constants";
@@ -16,6 +17,7 @@ import { useSettingsStore, applyDocumentSettings } from "./state/settingsStore";
 import { usePlaylistStore } from "./state/playlistStore";
 import { usePlaybackStore } from "./state/playbackStore";
 import { useSpotifyStore } from "./state/spotifyStore";
+import { useYouTubeStore } from "./state/youtubeStore";
 import { useAuthStore } from "./state/authStore";
 import { useLocalFileStore } from "./state/localFileStore";
 import { useToastStore } from "./state/toastStore";
@@ -73,6 +75,10 @@ export function App(): React.JSX.Element {
   const spotifyResults = useSpotifyStore((s) => s.results);
   const spotifyLoading = useSpotifyStore((s) => s.loading);
 
+  // YouTube Music catalog (`F8`, keyless)
+  const youtubeResults = useYouTubeStore((s) => s.results);
+  const youtubeLoading = useYouTubeStore((s) => s.loading);
+
   // Toasts
   const toasts = useToastStore((s) => s.toasts);
   const dismissToast = useToastStore((s) => s.dismiss);
@@ -80,6 +86,8 @@ export function App(): React.JSX.Element {
   // UI state
   const [nodesVisible, setNodesVisible] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Which tab the dialog opens on, so a source button jumps straight there.
+  const [dialogTab, setDialogTab] = useState<"local" | "spotify" | "youtube">("local");
 
   // OAuth landing page (`F6`): decided once, before the first paint
   const callback = useMemo(
@@ -97,6 +105,7 @@ export function App(): React.JSX.Element {
       playback,
       auth: new AuthController(api, { language: lang }),
       spotify: new SpotifyController(api, { language: lang }),
+      youtube: new YouTubeController(api, { language: lang }),
     };
   }, []);
 
@@ -130,17 +139,15 @@ export function App(): React.JSX.Element {
         useToastStore.getState().push("error", translate(language, "toast.error", { message }));
       }
       if (cancelled) return;
-      const [, playback] = await Promise.all([
+      // Startup never resumes audio by itself: the queue is loaded, but the
+      // player starts empty until the user presses play (autoplay policy and
+      // a clean "nothing playing" screen).
+      await Promise.all([
         controllers.playlists.refresh(),
-        controllers.playback.refresh(),
+        controllers.playback.refresh(/* restorePlaying */ false),
       ]);
-      if (cancelled || !playback?.playlist_id) return;
-      // A reload restarts `activeId` while the backend keeps its playback
-      // context: show the playlist being played, not the first one, or the
-      // list on screen stops matching the transport (`UX-011`).
-      const store = usePlaylistStore.getState();
-      const exists = store.playlists.some((item) => item.id === playback.playlist_id);
-      if (exists) store.setActiveId(playback.playlist_id);
+      if (cancelled) return;
+      usePlaybackStore.getState().reset();
     };
     void bootstrap();
     void controllers.auth.refresh();
@@ -208,8 +215,17 @@ export function App(): React.JSX.Element {
   );
 
   const handleOpenAddDialog = useCallback(() => {
+    setDialogTab("local");
     setDialogOpen(true);
   }, []);
+
+  const handleOpenDialogWithSource = useCallback(
+    (source: "local" | "spotify" | "youtube") => {
+      setDialogTab(source);
+      setDialogOpen(true);
+    },
+    [],
+  );
 
   /** Active playlist for a submit; picks the first one or creates a default. */
   const ensureActivePlaylist = useCallback(async (): Promise<string | null> => {
@@ -359,6 +375,24 @@ export function App(): React.JSX.Element {
     [ensureActivePlaylist, controllers],
   );
 
+  const handleYouTubeSearch = useCallback(
+    (query: string) => {
+      void controllers.youtube.search(query);
+    },
+    [controllers],
+  );
+
+  const handleSubmitYouTube = useCallback(
+    (songs: readonly Song[], position: TrackPosition) => {
+      void (async () => {
+        const id = await ensureActivePlaylist();
+        if (!id) return;
+        await controllers.playlists.addSongs(id, songs, position);
+      })();
+    },
+    [ensureActivePlaylist, controllers],
+  );
+
   const handleToggleTheme = useCallback(() => {
     setTheme(theme === "dark" ? "light" : "dark");
   }, [theme, setTheme]);
@@ -466,7 +500,8 @@ export function App(): React.JSX.Element {
         <SourceCard
           trackCount={songs.length}
           spotifyConnected={spotifyStatus === "linked"}
-          onAddMusic={handleOpenAddDialog}
+          youtubeAvailable
+          onAddFrom={handleOpenDialogWithSource}
           onSpotifyConnect={handleSpotifyConnect}
           onSpotifyDisconnect={handleSpotifyDisconnect}
         />
@@ -484,16 +519,22 @@ export function App(): React.JSX.Element {
 
       <AddTrackDialog
         open={dialogOpen}
+        initialTab={dialogTab}
         songsLength={songs.length}
         spotifyConnected={spotifyStatus === "linked"}
         spotifyLoading={spotifyLoading}
         spotifyResults={spotifyResults}
+        youtubeAvailable
+        youtubeLoading={youtubeLoading}
+        youtubeResults={youtubeResults}
         onClose={handleCloseDialog}
         onSubmit={handleSubmitTracks}
         onSubmitSpotify={handleSubmitSpotify}
+        onSubmitYouTube={handleSubmitYouTube}
         onSpotifySearch={handleSpotifySearch}
         onSpotifyConnect={handleSpotifyConnect}
         onSpotifyDisconnect={handleSpotifyDisconnect}
+        onYouTubeSearch={handleYouTubeSearch}
       />
     </AppShell>
   );

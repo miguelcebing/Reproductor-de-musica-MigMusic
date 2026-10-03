@@ -2,16 +2,34 @@
 
 This is the only place that understands Spotify's JSON shape; if Spotify
 renames a field, one function here changes and the whole app keeps working.
+
+The access token is not a method parameter: the API edge sets it on the
+request-scoped :data:`current_access_token` context variable, so the
+:class:`MusicProvider` contract stays provider-agnostic (see the port).
 """
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.domain.entities.song import Song
 from migmusic.domain.ports.music_provider import MusicProvider
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
+
+# Set per request by ``require_spotify_token``; read by the provider below.
+current_access_token: ContextVar[str | None] = ContextVar(
+    "spotify_access_token", default=None
+)
+
+
+def _require_token() -> str:
+    """Return the request's Spotify token or fail loudly (programming error)."""
+    token = current_access_token.get()
+    if not token:
+        raise RuntimeError("no Spotify access token in this request context")
+    return token
 
 
 class SpotifyMusicProvider(MusicProvider):
@@ -20,18 +38,26 @@ class SpotifyMusicProvider(MusicProvider):
     def __init__(self, client: SpotifyApiClient) -> None:
         self._client = client
 
-    async def search_tracks(self, access_token: str, query: str, *, limit: int = 20) -> list[Song]:
-        raw_items = await self._client.search_tracks(access_token, query, limit=limit)
+    async def search_tracks(self, query: str, *, limit: int = 20) -> list[Song]:
+        raw_items = await self._client.search_tracks(_require_token(), query, limit=limit)
         return _songs_from(raw_items)
 
-    async def saved_tracks(self, access_token: str, *, limit: int = 20) -> list[Song]:
-        raw_items = await self._client.saved_tracks(access_token, limit=limit)
+    async def get_track(self, track_id: str) -> Song | None:
+        raw = await self._client.track(_require_token(), track_id)
+        track = _unwrap(raw)
+        return _to_song(track) if track is not None else None
+
+    # Spotify-only extras (not part of the generic port, but reachable through
+    # the typed ``SpotifyProviderDep`` used by the Spotify router).
+
+    async def saved_tracks(self, *, limit: int = 20) -> list[Song]:
+        raw_items = await self._client.saved_tracks(_require_token(), limit=limit)
         return _songs_from(raw_items)
 
-    async def playlist_tracks(
-        self, access_token: str, playlist_id: str, *, limit: int = 50
-    ) -> list[Song]:
-        raw_items = await self._client.playlist_tracks(access_token, playlist_id, limit=limit)
+    async def playlist_tracks(self, playlist_id: str, *, limit: int = 50) -> list[Song]:
+        raw_items = await self._client.playlist_tracks(
+            _require_token(), playlist_id, limit=limit
+        )
         return _songs_from(raw_items)
 
 

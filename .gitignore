@@ -54,3 +54,6 @@ deploy/
 .neon
 
 .vercel
+
+# Local AI-agent workspace (plans, scratch notes)
+.opencode/

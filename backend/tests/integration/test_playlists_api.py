@@ -51,7 +51,7 @@ def test_list_playlists_returns_every_playlist(
 
 
 def test_playlists_are_scoped_by_the_device_header(client: TestClient) -> None:
-    """`X-Device-Id` isolates local lists per device (UX, not auth)."""
+    """`X-Device-Id` isolates playlists per device (UX isolation, not auth)."""
     phone = {"X-Device-Id": "device-a"}
     laptop = {"X-Device-Id": "device-b"}
     assert (
@@ -64,26 +64,61 @@ def test_playlists_are_scoped_by_the_device_header(client: TestClient) -> None:
 
     from_a = client.get("/api/playlists", headers=phone)
     from_b = client.get("/api/playlists", headers=laptop)
-    unscoped = client.get("/api/playlists")
 
     assert [item["name"] for item in from_a.json()] == ["Phone mix"]
     assert [item["name"] for item in from_b.json()] == ["Laptop mix"]
-    # No header (tooling, smoke checks) still sees every playlist.
-    assert [item["name"] for item in unscoped.json()] == ["Phone mix", "Laptop mix"]
 
 
-def test_a_blank_device_header_stays_unscoped(client: TestClient) -> None:
-    """Whitespace-only headers are treated as "no device", not as an owner."""
-    assert (
-        client.post(
-            "/api/playlists", json={"name": "Shared"}, headers={"X-Device-Id": "device-a"}
-        ).status_code
-        == 201
-    )
+def test_a_missing_device_header_is_rejected(client: TestClient) -> None:
+    """Without the header there is no owner, so the call is refused (400)."""
+    response = client.get("/api/playlists", headers={"X-Device-Id": ""})
 
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "http_error"
+
+
+def test_a_blank_device_header_is_rejected(client: TestClient) -> None:
+    """Whitespace-only headers are not a device either."""
     response = client.get("/api/playlists", headers={"X-Device-Id": "   "})
 
-    assert [item["name"] for item in response.json()] == ["Shared"]
+    assert response.status_code == 400
+
+
+def test_a_device_cannot_read_anothers_playlist(client: TestClient) -> None:
+    """A foreign UUID answers 404 instead of exposing its songs (IDOR)."""
+    created = client.post(
+        "/api/playlists", json={"name": "Phone mix"}, headers={"X-Device-Id": "device-a"}
+    ).json()
+
+    response = client.get(
+        f"/api/playlists/{created['id']}", headers={"X-Device-Id": "device-b"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_a_device_cannot_mutate_anothers_playlist(client: TestClient) -> None:
+    """Rename, delete and add are all refused (404) for a foreign playlist."""
+    created = client.post(
+        "/api/playlists", json={"name": "Phone mix"}, headers={"X-Device-Id": "device-a"}
+    ).json()
+    other = {"X-Device-Id": "device-b"}
+    url = f"/api/playlists/{created['id']}"
+
+    assert client.patch(url, json={"name": "Hijacked"}, headers=other).status_code == 404
+    assert (
+        client.post(
+            f"{url}/songs",
+            json={"song": {"id": "x", "title": "x", "artist": "x", "source": "local"}},
+            headers=other,
+        ).status_code
+        == 404
+    )
+    assert client.delete(url, headers=other).status_code == 404
+    # The owner still sees the untouched playlist.
+    from_owner = client.get(url, headers={"X-Device-Id": "device-a"})
+    assert from_owner.status_code == 200
+    assert from_owner.json()["name"] == "Phone mix"
 
 
 def test_get_playlist_returns_its_songs_in_order(

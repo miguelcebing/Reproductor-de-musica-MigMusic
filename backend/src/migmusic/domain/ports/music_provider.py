@@ -1,12 +1,13 @@
-"""Port for third-party music catalogs (Spotify today, anything tomorrow).
+"""Port for third-party music catalogs (Spotify, YouTube Music, ...).
 
-Implementations live in ``infrastructure/spotify``; only the mapping to the
-domain :class:`~migmusic.domain.entities.song.Song` is part of the contract,
-so the rest of the system never sees a raw Spotify payload.
+Implementations live in ``infrastructure/<provider>``; only the mapping to the
+domain :class:`~migmusic.domain.entities.song.Song` is part of the contract, so
+the rest of the system never sees a raw provider payload.
 
-Tokens are passed per call on purpose: they are short-lived, session-scoped
-and refreshed by the application layer, so a provider instance must never hold
-one.
+The contract is deliberately **token-agnostic**: a provider that needs a
+session (Spotify) resolves it from a request-scoped context set by the API
+edge, while a keyless provider (YouTube Music) ignores it. That keeps the port
+satisfiable by any source without leaking provider-specific parameters.
 """
 
 from __future__ import annotations
@@ -20,15 +21,18 @@ class MusicProvider(ABC):
     """Read-only access to a remote catalog, already mapped to ``Song``."""
 
     @abstractmethod
-    async def search_tracks(self, access_token: str, query: str, *, limit: int = 20) -> list[Song]:
+    async def search_tracks(self, query: str, *, limit: int = 20) -> list[Song]:
         """Search the catalog and return at most ``limit`` songs."""
 
     @abstractmethod
-    async def saved_tracks(self, access_token: str, *, limit: int = 20) -> list[Song]:
-        """Return the tracks saved to the user's library."""
+    async def get_track(self, track_id: str) -> Song | None:
+        """Return one track by its provider id, or ``None`` when unknown."""
 
-    @abstractmethod
-    async def playlist_tracks(
-        self, access_token: str, playlist_id: str, *, limit: int = 50
-    ) -> list[Song]:
-        """Return the tracks of one of the user's playlists."""
+    async def get_lyrics(self, track: Song) -> str | None:
+        """Return the plain-text lyrics for ``track`` when the source has them.
+
+        Default implementation: sources without lyrics (Spotify, local) answer
+        ``None`` so the caller can fall back to another service. Providers that
+        can fetch lyrics (YouTube Music) override this.
+        """
+        return None

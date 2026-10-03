@@ -73,6 +73,10 @@ class SpotifyApiClient:
             data = await self._request("GET", "/search", token, params=params)
         return _items(data, "tracks")
 
+    async def track(self, token: str, track_id: str) -> dict[str, Any]:
+        """Return one track by id (``GET /tracks/{id}``)."""
+        return await self._request("GET", f"/tracks/{track_id}", token)
+
     async def saved_tracks(self, token: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Tracks saved to the user's library (``user-library-read``)."""
         data = await self._request(

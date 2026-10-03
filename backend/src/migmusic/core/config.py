@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # --- Playback ---
     skip_seconds: float = Field(default=5.0, alias="SKIP_SECONDS", gt=0)
 
+    # --- YouTube Music (unofficial, no auth: see ytmusicapi) ---
+    youtube_music_enabled: bool = Field(default=True, alias="YOUTUBE_MUSIC_ENABLED")
+    youtube_music_language: str = Field(default="en", alias="YOUTUBE_MUSIC_LANGUAGE")
+    youtube_music_timeout_seconds: float = Field(
+        default=8.0, alias="YOUTUBE_MUSIC_TIMEOUT_SECONDS", gt=0
+    )
+
     # --- Persistence ---
     database_url: str = Field(default="", alias="DATABASE_URL")
 

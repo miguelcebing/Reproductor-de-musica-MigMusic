@@ -161,6 +161,41 @@ def test_malformed_json_response_is_an_oauth_error() -> None:
     asyncio.run(run())
 
 
+def test_missing_fields_in_a_success_body_are_an_oauth_error() -> None:
+    """A 200 without `scope`/`refresh_token` must not crash the callback (500)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"access_token": "at-1", "token_type": "Bearer", "expires_in": 3600},
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            tokens = await _oauth().exchange_code("code", "verifier", client)
+        # Missing optional fields default instead of raising KeyError.
+        assert tokens.access_token == "at-1"
+        assert tokens.refresh_token == ""
+        assert tokens.scope == ""
+
+    asyncio.run(run())
+
+
+def test_missing_access_token_is_reported_as_malformed() -> None:
+    """No token means a typed error (422), never an unhandled 500."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"token_type": "Bearer", "expires_in": 3600})
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with pytest.raises(SpotifyOAuthError) as excinfo:
+                await _oauth().exchange_code("code", "verifier", client)
+        assert excinfo.value.code == "malformed_response"
+
+    asyncio.run(run())
+
+
 def test_settings_expose_a_spotify_config(settings: Settings) -> None:
     """The composition root reads OAuth settings in one place."""
     spotify = settings.spotify

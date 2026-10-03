@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.3.3",
+    "ytmusicapi==1.12.3",
 ]
 
 [dependency-groups]

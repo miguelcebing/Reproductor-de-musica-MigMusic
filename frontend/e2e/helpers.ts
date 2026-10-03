@@ -38,13 +38,14 @@ export function makeWav(name: string, seconds = 12): TestAudioFile {
   };
 }
 
-/** Wipe every playlist so each spec starts from a clean backend. */
+/**
+ * Wipe every playlist so each spec starts from a clean backend.
+ *
+ * Uses the development-only reset endpoint: `GET /api/playlists` now requires
+ * a device header and would only ever return the caller's own playlists.
+ * `APP_ENV=development` in the Playwright backend, so the route exists.
+ */
 export async function resetBackend(request: APIRequestContext): Promise<void> {
-  const response = await request.get("/api/playlists");
-  expect(response.ok(), "GET /api/playlists must answer 200").toBe(true);
-  const playlists = (await response.json()) as { id: string }[];
-  for (const playlist of playlists) {
-    const deleted = await request.delete(`/api/playlists/${playlist.id}`);
-    expect(deleted.status(), `DELETE ${playlist.id} must answer 204`).toBe(204);
-  }
+  const response = await request.post("/api/testing/reset");
+  expect(response.ok(), "POST /api/testing/reset must answer 200").toBe(true);
 }

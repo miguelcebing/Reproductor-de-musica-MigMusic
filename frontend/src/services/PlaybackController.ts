@@ -118,10 +118,25 @@ export class PlaybackController {
     this.userGesture = true;
   }
 
-  /** Load the transport state from backend. */
-  async refresh(): Promise<PlaybackState | null> {
+  /**
+   * Load the transport state from backend.
+   *
+   * `restorePlaying` (default `true`) controls what happens when the backend
+   * still holds a song marked as playing from an earlier session: on startup
+   * the app passes `false`, so the queue is restored but nothing is shown or
+   * played until the user presses play. Without this, a reload resumed the
+   * previous track on its own.
+   */
+  async refresh(restorePlaying = true): Promise<PlaybackState | null> {
     try {
       const state = await this.api.getPlayback();
+      if (!restorePlaying && state.playing) {
+        // Startup: keep the cursor/queue, but never reopen the audio by itself.
+        const paused = { ...state, playing: false };
+        usePlaybackStore.getState().setPlayback(paused);
+        void this.api.report(undefined, false).catch(() => undefined);
+        return paused;
+      }
       usePlaybackStore.getState().setPlayback(state);
       return state;
     } catch (cause) {
@@ -295,6 +310,11 @@ export class PlaybackController {
     await this.attachPlayer(this.createPlayer("spotify", { api: this.api }), song);
   }
 
+  /** Drive the official YouTube IFrame player for a YouTube Music track (`F8`). */
+  private async loadYouTubeTrack(song: Song): Promise<void> {
+    await this.attachPlayer(this.createPlayer("youtube"), song);
+  }
+
   /** Called when the active track changes (next/previous/select/finish). */
   async onTrackChange(song: Song | null): Promise<void> {
     if (!song) {
@@ -304,6 +324,8 @@ export class PlaybackController {
     try {
       if (song.source === "local") {
         await this.loadLocalTrack(song);
+      } else if (song.source === "youtube") {
+        await this.loadYouTubeTrack(song);
       } else {
         await this.loadSpotifyTrack(song);
       }
@@ -522,14 +544,20 @@ export class PlaybackController {
       this.scheduleReport(pos);
     });
     this.unsubscribeError = player.on("error", ({ payload }) => {
-      const message = (payload as { error?: unknown; message?: string }).error
-        ?? (payload as { message?: string }).message
-        ?? "Unknown error";
-      const msg = String(message);
+      const error = (payload as { error?: unknown; message?: string }).error;
+      const raw = error ?? (payload as { message?: string }).message ?? "Unknown error";
+      const msg = String(raw);
+      // A YouTube track that forbids embedding: tell the user and move on to
+      // the next song instead of leaving the queue stuck on it.
+      if (msg === "youtube_unplayable") {
+        this.toast("error", "youtube.unavailable", { title: song.title });
+        void this.next();
+        return;
+      }
       if (msg.includes("account_error") || msg.includes("Premium") || msg.includes("premium")) {
         this.toast("error", "spotify.premiumRequired");
       } else {
-        this.fail(message);
+        this.fail(raw);
       }
     });
 

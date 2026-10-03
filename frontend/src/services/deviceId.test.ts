@@ -17,10 +17,10 @@ afterEach(() => {
 });
 
 describe("getDeviceId", () => {
-  it("returns null when there is no storage", () => {
+  it("still returns an id when there is no storage (ephemeral)", () => {
     vi.stubGlobal("localStorage", undefined);
 
-    expect(getDeviceId()).toBeNull();
+    expect(getDeviceId()).toBeTruthy();
   });
 
   it("mints an id once and reuses it afterwards", () => {
@@ -40,7 +40,7 @@ describe("getDeviceId", () => {
     expect(getDeviceId()).toBe("device-from-last-week");
   });
 
-  it("falls back to null when storage throws (private mode)", () => {
+  it("falls back to a stable ephemeral id when storage throws (private mode)", () => {
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("denied");
@@ -50,6 +50,9 @@ describe("getDeviceId", () => {
       },
     });
 
-    expect(getDeviceId()).toBeNull();
+    const first = getDeviceId();
+
+    expect(first).toBeTruthy();
+    expect(getDeviceId()).toBe(first);
   });
 });

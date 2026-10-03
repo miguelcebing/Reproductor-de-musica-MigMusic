@@ -10,7 +10,12 @@ from enum import StrEnum
 
 
 class AudioSourceType(StrEnum):
-    """Two independent, polymorphic sources (never mixed inside one player)."""
+    """Independent, polymorphic sources (never mixed inside one player).
+
+    ``YOUTUBE`` tracks carry a ``videoId`` and are played by the official
+    YouTube IFrame player in the browser; the backend only serves metadata.
+    """
 
     LOCAL = "local"
     SPOTIFY = "spotify"
+    YOUTUBE = "youtube"

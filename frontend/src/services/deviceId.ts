@@ -1,10 +1,16 @@
 /** Stable per-browser device id: the scope key for local playlists.
 
- * The backend only narrows what a caller *sees* (`X-Device-Id` on playlist
- * list/create); it is UX isolation between devices, never authentication.
+ * The backend requires `X-Device-Id` on every playlist and playback call and
+ * scopes all data to it. The id is persisted in `localStorage` so it survives
+ * reloads; when storage is unavailable (private mode, tests) an ephemeral id
+ * is minted in memory for the life of the page, so a header is always sent.
+ * This is UX isolation between devices, never authentication.
  */
 
 const STORAGE_KEY = "mig_device_id";
+
+/** Ephemeral fallback so callers always get a non-null id within one page. */
+let ephemeralId: string | null = null;
 
 function randomId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -14,19 +20,21 @@ function randomId(): string {
 }
 
 /**
- * This browser's device id, persisted in `localStorage`, or `null` when there
- * is no usable storage (unit tests, private-mode failures): callers then send
- * no header and the API answers with the unscoped view.
+ * This browser's device id, persisted in `localStorage`. When storage is
+ * missing or throws, an in-memory id keeps the app working for this session.
  */
-export function getDeviceId(): string | null {
+export function getDeviceId(): string {
   try {
-    if (typeof localStorage === "undefined") return null;
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && stored.trim()) return stored.trim();
-    const fresh = randomId();
-    localStorage.setItem(STORAGE_KEY, fresh);
-    return fresh;
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored && stored.trim()) return stored.trim();
+      const fresh = randomId();
+      localStorage.setItem(STORAGE_KEY, fresh);
+      return fresh;
+    }
   } catch {
-    return null;
+    // Storage is denied: fall through to the ephemeral id.
   }
+  if (ephemeralId === null) ephemeralId = randomId();
+  return ephemeralId;
 }
