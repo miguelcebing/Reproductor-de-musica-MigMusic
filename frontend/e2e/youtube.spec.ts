@@ -37,3 +37,25 @@ test("the source card's local button opens the local tab", async ({ page }) => {
 
   await expect(page.getByTestId("file-input")).toBeVisible();
 });
+
+test("all three source tabs stay inside the dialog and are clickable", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("add-music").click();
+  await expect(page.getByTestId("add-dialog")).toBeVisible();
+
+  const dialogBox = await page.getByTestId("add-dialog").boundingBox();
+  expect(dialogBox).not.toBeNull();
+
+  for (const id of ["tab-local", "tab-spotify", "tab-youtube"]) {
+    const tab = page.getByTestId(id);
+    await expect(tab).toBeVisible();
+    const box = await tab.boundingBox();
+    expect(box).not.toBeNull();
+    // The tab must not overflow the dialog's right edge (the old layout bug).
+    expect(box!.x + box!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width + 1);
+  }
+
+  // Clicking the YouTube tab reveals its search field.
+  await page.getByTestId("tab-youtube").click();
+  await expect(page.getByTestId("youtube-query")).toBeVisible();
+});
