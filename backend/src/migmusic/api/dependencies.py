@@ -11,7 +11,7 @@ from typing import Annotated, cast
 from fastapi import Depends, HTTPException, Request, status
 
 from migmusic.api.spotify_session import read_session_id
-from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services import LyricsService, PlaybackService, PlaylistService
 from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.domain.ports.music_provider import MusicProvider
@@ -30,6 +30,11 @@ def get_playlist_service(request: Request) -> PlaylistService:
 def get_playback_service(request: Request) -> PlaybackService:
     """Return the playback use cases attached by the composition root."""
     return cast(PlaybackService, request.app.state.playback_service)
+
+
+def get_lyrics_service(request: Request) -> LyricsService:
+    """Return the lyrics use cases attached by the composition root."""
+    return cast(LyricsService, request.app.state.lyrics_service)
 
 
 def get_spotify_auth_service(request: Request) -> SpotifyAuthService:
@@ -95,6 +100,7 @@ async def require_spotify_token(
 
 PlaylistServiceDep = Annotated[PlaylistService, Depends(get_playlist_service)]
 PlaybackServiceDep = Annotated[PlaybackService, Depends(get_playback_service)]
+LyricsServiceDep = Annotated[LyricsService, Depends(get_lyrics_service)]
 DeviceIdDep = Annotated[str, Depends(require_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]

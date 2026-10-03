@@ -20,9 +20,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
-from migmusic.api.routers import auth, health, playback, playlists, spotify, testing, youtube
+from migmusic.api.routers import (
+    auth,
+    health,
+    lyrics,
+    playback,
+    playlists,
+    spotify,
+    testing,
+    youtube,
+)
 from migmusic.api.routers.auth import callback_get as legacy_callback_get
-from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services import LyricsService, PlaybackService, PlaylistService
 from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
@@ -35,6 +44,7 @@ from migmusic.infrastructure.keep_alive import (
     keep_alive_url,
     make_pinger,
 )
+from migmusic.infrastructure.lyrics import LrclibClient
 from migmusic.infrastructure.persistence import (
     InMemoryPlaylistRepository,
     SqlPlaylistRepository,
@@ -156,12 +166,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         providers[AudioSourceType.YOUTUBE] = YouTubeMusicProvider(app.state.ytmusic_client)
     app.state.music_providers = MusicProviderRegistry(providers)
 
+    # Lyrics: the song's own source (YouTube Music) wins; LRCLIB covers the
+    # rest (Spotify, local) by title/artist. Keyless and cached in the service.
+    app.state.lyrics_service = LyricsService(LrclibClient(http_client), dict(providers))
+
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(playlists.router)
     app.include_router(playback.router)
     app.include_router(auth.router)
     app.include_router(spotify.router)
+    app.include_router(lyrics.router)
     if config.youtube_music_enabled:
         app.include_router(youtube.router)
     if not config.is_production:
