@@ -71,12 +71,39 @@
   max-width: 100%;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
 .trackTitle {
   margin: 0;
   font-size: var(--font-size-xl);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lyricsButton {
+  flex: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-3);
+  min-height: 28px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.lyricsButton:hover,
+.lyricsButtonActive {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 
 .trackArtist {

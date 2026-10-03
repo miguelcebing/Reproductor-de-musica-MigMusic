@@ -119,3 +119,21 @@ export interface SpotifyPlayerState {
   readonly volume_percent: number | null;
   readonly device_id: string | null;
 }
+
+// --- Lyrics (`F13`) ---------------------------------------------------------
+
+/** Lyrics for a track (`POST /api/lyrics`); `null` when the API answers 204. */
+export interface Lyrics {
+  readonly text: string;
+  readonly source: string;
+  readonly synced: boolean;
+}
+
+/** Request body for `POST /api/lyrics`: the track to look up. */
+export interface LyricsQuery {
+  readonly id: string;
+  readonly title: string;
+  readonly artist: string;
+  readonly duration: number;
+  readonly source: AudioSource;
+}

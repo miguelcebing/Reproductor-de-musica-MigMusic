@@ -9,6 +9,8 @@ import type {
   AuthStatus,
   CallbackResult,
   ErrorEnvelope,
+  Lyrics,
+  LyricsQuery,
   PlaybackState,
   Playlist,
   RepeatMode,
@@ -246,6 +248,21 @@ export class ApiClient {
   searchYouTube(query: string, limit = 20): Promise<Song[]> {
     const params = `?q=${encodeURIComponent(query)}&limit=${limit}`;
     return this.send<Song[]>("GET", `/youtube/search${params}`);
+  }
+
+  // --- Lyrics (`F13`) -------------------------------------------------------
+
+  /** Lyrics for a track; a `204` (no lyrics) resolves to `null`. */
+  async getLyrics(query: LyricsQuery): Promise<Lyrics | null> {
+    const body = {
+      title: query.title,
+      artist: query.artist,
+      duration: query.duration,
+      source: query.source,
+      track_id: query.id,
+    };
+    const result = await this.send<Lyrics | undefined>("POST", "/lyrics", body);
+    return result ?? null;
   }
 
   // --- Spotify player proxy (`F6`) ------------------------------------------

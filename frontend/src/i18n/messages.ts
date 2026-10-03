@@ -111,6 +111,15 @@ const es = {
   "spotify.working": "Conectando con Spotify…",
   "spotify.failed": "No se pudo conectar: {message}",
   "spotify.results": "{count} resultados",
+  "lyrics.open": "Ver letras",
+  "lyrics.title": "Letras",
+  "lyrics.loading": "Buscando letras…",
+  "lyrics.empty": "No hay letras para esta canción.",
+  "lyrics.error": "No se pudieron cargar las letras.",
+  "lyrics.close": "Cerrar letras",
+  "lyrics.credit": "Letras de {source}",
+  "lyrics.source.youtube": "YouTube Music",
+  "lyrics.source.lrclib": "LRCLIB",
   "state.offline": "No se pudo contactar a la API",
 } as const;
 
@@ -225,6 +234,15 @@ const en: Record<MessageKey, string> = {
   "spotify.working": "Connecting to Spotify…",
   "spotify.failed": "Could not connect: {message}",
   "spotify.results": "{count} results",
+  "lyrics.open": "Show lyrics",
+  "lyrics.title": "Lyrics",
+  "lyrics.loading": "Looking for lyrics…",
+  "lyrics.empty": "No lyrics found for this song.",
+  "lyrics.error": "Could not load the lyrics.",
+  "lyrics.close": "Close lyrics",
+  "lyrics.credit": "Lyrics from {source}",
+  "lyrics.source.youtube": "YouTube Music",
+  "lyrics.source.lrclib": "LRCLIB",
   "state.offline": "Could not reach the API",
 };
 
