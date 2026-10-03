@@ -273,6 +273,43 @@ export class PlaybackController {
     );
   }
 
+  /** Media Session "play": resume only when the transport is actually paused. */
+  async play(): Promise<PlaybackState | null> {
+    if (usePlaybackStore.getState().playback?.playing) return null;
+    return this.togglePlaying();
+  }
+
+  /** Media Session "pause": stop only when the transport is actually playing. */
+  async pause(): Promise<PlaybackState | null> {
+    if (!usePlaybackStore.getState().playback?.playing) return null;
+    return this.togglePlaying();
+  }
+
+  /**
+   * Resume audio the browser paused on its own (`F12`): backgrounded tab,
+   * screen lock or bfcache restore.
+   *
+   * The store keeps saying `playing` when the *browser* interrupts, while a
+   * user pause flips it to `false`; so a store/player mismatch means an
+   * interruption and can be resumed. A blocked resume is swallowed: the next
+   * real gesture will start the audio again.
+   */
+  async resumeIfInterrupted(): Promise<void> {
+    const playback = usePlaybackStore.getState().playback;
+    if (!playback?.song || !playback.playing) return;
+    const player = this.player;
+    if (!player) {
+      await this.onTrackChange(playback.song);
+      return;
+    }
+    if (player.isPlaying) return;
+    try {
+      await player.play();
+    } catch (cause) {
+      if (!isAutoplayBlocked(cause)) this.fail(cause);
+    }
+  }
+
   async setRepeat(repeat: RepeatMode): Promise<PlaybackState | null> {
     return this.send(() => this.api.setModes({ repeat }), { repeat });
   }

@@ -10,6 +10,8 @@ import { SpotifyController } from "./services/SpotifyController";
 import { YouTubeController } from "./services/YouTubeController";
 import { readCallbackParams } from "./services/callbackParams";
 import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
+import { MediaSessionBridge } from "./services/mediaSession";
+import { PlaybackResilience } from "./services/playbackResilience";
 import { REPEAT_CYCLE } from "./ui/constants";
 import { useT } from "./i18n/useT";
 import { translate } from "./i18n/messages";
@@ -123,6 +125,20 @@ export function App(): React.JSX.Element {
     const timer = setInterval(ping, 10 * 60_000);
     return () => clearInterval(timer);
   }, []);
+
+  // Background playback (`F12`): publish lock-screen metadata/controls and
+  // resume audio the browser paused while hidden. Bound to the controller
+  // instance, so it survives every re-render.
+  useEffect(() => {
+    const mediaSession = new MediaSessionBridge(controllers.playback);
+    const resilience = new PlaybackResilience(controllers.playback);
+    mediaSession.start();
+    resilience.start();
+    return () => {
+      mediaSession.stop();
+      resilience.stop();
+    };
+  }, [controllers]);
 
   // Initial load: rebuild the local object URLs *before* the queue is read, so
   // `blob:` artwork URLs that died on reload are replaced, and tracks whose
