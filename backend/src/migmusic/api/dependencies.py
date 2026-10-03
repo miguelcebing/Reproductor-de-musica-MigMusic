@@ -12,9 +12,14 @@ from fastapi import Depends, HTTPException, Request, status
 
 from migmusic.api.spotify_session import read_session_id
 from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.domain.ports.music_provider import MusicProvider
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient, token_refresher
+from migmusic.infrastructure.spotify.spotify_music_provider import (
+    SpotifyMusicProvider,
+    current_access_token,
+)
 
 
 def get_playlist_service(request: Request) -> PlaylistService:
@@ -40,6 +45,11 @@ def get_spotify_client(request: Request) -> SpotifyApiClient:
 def get_music_provider(request: Request) -> MusicProvider:
     """Return the Spotify catalog adapter (stateless, token passed per call)."""
     return cast(MusicProvider, request.app.state.music_provider)
+
+
+def get_music_provider_registry(request: Request) -> MusicProviderRegistry:
+    """Return the source→provider registry built by the composition root."""
+    return cast(MusicProviderRegistry, request.app.state.music_providers)
 
 
 DEVICE_ID_HEADER = "x-device-id"
@@ -77,6 +87,9 @@ async def require_spotify_token(
     # Let the Web API client renew this session's token when a 401 arrives
     # despite the proactive refresh (clock skew, early invalidation).
     token_refresher.set(lambda: service.force_refresh(session_id))
+    # Expose the token to the provider through the request-scoped context so
+    # the MusicProvider contract stays free of Spotify-specific parameters.
+    current_access_token.set(token.access_token)
     return token.access_token
 
 
@@ -86,4 +99,13 @@ DeviceIdDep = Annotated[str, Depends(require_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]
 MusicProviderDep = Annotated[MusicProvider, Depends(get_music_provider)]
+MusicProviderRegistryDep = Annotated[MusicProviderRegistry, Depends(get_music_provider_registry)]
+
+
+def get_spotify_provider(request: Request) -> SpotifyMusicProvider:
+    """Return the Spotify adapter typed for its Spotify-only extras."""
+    return cast(SpotifyMusicProvider, request.app.state.music_provider)
+
+
+SpotifyProviderDep = Annotated[SpotifyMusicProvider, Depends(get_spotify_provider)]
 SpotifyTokenDep = Annotated[str, Depends(require_spotify_token)]

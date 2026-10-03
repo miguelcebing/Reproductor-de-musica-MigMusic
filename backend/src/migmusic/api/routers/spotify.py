@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Response, status
 
-from migmusic.api.dependencies import MusicProviderDep, SpotifyClientDep, SpotifyTokenDep
+from migmusic.api.dependencies import SpotifyClientDep, SpotifyProviderDep, SpotifyTokenDep
 from migmusic.api.schemas import (
     DeviceRequest,
     PlayerStateOut,
@@ -31,24 +31,28 @@ router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 
 @router.get("/search", summary="Search tracks on Spotify")
 async def search(
-    token: SpotifyTokenDep,
-    provider: MusicProviderDep,
+    _token: SpotifyTokenDep,
+    provider: SpotifyProviderDep,
     q: str = Query(min_length=1, max_length=200),
     limit: int = Query(default=20, ge=1, le=50),
 ) -> list[SongOut]:
-    """Return matching tracks already mapped to the domain song shape."""
-    songs = await provider.search_tracks(token, q, limit=limit)
+    """Return matching tracks already mapped to the domain song shape.
+
+    ``SpotifyTokenDep`` resolves and publishes the request token on a context
+    variable; the provider reads it from there.
+    """
+    songs = await provider.search_tracks(q, limit=limit)
     return [song_out(song) for song in songs]
 
 
 @router.get("/saved", summary="Tracks saved to the Spotify library")
 async def saved(
-    token: SpotifyTokenDep,
-    provider: MusicProviderDep,
+    _token: SpotifyTokenDep,
+    provider: SpotifyProviderDep,
     limit: int = Query(default=20, ge=1, le=50),
 ) -> list[SongOut]:
     """Return the user's saved tracks (``user-library-read``)."""
-    songs = await provider.saved_tracks(token, limit=limit)
+    songs = await provider.saved_tracks(limit=limit)
     return [song_out(song) for song in songs]
 
 
@@ -74,12 +78,12 @@ async def playlists(
 @router.get("/playlists/{playlist_id}/tracks", summary="Tracks of a Spotify playlist")
 async def playlist_tracks(
     playlist_id: str,
-    token: SpotifyTokenDep,
-    provider: MusicProviderDep,
+    _token: SpotifyTokenDep,
+    provider: SpotifyProviderDep,
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[SongOut]:
     """Return the playlist's tracks mapped to songs."""
-    songs = await provider.playlist_tracks(token, playlist_id, limit=limit)
+    songs = await provider.playlist_tracks(playlist_id, limit=limit)
     return [song_out(song) for song in songs]
 
 

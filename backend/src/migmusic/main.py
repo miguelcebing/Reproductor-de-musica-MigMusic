@@ -19,11 +19,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
-from migmusic.api.routers import auth, health, playback, playlists, spotify, testing
+from migmusic.api.routers import auth, health, playback, playlists, spotify, testing, youtube
 from migmusic.api.routers.auth import callback_get as legacy_callback_get
 from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import Settings, configure_logging, get_logger, get_settings
+from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.domain.ports.playlist_repository import PlaylistRepository
 from migmusic.domain.ports.token_store import TokenStore
 from migmusic.infrastructure.keep_alive import (
@@ -41,6 +43,8 @@ from migmusic.infrastructure.security.sql_token_store import SqlTokenStore
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
 from migmusic.infrastructure.spotify.spotify_music_provider import SpotifyMusicProvider
 from migmusic.infrastructure.spotify.spotify_oauth import SpotifyOAuth
+from migmusic.infrastructure.youtube.youtube_music_provider import YouTubeMusicProvider
+from migmusic.infrastructure.youtube.ytmusic_client import YtMusicClient
 
 logger = get_logger(__name__)
 
@@ -134,12 +138,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.spotify_client = SpotifyApiClient(http_client)
     app.state.music_provider = SpotifyMusicProvider(app.state.spotify_client)
 
+    # Catalog registry (Open/Closed): one adapter per remote source, built once.
+    # YouTube Music is keyless and shares a single ``YTMusic`` instance; when
+    # disabled the endpoint simply is not registered below.
+    providers: dict[AudioSourceType, Any] = {
+        AudioSourceType.SPOTIFY: app.state.music_provider,
+    }
+    if config.youtube_music_enabled:
+        app.state.ytmusic_client = YtMusicClient(
+            language=config.youtube_music_language,
+            timeout=config.youtube_music_timeout_seconds,
+        )
+        providers[AudioSourceType.YOUTUBE] = YouTubeMusicProvider(app.state.ytmusic_client)
+    app.state.music_providers = MusicProviderRegistry(providers)
+
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(playlists.router)
     app.include_router(playback.router)
     app.include_router(auth.router)
     app.include_router(spotify.router)
+    if config.youtube_music_enabled:
+        app.include_router(youtube.router)
     if not config.is_production:
         # The reset helper only exists outside production.
         app.include_router(testing.router)

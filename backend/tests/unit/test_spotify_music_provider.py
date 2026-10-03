@@ -9,7 +9,10 @@ import httpx
 
 from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
-from migmusic.infrastructure.spotify.spotify_music_provider import SpotifyMusicProvider
+from migmusic.infrastructure.spotify.spotify_music_provider import (
+    SpotifyMusicProvider,
+    current_access_token,
+)
 
 
 def _track(**overrides: Any) -> dict[str, Any]:
@@ -31,6 +34,9 @@ def _track(**overrides: Any) -> dict[str, Any]:
 
 
 def _provider(payload: Any) -> SpotifyMusicProvider:
+    # The provider reads the token from a request-scoped context variable.
+    current_access_token.set("token")
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=payload)
 
@@ -42,7 +48,7 @@ def test_track_maps_to_a_domain_song() -> None:
     """Every Spotify field lands on the matching ``Song`` attribute."""
     provider = _provider({"tracks": {"items": [_track()]}})
 
-    songs = asyncio.run(provider.search_tracks("token", "night"))
+    songs = asyncio.run(provider.search_tracks("night"))
 
     assert len(songs) == 1
     song = songs[0]
@@ -73,7 +79,7 @@ def test_search_skips_unusable_entries() -> None:
         }
     )
 
-    songs = asyncio.run(provider.search_tracks("token", "q"))
+    songs = asyncio.run(provider.search_tracks("q"))
 
     assert [song.id for song in songs] == ["abc123"]
 
@@ -82,7 +88,7 @@ def test_saved_tracks_unwraps_the_track_envelope() -> None:
     """``/me/tracks`` wraps each track in an ``item`` object."""
     provider = _provider({"items": [{"added_at": "2024-01-01", "track": _track()}]})
 
-    songs = asyncio.run(provider.saved_tracks("token"))
+    songs = asyncio.run(provider.saved_tracks())
 
     assert len(songs) == 1
     assert songs[0].title == "Night Drive"
@@ -92,7 +98,7 @@ def test_playlist_tracks_unwraps_its_envelope() -> None:
     """Playlist items carry the track under ``track``."""
     provider = _provider({"items": [{"track": _track()}, {"track": None}]})
 
-    songs = asyncio.run(provider.playlist_tracks("token", "playlist-1"))
+    songs = asyncio.run(provider.playlist_tracks("playlist-1"))
 
     assert len(songs) == 1
 
@@ -101,7 +107,7 @@ def test_unplayable_track_is_marked_unavailable() -> None:
     """Region-restricted tracks are listed but flagged, never hidden."""
     provider = _provider({"tracks": {"items": [_track(is_playable=False)]}})
 
-    songs = asyncio.run(provider.search_tracks("token", "q"))
+    songs = asyncio.run(provider.search_tracks("q"))
 
     assert songs[0].available is False
 
@@ -123,7 +129,7 @@ def test_missing_duration_and_artwork_are_tolerated() -> None:
         }
     )
 
-    songs = asyncio.run(provider.search_tracks("token", "q"))
+    songs = asyncio.run(provider.search_tracks("q"))
 
     assert songs[0].duration == 0.0
     assert songs[0].artwork_url is None
@@ -134,4 +140,4 @@ def test_search_handles_a_malformed_envelope() -> None:
     """A weird upstream body yields an empty list instead of a crash."""
     provider = _provider({"tracks": {"items": "not-a-list"}})
 
-    assert asyncio.run(provider.search_tracks("token", "q")) == []
+    assert asyncio.run(provider.search_tracks("q")) == []
