@@ -1,7 +1,7 @@
 /** Wire contract shared with the backend (see `docs/api.md`). */
 
 /** Where a track comes from; players are polymorphic over this value. */
-export type AudioSource = "local" | "spotify";
+export type AudioSource = "local" | "spotify" | "youtube";
 
 /** Repeat modes exposed by `POST /api/playback/modes`. */
 export type RepeatMode = "off" | "one" | "all";

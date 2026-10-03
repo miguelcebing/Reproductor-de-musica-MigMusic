@@ -36,12 +36,17 @@ export interface AddTrackDialogProps {
   readonly spotifyConnected: boolean;
   readonly spotifyLoading: boolean;
   readonly spotifyResults: readonly Song[];
+  readonly youtubeAvailable?: boolean;
+  readonly youtubeLoading?: boolean;
+  readonly youtubeResults?: readonly Song[];
   readonly onClose: () => void;
   readonly onSubmit: (files: File[], position: TrackPosition) => void;
   readonly onSubmitSpotify: (songs: readonly Song[], position: TrackPosition) => void;
+  readonly onSubmitYouTube?: (songs: readonly Song[], position: TrackPosition) => void;
   readonly onSpotifySearch: (query: string) => void;
   readonly onSpotifyConnect: () => void;
   readonly onSpotifyDisconnect: () => void;
+  readonly onYouTubeSearch?: (query: string) => void;
 }
 
 export const AddTrackDialog = memo(function AddTrackDialog({
@@ -50,15 +55,20 @@ export const AddTrackDialog = memo(function AddTrackDialog({
   spotifyConnected,
   spotifyLoading,
   spotifyResults,
+  youtubeAvailable = false,
+  youtubeLoading = false,
+  youtubeResults = [],
   onClose,
   onSubmit,
   onSubmitSpotify,
+  onSubmitYouTube,
   onSpotifySearch,
   onSpotifyConnect,
   onSpotifyDisconnect,
+  onYouTubeSearch,
 }: AddTrackDialogProps): React.JSX.Element {
   const t = useT();
-  const [tab, setTab] = useState<"local" | "spotify">("local");
+  const [tab, setTab] = useState<"local" | "spotify" | "youtube">("local");
   const [files, setFiles] = useState<readonly File[]>([]);
   const [positionKind, setPositionKind] = useState<"start" | "end" | "index">("end");
   const [index, setIndex] = useState(0);
@@ -72,10 +82,10 @@ export const AddTrackDialog = memo(function AddTrackDialog({
     if (!nextOpen) onClose();
   };
 
-  // A fresh search invalidates the previous selection.
+  // A fresh search (either catalog) invalidates the previous selection.
   useEffect(() => {
     setSelected(new Set());
-  }, [spotifyResults]);
+  }, [spotifyResults, youtubeResults]);
 
   useEffect(() => {
     if (open) return;
@@ -89,7 +99,7 @@ export const AddTrackDialog = memo(function AddTrackDialog({
 
   const maxIndex = Math.max(0, songsLength - 1);
   const boundedIndex = Math.min(index, maxIndex);
-  const pendingCount = tab === "spotify" ? selected.size : files.length;
+  const pendingCount = tab === "local" ? files.length : selected.size;
 
   const position: TrackPosition =
     positionKind === "start"
@@ -120,10 +130,25 @@ export const AddTrackDialog = memo(function AddTrackDialog({
     onClose();
   };
 
+  const submitYouTube = (): void => {
+    const chosen = youtubeResults.filter((song) => selected.has(song.id));
+    if (chosen.length === 0) {
+      setError(t("youtube.selectOne"));
+      return;
+    }
+    onSubmitYouTube?.(chosen, position);
+    setError(null);
+    onClose();
+  };
+
   const submit = (): void => {
     if (tab === "spotify") {
       if (spotifyConnected) submitSpotify();
       else onSpotifyConnect();
+      return;
+    }
+    if (tab === "youtube") {
+      submitYouTube();
       return;
     }
     submitLocal();
@@ -144,7 +169,13 @@ export const AddTrackDialog = memo(function AddTrackDialog({
     onSpotifySearch(query);
   };
 
-  const showPositionPicker = tab === "local" || spotifyConnected;
+  const runYouTubeSearch = (event: React.FormEvent): void => {
+    event.preventDefault();
+    setSearched(true);
+    onYouTubeSearch?.(query);
+  };
+
+  const showPositionPicker = tab === "local" || spotifyConnected || tab === "youtube";
 
   return (
     <ModalRoot isOpen={open} onOpenChange={handleOpenChange}>
@@ -165,9 +196,11 @@ export const AddTrackDialog = memo(function AddTrackDialog({
             <TabsRoot
               className={styles.tabsRoot}
               selectedKey={tab}
-              onSelectionChange={(key) =>
-                setTab(key === "spotify" ? "spotify" : "local")
-              }
+              onSelectionChange={(key) => {
+                if (key === "spotify") setTab("spotify");
+                else if (key === "youtube") setTab("youtube");
+                else setTab("local");
+              }}
             >
               <TabList className={styles.tabs}>
                 <Tab
@@ -183,6 +216,13 @@ export const AddTrackDialog = memo(function AddTrackDialog({
                   data-testid="tab-spotify"
                 >
                   {t("dialog.tabSpotify")}
+                </Tab>
+                <Tab
+                  id="youtube"
+                  className={`${styles.tab} ${tab === "youtube" ? styles.tabActive : ""}`}
+                  data-testid="tab-youtube"
+                >
+                  {t("dialog.tabYouTube")}
                 </Tab>
               </TabList>
 
@@ -297,6 +337,69 @@ export const AddTrackDialog = memo(function AddTrackDialog({
                         {t("dialog.spotifyPremiumNote")}
                       </p>
                     </div>
+                  )}
+                </TabPanel>
+
+                <TabPanel id="youtube" className={styles.tabPanel}>
+                  {youtubeAvailable ? (
+                    <>
+                      <form className={styles.playlistBar} onSubmit={runYouTubeSearch}>
+                        <input
+                          type="search"
+                          className={styles.input}
+                          value={query}
+                          placeholder={t("youtube.searchPlaceholder")}
+                          aria-label={t("youtube.search")}
+                          data-testid="youtube-query"
+                          onChange={(event) => setQuery(event.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          className={styles.button}
+                          disabled={youtubeLoading}
+                          data-testid="youtube-search"
+                        >
+                          {youtubeLoading ? t("youtube.searching") : t("youtube.search")}
+                        </button>
+                      </form>
+                      <p className={styles.hint}>{t("youtube.selectHint")}</p>
+                      {youtubeLoading ? (
+                        <p className={styles.loading} data-testid="youtube-loading">
+                          {t("youtube.searching")}
+                        </p>
+                      ) : youtubeResults.length === 0 ? (
+                        <p className={styles.hint} data-testid="youtube-empty">
+                          {searched ? t("youtube.noResults") : ""}
+                        </p>
+                      ) : (
+                        <ul className={styles.list} data-testid="youtube-results">
+                          {youtubeResults.map((song) => (
+                            <li key={song.id} className={styles.row}>
+                              <input
+                                type="checkbox"
+                                className={styles.rowCheck}
+                                checked={selected.has(song.id)}
+                                aria-label={`${song.title} - ${song.artist}`}
+                                onChange={() => toggleSelected(song.id)}
+                                data-testid={`youtube-result-${song.id}`}
+                              />
+                              <div className={styles.rowMain}>
+                                <p className={styles.rowTitle}>{song.title}</p>
+                                <p className={styles.rowMeta}>{song.artist}</p>
+                              </div>
+                              <span className={styles.duration}>{song.duration_label}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className={styles.count}>
+                        {t("youtube.results", { count: youtubeResults.length })}
+                      </p>
+                    </>
+                  ) : (
+                    <p className={styles.hint} data-testid="youtube-unavailable">
+                      {t("youtube.notConfigured")}
+                    </p>
                   )}
                 </TabPanel>
 

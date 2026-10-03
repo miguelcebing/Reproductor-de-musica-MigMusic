@@ -310,6 +310,11 @@ export class PlaybackController {
     await this.attachPlayer(this.createPlayer("spotify", { api: this.api }), song);
   }
 
+  /** Drive the official YouTube IFrame player for a YouTube Music track (`F8`). */
+  private async loadYouTubeTrack(song: Song): Promise<void> {
+    await this.attachPlayer(this.createPlayer("youtube"), song);
+  }
+
   /** Called when the active track changes (next/previous/select/finish). */
   async onTrackChange(song: Song | null): Promise<void> {
     if (!song) {
@@ -319,6 +324,8 @@ export class PlaybackController {
     try {
       if (song.source === "local") {
         await this.loadLocalTrack(song);
+      } else if (song.source === "youtube") {
+        await this.loadYouTubeTrack(song);
       } else {
         await this.loadSpotifyTrack(song);
       }

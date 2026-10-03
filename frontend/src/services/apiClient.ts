@@ -239,6 +239,13 @@ export class ApiClient {
     );
   }
 
+  // --- YouTube Music catalog (`F8`) -----------------------------------------
+
+  searchYouTube(query: string, limit = 20): Promise<Song[]> {
+    const params = `?q=${encodeURIComponent(query)}&limit=${limit}`;
+    return this.send<Song[]>("GET", `/youtube/search${params}`);
+  }
+
   // --- Spotify player proxy (`F6`) ------------------------------------------
 
   spotifyPlay(params: {

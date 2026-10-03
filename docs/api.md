@@ -221,6 +221,28 @@ browser. `SongOut` is the same shape as in *Playlists*, with
 
 ---
 
+### YouTube Music (`F8`)
+
+Metadata-only, **keyless** source backed by the unofficial `ytmusicapi`
+(`YOUTUBE_MUSIC_ENABLED=true`, no OAuth, no cookies). Results use the same
+`SongOut` shape with `source: "youtube"` and `id` equal to the YouTube
+`videoId`. Audio is **never** resolved server-side: the browser plays it
+through the official YouTube IFrame player using that `videoId`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/youtube/search` | `?q=…&limit=1..50` → `SongOut[]`. |
+
+**Notes**
+
+- The route is only mounted when `YOUTUBE_MUSIC_ENABLED=true`; otherwise the
+  frontend hides the YouTube tab.
+- Search results are cached in-process for 5 minutes; a failed call answers
+  `502/504` and never breaks Spotify or local playback.
+- Lyrics for YouTube tracks use the watch-playlist browse id (see `F9`).
+
+---
+
 ## Status codes
 
 | Code | Meaning |

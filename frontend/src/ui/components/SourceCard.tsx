@@ -9,6 +9,7 @@ import styles from "./SourceCard.module.css";
 export interface SourceCardProps {
   readonly trackCount: number;
   readonly spotifyConnected: boolean;
+  readonly youtubeAvailable?: boolean;
   readonly onAddMusic: () => void;
   readonly onSpotifyConnect: () => void;
   readonly onSpotifyDisconnect: () => void;
@@ -17,6 +18,7 @@ export interface SourceCardProps {
 export function SourceCard({
   trackCount,
   spotifyConnected,
+  youtubeAvailable = false,
   onAddMusic,
   onSpotifyConnect,
   onSpotifyDisconnect,
@@ -60,6 +62,23 @@ export function SourceCard({
             data-testid="source-spotify"
           >
             {t(spotifyConnected ? "spotify.disconnect" : "spotify.connect")}
+          </button>
+        </li>
+        <li className={styles.row}>
+          <span className={styles.dot} data-on={String(youtubeAvailable)} aria-hidden="true" />
+          <span className={styles.labels}>
+            <span className={styles.name}>{t("source.youtube")}</span>
+            <span className={styles.meta}>
+              {t(youtubeAvailable ? "spotify.connected" : "youtube.notConfigured")}
+            </span>
+          </span>
+          <button
+            type="button"
+            className={styles.action}
+            onClick={onAddMusic}
+            data-testid="source-youtube"
+          >
+            {t("dialog.addTitle")}
           </button>
         </li>
       </ul>

@@ -7,6 +7,7 @@ import { PlaylistController } from "./services/PlaylistController";
 import { PlaybackController } from "./services/PlaybackController";
 import { AuthController } from "./services/AuthController";
 import { SpotifyController } from "./services/SpotifyController";
+import { YouTubeController } from "./services/YouTubeController";
 import { readCallbackParams } from "./services/callbackParams";
 import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
 import { REPEAT_CYCLE } from "./ui/constants";
@@ -16,6 +17,7 @@ import { useSettingsStore, applyDocumentSettings } from "./state/settingsStore";
 import { usePlaylistStore } from "./state/playlistStore";
 import { usePlaybackStore } from "./state/playbackStore";
 import { useSpotifyStore } from "./state/spotifyStore";
+import { useYouTubeStore } from "./state/youtubeStore";
 import { useAuthStore } from "./state/authStore";
 import { useLocalFileStore } from "./state/localFileStore";
 import { useToastStore } from "./state/toastStore";
@@ -73,6 +75,10 @@ export function App(): React.JSX.Element {
   const spotifyResults = useSpotifyStore((s) => s.results);
   const spotifyLoading = useSpotifyStore((s) => s.loading);
 
+  // YouTube Music catalog (`F8`, keyless)
+  const youtubeResults = useYouTubeStore((s) => s.results);
+  const youtubeLoading = useYouTubeStore((s) => s.loading);
+
   // Toasts
   const toasts = useToastStore((s) => s.toasts);
   const dismissToast = useToastStore((s) => s.dismiss);
@@ -97,6 +103,7 @@ export function App(): React.JSX.Element {
       playback,
       auth: new AuthController(api, { language: lang }),
       spotify: new SpotifyController(api, { language: lang }),
+      youtube: new YouTubeController(api, { language: lang }),
     };
   }, []);
 
@@ -357,6 +364,24 @@ export function App(): React.JSX.Element {
     [ensureActivePlaylist, controllers],
   );
 
+  const handleYouTubeSearch = useCallback(
+    (query: string) => {
+      void controllers.youtube.search(query);
+    },
+    [controllers],
+  );
+
+  const handleSubmitYouTube = useCallback(
+    (songs: readonly Song[], position: TrackPosition) => {
+      void (async () => {
+        const id = await ensureActivePlaylist();
+        if (!id) return;
+        await controllers.playlists.addSongs(id, songs, position);
+      })();
+    },
+    [ensureActivePlaylist, controllers],
+  );
+
   const handleToggleTheme = useCallback(() => {
     setTheme(theme === "dark" ? "light" : "dark");
   }, [theme, setTheme]);
@@ -464,6 +489,7 @@ export function App(): React.JSX.Element {
         <SourceCard
           trackCount={songs.length}
           spotifyConnected={spotifyStatus === "linked"}
+          youtubeAvailable
           onAddMusic={handleOpenAddDialog}
           onSpotifyConnect={handleSpotifyConnect}
           onSpotifyDisconnect={handleSpotifyDisconnect}
@@ -486,12 +512,17 @@ export function App(): React.JSX.Element {
         spotifyConnected={spotifyStatus === "linked"}
         spotifyLoading={spotifyLoading}
         spotifyResults={spotifyResults}
+        youtubeAvailable
+        youtubeLoading={youtubeLoading}
+        youtubeResults={youtubeResults}
         onClose={handleCloseDialog}
         onSubmit={handleSubmitTracks}
         onSubmitSpotify={handleSubmitSpotify}
+        onSubmitYouTube={handleSubmitYouTube}
         onSpotifySearch={handleSpotifySearch}
         onSpotifyConnect={handleSpotifyConnect}
         onSpotifyDisconnect={handleSpotifyDisconnect}
+        onYouTubeSearch={handleYouTubeSearch}
       />
     </AppShell>
   );
