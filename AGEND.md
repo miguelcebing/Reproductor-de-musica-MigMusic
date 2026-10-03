@@ -1261,6 +1261,33 @@ FEAT-003:
   Guidance: "Reflejar en el Roadmap."
   Answer: null
   DecidedOn: null
+
+FEAT-004:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Letras de la cancion: YouTube Music (fuente propia) y LRCLIB para Spotify/local?"
+  Guidance: "Diseno previo recuperado de los .pyc: entidad Lyrics, puerto LyricsProvider, LyricsService con estrategia (fuente propia -> LRCLIB) y cache TTL; POST /api/lyrics con 204 cuando no hay letras. El adapter LRCLIB nunca llego a existir."
+  Answer: "CONFIRMED - implementar en la rama feature/background-play-and-security"
+  DecidedOn: 2026-10-03
+
+FEAT-005:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: [FEAT-001]
+  Question: "Reproduccion en segundo plano (Media Session + PWA) y reproduccion inmediata al pulsar una cancion?"
+  Guidance: "Media Session API con metadata y controles; manifest + service worker sencillo sin cachear /api/*; clic optimista, cancelacion de peticiones obsoletas, reutilizacion de reproductores y precarga de la siguiente pista. Limitacion aceptada: el iframe de YouTube se pausa al bloquear el movil (no evitable de forma legitima)."
+  Answer: "CONFIRMED - rama feature/background-play-and-security"
+  DecidedOn: 2026-10-03
+
+SEC-001:
+  Status: CONFIRMED
+  Priority: NORMAL
+  DependsOn: []
+  Question: "Endurecimiento de seguridad: rate limiting, cabeceras, validacion estricta, auditoria de dependencias y modo produccion?"
+  Guidance: "Rate limiting por X-Device-Id (principal) + IP (respaldo), estricto en endpoints costosos (busqueda, letras, YouTube Music), 429 con Retry-After, desactivado en desarrollo/tests. CSP probada con E2E y ajustada a YouTube/Spotify; HSTS, nosniff, Referrer-Policy, frame-ancestors; validacion de tipos/longitudes/tamano de cuerpo; autorizacion por owner_id en todos los recursos."
+  Answer: "CONFIRMED - rama feature/background-play-and-security"
+  DecidedOn: 2026-10-03
 ```
 
 ### R12 â€” Deployment Questions
@@ -1604,6 +1631,10 @@ ConvenciÃ³n de IDs nuevos: `<PREFIJO>-<nÃºmero>` siguiente disponible, o suf
 | 2026-10-02 | VIS-005 | Se levanta el rechazo de gradientes: se usan **gradientes fijos** (nebulosa y campo estelar) | Anula la lÃ­nea VIS-005 del 2026-09-28; sigue prohibido el gradiente dinÃ¡mico por portada, asÃ­ que no cambia COST de extracciÃ³n de color |
 | 2026-10-02 | VIS-012 | El layout "reproductor central + lista debajo" se rediseÃ±a a **grid bento** de tiles (reproductor, cola y fuentes) | Reinterpreta la opciÃ³n B sin romperla: en mÃ³vil apilado el orden sigue siendo reproductor arriba y lista debajo (ver VIS-013) |
 | 2026-10-02 | SPOTIFY-004 | DiagnÃ³stico Spotify (Fase 1) antes del merge: el flujo es **Authorization Code + PKCE S256 correcto** y las dos URIs de redirect responden 302 verificado en vivo (dev `http://127.0.0.1:5173/callback`, prod `https://migmusic.vercel.app/api/auth/callback`); Ãºnico gap de cÃ³digo: un **401 de la Web API no disparaba refresh** (solo el proactivo de 60 s) â‡’ `SpotifyAuthService.force_refresh()` + `token_refresher` (ContextVar fijado por `require_spotify_token`) para **reintentar una sola vez** con token nuevo antes de devolver 401, sin tocar routers ni frontend; higiene: `HANDOFF.md` (secretos en claro, sin trackear) aÃ±adido a `.gitignore` y `SPOTIFY_SCOPES` documentado en `.env.example` | Plan aprobado por el usuario (mostrÃ³ el diff antes de aplicarlo); backend: ruff/format/mypy/**pytest 351**/97.06 %, tests nuevos `test_spotify_client.py` +3 y `test_spotify_auth_service.py` +3; no verificable desde el repo (declarado): estado del Dashboard de Spotify (URIs, Development mode/User Management) y cuenta Premium |
+
+| 2026-10-03 | BGSCOPE | Nueva rama `feature/background-play-and-security`: reproduccion en segundo plano (Media Session API + PWA) e inicio inmediato al pulsar una cancion (clic optimista, cancelacion de peticiones obsoletas, reutilizacion de reproductores y precarga) | Alcance solicitado por el usuario; no altera el gate ni las decisiones confirmadas; limitacion aceptada: el iframe de YouTube se pausa al bloquear el movil |
+| 2026-10-03 | FEAT-004 | Letras: se reconstruye el diseno hallado en los `.pyc` (entidad `Lyrics`, puerto `LyricsProvider`, `LyricsService` con estrategia fuente-propia -> LRCLIB y cache TTL) + adapter LRCLIB (nuevo, sin claves) + `POST /api/lyrics` con 204 cuando no hay letras; UI nueva en el reproductor | Cubre YouTube Music, Spotify y musica local; un fallo de letras nunca interrumpe la reproduccion |
+| 2026-10-03 | SEC-001 | Endurecimiento: rate limiting por `X-Device-Id`+IP (estricto en busqueda/letras/YouTube, 429 con `Retry-After`, apagado en dev/tests), validacion estricta, cabeceras de seguridad con CSP probada por E2E, auditoria de dependencias y modo produccion | RNF-07/RNF-09; el proxy de Vercel oculta la IP real, por eso la clave principal es el device id |
 
 ## ValidaciÃ³n de entrega de este AGEND.md
 
