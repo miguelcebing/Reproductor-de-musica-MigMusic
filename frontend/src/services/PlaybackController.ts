@@ -544,14 +544,20 @@ export class PlaybackController {
       this.scheduleReport(pos);
     });
     this.unsubscribeError = player.on("error", ({ payload }) => {
-      const message = (payload as { error?: unknown; message?: string }).error
-        ?? (payload as { message?: string }).message
-        ?? "Unknown error";
-      const msg = String(message);
+      const error = (payload as { error?: unknown; message?: string }).error;
+      const raw = error ?? (payload as { message?: string }).message ?? "Unknown error";
+      const msg = String(raw);
+      // A YouTube track that forbids embedding: tell the user and move on to
+      // the next song instead of leaving the queue stuck on it.
+      if (msg === "youtube_unplayable") {
+        this.toast("error", "youtube.unavailable", { title: song.title });
+        void this.next();
+        return;
+      }
       if (msg.includes("account_error") || msg.includes("Premium") || msg.includes("premium")) {
         this.toast("error", "spotify.premiumRequired");
       } else {
-        this.fail(message);
+        this.fail(raw);
       }
     });
 

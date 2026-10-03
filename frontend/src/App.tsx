@@ -478,7 +478,6 @@ export function App(): React.JSX.Element {
           onRename={handleRenamePlaylist}
           onDelete={handleDeletePlaylist}
           onAddMusic={handleOpenAddDialog}
-          onAddYouTube={() => handleOpenDialogWithSource("youtube")}
         />
         <TrackList
           songs={songs}

@@ -93,7 +93,7 @@ export class YouTubePlayer implements AudioPlayer {
             resolve(player);
           },
           onStateChange: (event) => this.onStateChange(event.data ?? -1, api),
-          onError: (event) => this.emit("error", { error: `youtube_error_${event.data}` }),
+          onError: (event) => this.onError(event.data ?? -1),
         },
       });
     });
@@ -146,6 +146,20 @@ export class YouTubePlayer implements AudioPlayer {
   }
 
   // ------------------------------------------------------------- internals
+
+  /**
+   * YouTube error codes that mean "cannot be played embedded" (`100`, `101`,
+   * `150`: video missing/private, embedding disabled by the owner, or the
+   * owner restricted it). These are not fixable client-side, so the caller
+   * shows a friendly message and skips instead of a raw error.
+   */
+  private onError(code: number): void {
+    if (code === 100 || code === 101 || code === 150) {
+      this.emit("error", { error: "youtube_unplayable", code });
+      return;
+    }
+    this.emit("error", { error: `youtube_error_${code}`, code });
+  }
 
   private onStateChange(state: number, api: { PlayerState: { ENDED: number; PLAYING: number; PAUSED: number } }): void {
     if (state === api.PlayerState.PLAYING) {

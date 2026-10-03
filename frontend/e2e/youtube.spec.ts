@@ -12,10 +12,13 @@ test.beforeEach(async ({ request }) => {
   await resetBackend(request);
 });
 
-test("the playlist bar exposes a YouTube button that opens the YouTube tab", async ({ page }) => {
+test("the add dialog exposes the YouTube Music tab", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByTestId("add-youtube").click();
+  // YouTube lives only inside the add dialog, not as a separate bar button.
+  await expect(page.getByTestId("add-youtube")).toHaveCount(0);
+  await page.getByTestId("add-music").click();
+  await page.getByTestId("tab-youtube").click();
 
   await expect(page.getByTestId("add-dialog")).toBeVisible();
   await expect(page.getByTestId("youtube-query")).toBeVisible();

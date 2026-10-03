@@ -70,6 +70,9 @@ class FakeInnerPlayer implements YouTubePlayerInstance {
     this.state = state;
     this.options.events?.onStateChange?.({ target: this, data: state });
   }
+  emitError(code: number): void {
+    this.options.events?.onError?.({ target: this, data: code });
+  }
 }
 
 const created: FakeInnerPlayer[] = [];
@@ -199,6 +202,31 @@ describe("YouTubePlayer", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("maps embedding-disabled errors (100/101/150) to a playable signal", async () => {
+    const { player, inner } = await loaded();
+    const onError = vi.fn();
+    player.on("error", onError);
+
+    inner.emitError(150);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((onError.mock.calls[0][0] as { payload: { error: string } }).payload.error).toBe(
+      "youtube_unplayable",
+    );
+  });
+
+  it("keeps other YouTube errors as codes", async () => {
+    const { player, inner } = await loaded();
+    const onError = vi.fn();
+    player.on("error", onError);
+
+    inner.emitError(2);
+
+    expect((onError.mock.calls[0][0] as { payload: { error: string } }).payload.error).toBe(
+      "youtube_error_2",
+    );
   });
 
   it("destroys cleanly and removes the host container", async () => {
