@@ -19,6 +19,8 @@ export interface TrackListProps {
   readonly songs: readonly Song[];
   readonly currentIndex: number | null;
   readonly loading: boolean;
+  /** The active track's audio is still being prepared (`F12`). */
+  readonly trackLoading?: boolean;
   readonly onPlay: (index: number) => void;
   readonly onRemove: (index: number) => void;
   readonly onMove: (index: number, delta: -1 | 1) => void;
@@ -34,6 +36,7 @@ export const TrackList = memo(function TrackList({
   songs,
   currentIndex,
   loading,
+  trackLoading = false,
   onPlay,
   onRemove,
   onMove,
@@ -218,6 +221,7 @@ export const TrackList = memo(function TrackList({
               isMatch={index === matchIndex}
               isDragging={index === dragIndex}
               isDragOver={index === dragOverIndex && index !== dragIndex}
+              isLoading={trackLoading && index === currentIndex}
               canMoveUp={index > 0}
               canMoveDown={index < songs.length - 1}
               onPlay={onPlay}

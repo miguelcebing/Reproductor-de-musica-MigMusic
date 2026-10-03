@@ -257,6 +257,34 @@
   color: var(--color-text-muted);
 }
 
+/* A picked track whose audio is still being prepared (`F12`): the row answers
+   the click before the sound starts. */
+.rowLoading {
+  opacity: 0.85;
+}
+
+.rowSpinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+  border-top-color: var(--color-accent);
+  animation: mm-row-spin 0.7s linear infinite;
+}
+
+@keyframes mm-row-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rowSpinner {
+    animation: none;
+  }
+}
+
 .loading {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);

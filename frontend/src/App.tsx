@@ -71,6 +71,7 @@ export function App(): React.JSX.Element {
   const playbackIndex = usePlaybackStore((s) => s.playback?.index ?? null);
   const playlistId = usePlaybackStore((s) => s.playback?.playlist_id ?? null);
   const skipSeconds = usePlaybackStore((s) => s.playback?.skip_seconds ?? 5);
+  const trackLoading = usePlaybackStore((s) => s.loading);
 
   // Spotify link + catalog (`F6`)
   const spotifyStatus = useAuthStore((s) => s.status);
@@ -506,6 +507,7 @@ export function App(): React.JSX.Element {
           songs={songs}
           currentIndex={currentIndex}
           loading={loading}
+          trackLoading={trackLoading}
           onPlay={handlePlayTrack}
           onRemove={handleRemoveTrack}
           onMove={handleMoveTrack}

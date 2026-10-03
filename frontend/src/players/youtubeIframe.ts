@@ -25,6 +25,7 @@ export interface YouTubePlayerInstance {
   playVideo(): void;
   pauseVideo(): void;
   stopVideo(): void;
+  loadVideoById(videoId: string, startSeconds?: number): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   setVolume(volume: number): void;
   mute(): void;
@@ -50,7 +51,7 @@ export interface YouTubePlayerOptions {
   };
 }
 
-interface YouTubeApi {
+export interface YouTubeApi {
   Player: new (element: HTMLElement | string, options: YouTubePlayerOptions) => YouTubePlayerInstance;
   PlayerState: {
     readonly UNSTARTED: number;

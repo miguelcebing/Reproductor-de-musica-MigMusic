@@ -32,6 +32,8 @@ export interface TrackItemProps {
   readonly isMatch: boolean;
   readonly isDragging: boolean;
   readonly isDragOver: boolean;
+  /** The active row's audio is still being prepared (`F12`). */
+  readonly isLoading?: boolean;
   readonly canMoveUp: boolean;
   readonly canMoveDown: boolean;
   /** Index-aware callbacks: rows share the stable ones from `App`. */
@@ -49,6 +51,7 @@ export const TrackItem = memo(function TrackItem({
   isMatch,
   isDragging,
   isDragOver,
+  isLoading = false,
   canMoveUp,
   canMoveDown,
   onPlay,
@@ -80,6 +83,7 @@ export const TrackItem = memo(function TrackItem({
     isMatch ? styles.rowMatch : "",
     isDragging ? styles.rowDragging : "",
     isDragOver ? styles.rowDropTarget : "",
+    isLoading ? styles.rowLoading : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -91,7 +95,9 @@ export const TrackItem = memo(function TrackItem({
       data-index={index}
       data-active={isActive}
       data-match={isMatch}
+      data-loading={isLoading}
       aria-current={isActive ? "true" : undefined}
+      aria-busy={isLoading ? true : undefined}
       draggable
       onDragStartCapture={(event) => drag.onDragStart(index, event)}
       onDragOver={(event) => drag.onDragOver(index, event)}
@@ -130,6 +136,7 @@ export const TrackItem = memo(function TrackItem({
       </div>
 
       <div className={styles.rowActions}>
+        {isLoading && <span className={styles.rowSpinner} aria-hidden="true" />}
         <span className={styles.duration}>{song.duration_label || formatTime(song.duration)}</span>
         {missingFile && (
           <>

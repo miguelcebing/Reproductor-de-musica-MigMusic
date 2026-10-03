@@ -10,7 +10,7 @@
 import { ApiClient, ApiError, failureMessage } from "./apiClient";
 import { createPlayerForSource, type PlayerFactoryOptions } from "../players/PlayerFactory";
 import type { AudioPlayer } from "../players/AudioPlayer";
-import type { AudioSource, PlaybackState, RepeatMode, SkipDirection, Song } from "../domain/types";
+import type { AudioSource, PlaybackState, Playlist, RepeatMode, SkipDirection, Song } from "../domain/types";
 import { usePlaybackStore } from "../state/playbackStore";
 import { usePlaylistStore } from "../state/playlistStore";
 import { useSettingsStore } from "../state/settingsStore";
@@ -41,6 +41,11 @@ function isUnknownOutcome(cause: unknown): boolean {
     cause instanceof ApiError &&
     (cause.code === "timeout" || cause.code === "network_error" || cause.status >= 500)
   );
+}
+
+/** A superseded request the client cancelled on purpose (`F12`): stay silent. */
+function isAborted(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.code === "aborted";
 }
 
 /** Whether two states point at the same song in the same queue slot. */
@@ -80,6 +85,10 @@ export class PlaybackController {
   private unsubscribeError: (() => void) | null = null;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
   private userGesture = false;
+  /** Cancels the previous `select` when a new track is picked (`F12`). */
+  private selectAbort: AbortController | null = null;
+  /** How many `select` calls are still in flight (drives the loading flag). */
+  private selectPending = 0;
   /** Newest request started; responses older than `lastAppliedSeq` are stale. */
   private requestSeq = 0;
   private lastAppliedSeq = 0;
@@ -149,10 +158,50 @@ export class PlaybackController {
     }
   }
 
-  /** Activate a track from a playlist. */
+  /**
+   * Activate a track from a playlist (`F12`).
+   *
+   * The UI answers the click before the network does: the store is patched
+   * from the already-loaded list (cover, title and queue flags), the previous
+   * track is silenced at once, and the player loads the new song immediately.
+   * The backend answer only confirms or corrects it. A newer click cancels the
+   * previous request so only the last pick can win; the loading flag stays set
+   * while any pick is still in flight.
+   */
   async select(playlistId: string, index: number): Promise<PlaybackState | null> {
     this.markUserGesture();
-    return this.commit(() => this.api.selectSong(playlistId, index));
+    const before = this.identity();
+    const current = usePlaybackStore.getState().playback;
+    const playlist = usePlaylistStore.getState().playlists.find((item) => item.id === playlistId);
+    const optimistic = playlist ? this.indexPatch(playlist, index) : undefined;
+
+    if (current && optimistic) {
+      // Stop the old audio now: two songs must never overlap (`RF-12`).
+      if ((current.song?.id ?? null) !== (optimistic.song?.id ?? null)) this.player?.pause();
+      usePlaybackStore.getState().setPlayback({ ...current, ...optimistic });
+    }
+
+    this.selectAbort?.abort();
+    const abort = new AbortController();
+    this.selectAbort = abort;
+    this.selectPending += 1;
+    usePlaybackStore.getState().setLoading(true);
+    try {
+      const state = await this.send(
+        () => this.api.selectSong(playlistId, index, abort.signal),
+        optimistic ? {} : undefined,
+        current ?? undefined,
+        true,
+      );
+      // Re-selecting the same song does not reload it: move the playhead back
+      // to the backend position instead (a fresh pick restarts at 0:00).
+      if (state) await this.syncAfterState(state, before);
+      return state;
+    } finally {
+      if (this.selectAbort === abort) this.selectAbort = null;
+      this.selectPending = Math.max(0, this.selectPending - 1);
+      if (this.selectPending === 0) usePlaybackStore.getState().setLoading(false);
+    }
   }
 
   /** Open a playlist at its first song. */
@@ -450,6 +499,7 @@ export class PlaybackController {
       return state;
     } catch (cause) {
       this.settleIntent(seq);
+      if (isAborted(cause)) return null; // a newer select owns the UI now
       if (seq >= this.lastAppliedSeq) {
         if (snapshot && optimistic && !(transport && isUnknownOutcome(cause))) {
           this.rollback(snapshot, optimistic);
@@ -497,18 +547,26 @@ export class PlaybackController {
     const playlist = usePlaylistStore
       .getState()
       .playlists.find((item) => item.id === playback.playlist_id);
-    const song = playlist?.songs[target];
-    if (!song) return undefined; // queue not loaded: wait for the server answer
+    if (!playlist) return undefined; // queue not loaded: wait for the server answer
+    return this.indexPatch(playlist, target);
+  }
+
+  /** Optimistic state for jumping to `target` inside a loaded playlist. */
+  private indexPatch(playlist: Playlist, target: number): Partial<PlaybackState> | undefined {
+    const song = playlist.songs[target];
+    if (!song) return undefined;
+    const playback = usePlaybackStore.getState().playback;
 
     const patch: Partial<PlaybackState> = { song, index: target, position: 0, playing: true };
-    if (playback.shuffle || !playlist) return patch;
+    if (playback?.shuffle) return patch;
 
     const size = playlist.songs.length;
-    const wrap = playback.repeat === "all" && size > 0;
+    const wrap = playback?.repeat === "all" && size > 0;
     const atLast = target >= size - 1;
     const atFirst = target <= 0;
     return {
       ...patch,
+      size,
       available_next: size > 0 && (!atLast || wrap),
       available_previous: size > 0 && (!atFirst || wrap),
       next_index: atLast ? (wrap ? 0 : null) : target + 1,
@@ -629,6 +687,27 @@ export class PlaybackController {
       if (seq !== this.attachSeq) return; // a newer attach owns the cleanup
       throw cause;
     }
+
+    this.preloadNext();
+  }
+
+  /**
+   * Warm the next queued track when the active player supports it (`F12`).
+   *
+   * Only the local player can prepare the next bytes without interrupting the
+   * current song; YouTube's iframe cannot cue a second video on the same
+   * player, and Spotify plays on a server-side device. Those sources answer
+   * `undefined` and stay untouched.
+   */
+  private preloadNext(): void {
+    const playback = usePlaybackStore.getState().playback;
+    const target = playback?.next_index ?? null;
+    if (!playback || target === null) return;
+    const playlist = usePlaylistStore
+      .getState()
+      .playlists.find((item) => item.id === playback.playlist_id);
+    const song = playlist?.songs[target];
+    if (song) this.player?.preload?.(song.id);
   }
 
   /** Where a (re)load should start: the backend position, unless it is the end. */

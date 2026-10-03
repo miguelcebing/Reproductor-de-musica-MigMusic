@@ -23,6 +23,8 @@ export interface AudioPlayer {
   seek(time: number): Promise<void>;
   setVolume(volume: number): void;
   setMuted(muted: boolean): void;
+  /** Optional: prepare the next track's bytes without playing them (`F12`). */
+  preload?(source: string): void;
   destroy(): void;
 
   on(event: PlayerEventType, listener: PlayerEventListener): () => void;
