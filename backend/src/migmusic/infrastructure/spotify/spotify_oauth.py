@@ -161,10 +161,24 @@ class SpotifyOAuth:
                 payload.get("error_description", "Unknown error"),
             )
 
+        # Spotify may omit fields on some grants (refresh may drop `scope` or
+        # `refresh_token`); reading them defensively avoids a 500 on the OAuth
+        # callback where an OAuth error (422) is the correct answer.
+        access_token = payload.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            raise SpotifyOAuthError("malformed_response", "missing access_token")
+
+        refresh_token = payload.get("refresh_token")
+        scope = payload.get("scope")
+        try:
+            expires_in = int(payload.get("expires_in", 0))
+        except (TypeError, ValueError) as exc:
+            raise SpotifyOAuthError("malformed_response", "invalid expires_in") from exc
+
         return TokenResponse(
-            access_token=payload["access_token"],
-            token_type=payload["token_type"],
-            expires_in=int(payload["expires_in"]),
-            refresh_token=payload["refresh_token"],
-            scope=payload["scope"],
+            access_token=access_token,
+            token_type="Bearer",  # noqa: S106 - OAuth scheme name, not a secret
+            expires_in=expires_in,
+            refresh_token=refresh_token if isinstance(refresh_token, str) else "",
+            scope=scope if isinstance(scope, str) else "",
         )

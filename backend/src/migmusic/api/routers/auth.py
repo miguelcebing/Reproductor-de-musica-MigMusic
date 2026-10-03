@@ -36,6 +36,7 @@ from migmusic.api.spotify_session import (
 )
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.core import get_logger
+from migmusic.infrastructure.spotify.spotify_oauth import SpotifyOAuthError
 
 logger = get_logger(__name__)
 
@@ -192,11 +193,27 @@ async def _exchange(
             detail="Missing or expired OAuth state; start the login again",
         )
 
-    await service.handle_callback(
-        code=code,
-        state=state,
-        expected_state=pending.state,
-        code_verifier=pending.code_verifier,
-        session_id=pending.session_id,
-    )
+    try:
+        await service.handle_callback(
+            code=code,
+            state=state,
+            expected_state=pending.state,
+            code_verifier=pending.code_verifier,
+            session_id=pending.session_id,
+        )
+    except SpotifyOAuthError as exc:
+        # A bad/expired code or an upstream hiccup is a client-facing auth
+        # failure, not a server bug: answer 401 so the UI asks to reconnect.
+        logger.warning("spotify_callback_failed [%s]: %s", exc.code, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Spotify rejected the login; please try again",
+        ) from exc
+    except Exception:
+        # Anything unexpected during the exchange must not surface as a raw 500.
+        logger.exception("spotify_callback_unexpected")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not complete the Spotify login; please try again",
+        ) from None
     return pending

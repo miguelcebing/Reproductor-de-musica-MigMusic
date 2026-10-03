@@ -95,7 +95,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
         # Never leak internals to the client; the full traceback goes to the logs.
-        request.app.state.logger.exception("unhandled_exception")
+        request.app.state.logger.exception(
+            "unhandled_exception",
+            extra={"path": request.url.path, "error_type": type(exc).__name__},
+        )
         return JSONResponse(
             status_code=500,
             content=_payload(request, 500, "internal_error", "Unexpected server error"),
