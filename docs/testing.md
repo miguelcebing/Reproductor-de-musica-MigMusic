@@ -1,6 +1,6 @@
 # Estrategia y reporte de pruebas (F11)
 
-> Fuente de verdad de calidad: `AGEND.md` (`TEST-001..004`) y `skills/SKILL6.md`.
+> Fuente de verdad de calidad: `AGEND.md` (`TEST-001..004`) y `docs/skills/SKILL6.md`.
 > Actualizado: 2026-10-01 (OAuth, música local tras F5, Framer Motion, correcciones
 > UX, y el reproductor: resiliencia ante reinicio del backend, UI optimista,
 > rendimiento del hilo principal, auto-avance y limpieza de código).
