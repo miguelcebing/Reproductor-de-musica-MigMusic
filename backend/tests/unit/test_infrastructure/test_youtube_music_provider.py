@@ -86,9 +86,7 @@ def test_search_skips_entries_without_a_video_id_or_title() -> None:
 
 def test_get_track_maps_video_details() -> None:
     provider = YouTubeMusicProvider(
-        FakeYtMusicClient(
-            song={"title": "Wonderwall", "author": "Oasis", "lengthSeconds": "259"}
-        )
+        FakeYtMusicClient(song={"title": "Wonderwall", "author": "Oasis", "lengthSeconds": "259"})
     )
 
     song = asyncio.run(provider.get_track("vid1"))

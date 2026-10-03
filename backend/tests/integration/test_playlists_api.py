@@ -90,9 +90,7 @@ def test_a_device_cannot_read_anothers_playlist(client: TestClient) -> None:
         "/api/playlists", json={"name": "Phone mix"}, headers={"X-Device-Id": "device-a"}
     ).json()
 
-    response = client.get(
-        f"/api/playlists/{created['id']}", headers={"X-Device-Id": "device-b"}
-    )
+    response = client.get(f"/api/playlists/{created['id']}", headers={"X-Device-Id": "device-b"})
 
     assert response.status_code == 404
 

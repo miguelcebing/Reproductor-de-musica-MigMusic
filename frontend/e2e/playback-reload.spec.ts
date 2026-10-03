@@ -1,9 +1,9 @@
-/** After a reload the visible playlist must be the one being played.
+/** After a reload the queue is restored but nothing plays until the user asks.
 
- * The playback context survives in the backend, but `activeId` restarts on
- * every load: showing the first playlist while another one plays made the
- * transport look broken (the highlight and the next/previous toasts did not
- * match the list on screen).
+ * The playback context survives in the backend, but the app deliberately
+ * starts with an empty player (`refresh(restorePlaying=false)`): a reload must
+ * not reopen audio on its own. The playlist being played is still the one
+ * shown, so the list on screen keeps matching the backend transport.
  */
 
 import { expect, test } from "@playwright/test";
@@ -18,7 +18,7 @@ test.beforeEach(async ({ request }) => {
   await resetBackend(request);
 });
 
-test("reload keeps showing the playlist that is playing", async ({ page }) => {
+test("reload restores the queue but starts with an empty player", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));
 
@@ -39,23 +39,22 @@ test("reload keeps showing the playlist that is playing", async ({ page }) => {
   await page.getByTestId("dialog-submit").click();
   await expect(page.getByTestId("track-row")).toHaveCount(2);
 
-  // Play Beta's last song, so the edge toast is meaningful after the reload.
   await page.getByRole("button", { name: "Reproducir Beta Two" }).click();
   await expect(page.getByTestId("now-playing-title")).toHaveText("Beta Two");
 
   await page.reload();
 
-  // The app must resume on the playlist being played, not on the first one.
-  await expect(page.getByTestId("now-playing-title")).toHaveText("Beta Two");
+  // Nothing resumes by itself: the player is empty until the user presses play.
+  await expect(page.getByTestId("now-playing-title")).toHaveText("Nada en reproducción");
+
+  // The queue is restored, and the playlist shown is the one that was playing.
   const rows = page.getByTestId("track-row");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("Beta One");
   await expect(rows.nth(1)).toContainText("Beta Two");
-  await expect(page.locator('[data-testid="track-row"][data-active="true"]')).toHaveCount(1);
 
-  // The tail still answers with the edge toast (PLAYLIST-009 = A).
-  await page.getByTestId("next").click();
-  await expect(page.getByTestId("toasts")).toContainText("Estás en la última canción");
+  // Pressing play on the restored queue brings the track back.
+  await page.getByRole("button", { name: "Reproducir Beta Two" }).click();
   await expect(page.getByTestId("now-playing-title")).toHaveText("Beta Two");
 
   expect(pageErrors, `page errors: ${pageErrors.join(" | ")}`).toHaveLength(0);

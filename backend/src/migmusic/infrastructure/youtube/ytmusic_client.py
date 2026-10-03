@@ -88,9 +88,7 @@ class YtMusicClient:
         if not browse_id:
             self._lyrics_cache.set(video_id, None)
             return None
-        payload = await self._call(
-            lambda yt: yt.get_lyrics(browse_id), operation_name="get_lyrics"
-        )
+        payload = await self._call(lambda yt: yt.get_lyrics(browse_id), operation_name="get_lyrics")
         lyrics = payload.get("lyrics") if isinstance(payload, dict) else None
         text = lyrics.strip() if isinstance(lyrics, str) and lyrics.strip() else None
         self._lyrics_cache.set(video_id, text)

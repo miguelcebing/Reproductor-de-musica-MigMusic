@@ -294,9 +294,7 @@ class PlaybackService:
             raise NoActivePlaybackError("no playlist is being played")
         return self._find(context, context.playlist_id, owner_id)
 
-    def _find(
-        self, context: _PlaybackContext, playlist_id: str, owner_id: str
-    ) -> Playlist:
+    def _find(self, context: _PlaybackContext, playlist_id: str, owner_id: str) -> Playlist:
         playlist = self._repository.find_by_id(playlist_id, owner_id=owner_id)
         if playlist is None:
             raise PlaylistNotFoundError(playlist_id)

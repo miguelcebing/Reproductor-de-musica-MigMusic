@@ -19,9 +19,7 @@ from migmusic.domain.ports.music_provider import MusicProvider
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
 
 # Set per request by ``require_spotify_token``; read by the provider below.
-current_access_token: ContextVar[str | None] = ContextVar(
-    "spotify_access_token", default=None
-)
+current_access_token: ContextVar[str | None] = ContextVar("spotify_access_token", default=None)
 
 
 def _require_token() -> str:
@@ -55,9 +53,7 @@ class SpotifyMusicProvider(MusicProvider):
         return _songs_from(raw_items)
 
     async def playlist_tracks(self, playlist_id: str, *, limit: int = 50) -> list[Song]:
-        raw_items = await self._client.playlist_tracks(
-            _require_token(), playlist_id, limit=limit
-        )
+        raw_items = await self._client.playlist_tracks(_require_token(), playlist_id, limit=limit)
         return _songs_from(raw_items)
 
 

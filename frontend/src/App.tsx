@@ -147,6 +147,13 @@ export function App(): React.JSX.Element {
         controllers.playback.refresh(/* restorePlaying */ false),
       ]);
       if (cancelled) return;
+      // Keep showing the playlist that was being played (if it still exists),
+      // so the list matches the backend transport, then clear the audio state.
+      const backend = usePlaybackStore.getState().playback;
+      const store = usePlaylistStore.getState();
+      if (backend?.playlist_id && store.playlists.some((item) => item.id === backend.playlist_id)) {
+        store.setActiveId(backend.playlist_id);
+      }
       usePlaybackStore.getState().reset();
     };
     void bootstrap();

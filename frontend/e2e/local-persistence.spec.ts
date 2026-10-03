@@ -1,4 +1,8 @@
-/** LOCAL-006: local tracks (and their queue) survive an F5 reload. */
+/** LOCAL-006: local tracks (and their queue) survive an F5 reload.
+
+ * The queue and the file bytes come back, but playback never resumes on its
+ * own: the user presses play to continue after the reload.
+ */
 
 import { expect, test, type Page } from "@playwright/test";
 import { makeWav, resetBackend } from "./helpers";
@@ -39,13 +43,16 @@ test("local track added before the reload still plays after it", async ({ page }
 
   await page.reload();
 
-  // The queue comes back from the backend and the file URL from IndexedDB.
+  // The queue comes back from the backend and the file URL from IndexedDB, but
+  // nothing plays until the user asks for it.
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("Reload Anthem");
   await expect(page.getByTestId("relink-0")).toHaveCount(0);
+  await expect(page.getByTestId("now-playing-title")).toHaveText("Nada en reproducción");
 
-  // The audio loads from the restored blob: play resumes without a missing-file
-  // toast, and the transport actually moves.
+  // Pressing play uses the restored blob: no missing-file toast, and the
+  // transport actually moves.
+  await page.getByRole("button", { name: "Reproducir Reload Anthem" }).click();
   await expect(page.getByTestId("now-playing-title")).toHaveText("Reload Anthem");
   await expect(page.getByTestId("play-pause")).toHaveAttribute("aria-label", "Pausar");
   await expect
