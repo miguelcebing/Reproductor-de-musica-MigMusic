@@ -227,7 +227,7 @@ describe("ApiClient in-list search and favourites", () => {
 describe("ApiClient device scope header", () => {
   const origin = "https://migmusic.example";
 
-  it("omits x-device-id when storage is unavailable", async () => {
+  it("sends an ephemeral x-device-id when storage is unavailable", async () => {
     vi.stubGlobal("localStorage", undefined);
     try {
       const { fetchImpl, calls } = recorder(200, { authenticated: true });
@@ -235,7 +235,8 @@ describe("ApiClient device scope header", () => {
 
       await api.spotifyStatus();
 
-      expect((calls[0]?.init?.headers as Record<string, string>)["x-device-id"]).toBeUndefined();
+      const header = (calls[0]?.init?.headers as Record<string, string>)["x-device-id"];
+      expect(header).toBeTruthy();
     } finally {
       vi.unstubAllGlobals();
     }

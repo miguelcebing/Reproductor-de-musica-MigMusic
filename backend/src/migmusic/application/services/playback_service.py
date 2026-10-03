@@ -4,6 +4,10 @@ The service is the single owner of playback state (``PLAYER-011``): the
 frontend executes the audio and reports back, while repeat/shuffle/skip rules
 are decided here so they can be unit-tested without a browser.
 
+State is kept **per owner**: each device has its own active playlist, cursor,
+position and playback order, so two users never share a queue. Every method
+receives an ``owner_id`` and the matching context is created on first use.
+
 Shuffle follows ``PLAYER-004 = b``: the doubly linked list is never reordered,
 an auxiliary permutation records the playback order and the cursor is moved to
 whatever song that order selects.
@@ -12,6 +16,7 @@ whatever song that order selects.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass, field
 from typing import Final
 
 from migmusic.application.dto.playback import PlaybackState, RepeatMode, SkipDirection
@@ -29,8 +34,23 @@ DEFAULT_SKIP_SECONDS: Final = 5.0
 """``PLAYER-001/002``: both buttons step exactly this many seconds."""
 
 
+@dataclass
+class _PlaybackContext:
+    """Everything the transport remembers for one owner (one device)."""
+
+    playlist_id: str | None = None
+    repeat: RepeatMode = RepeatMode.OFF
+    shuffle: bool = False
+    order: list[int] = field(default_factory=list)
+    order_playlist_id: str | None = None
+    order_index: int = 0
+    position: float = 0.0
+    playing: bool = False
+    cursors: dict[str, int] = field(default_factory=dict)
+
+
 class PlaybackService:
-    """Playback use cases over the active playlist."""
+    """Playback use cases over the active playlist of each owner."""
 
     def __init__(
         self,
@@ -49,261 +69,286 @@ class PlaybackService:
         self._repository = repository
         self._skip_seconds = skip_seconds
         self._rng = rng if rng is not None else random.Random()  # noqa: S311
-        self._playlist_id: str | None = None
-        self._repeat = RepeatMode.OFF
-        self._shuffle = False
-        self._order: list[int] = []
-        self._order_playlist_id: str | None = None
-        self._order_index = 0
-        self._position = 0.0
-        self._playing = False
-        self._cursors: dict[str, int] = {}
+        self._contexts: dict[str, _PlaybackContext] = {}
 
     @property
     def skip_seconds(self) -> float:
         """Configured step in seconds (read-only)."""
         return self._skip_seconds
 
+    def _context(self, owner_id: str) -> _PlaybackContext:
+        """Return (creating on first use) the transport context of ``owner_id``."""
+        context = self._contexts.get(owner_id)
+        if context is None:
+            context = _PlaybackContext()
+            self._contexts[owner_id] = context
+        return context
+
     # ------------------------------------------------------------ selection
 
-    def open(self, playlist_id: str) -> PlaybackState:
+    def open(self, playlist_id: str, *, owner_id: str) -> PlaybackState:
         """Start playing ``playlist_id`` from its first song.
 
         An empty playlist opens in silence instead of raising, because a fresh
         playlist (``PLAYLIST-002``) legitimately has no songs yet.
         """
-        playlist = self._find(playlist_id)
+        context = self._context(owner_id)
+        playlist = self._find(context, playlist_id, owner_id)
         if playlist.size == 0:
-            self._playlist_id = playlist_id
-            self._ensure_order(playlist)
-            self._position = 0.0
-            self._playing = False
-            return self.state()
-        return self.select(playlist_id, 0)
+            context.playlist_id = playlist_id
+            self._ensure_order(context, playlist)
+            context.position = 0.0
+            context.playing = False
+            return self.state(owner_id=owner_id)
+        return self.select(playlist_id, 0, owner_id=owner_id)
 
-    def select(self, playlist_id: str, index: int) -> PlaybackState:
+    def select(self, playlist_id: str, index: int, *, owner_id: str) -> PlaybackState:
         """Jump to ``index`` of ``playlist_id``, activating that playlist."""
-        playlist = self._find(playlist_id)
+        context = self._context(owner_id)
+        playlist = self._find(context, playlist_id, owner_id)
         if not 0 <= index < playlist.size:
             raise InvalidPositionError(index, playlist.size)
-        self._playlist_id = playlist_id
-        self._ensure_order(playlist)
-        self._order_index = self._order.index(index)
+        context.playlist_id = playlist_id
+        self._ensure_order(context, playlist)
+        context.order_index = context.order.index(index)
         playlist.move_to(index)
-        self._remember_cursor(playlist)
-        self._position = 0.0
-        self._playing = True
-        return self.state()
+        self._remember_cursor(context, playlist)
+        context.position = 0.0
+        context.playing = True
+        return self.state(owner_id=owner_id)
 
     # ----------------------------------------------------------- transport
 
-    def state(self) -> PlaybackState:
-        """Snapshot of the active playlist (raises when nothing is open)."""
-        playlist = self._active()
-        self._ensure_order(playlist)
+    def state(self, *, owner_id: str) -> PlaybackState:
+        """Snapshot of the owner's active playlist (raises when nothing is open)."""
+        context = self._context(owner_id)
+        playlist = self._active(context, owner_id)
+        self._ensure_order(context, playlist)
         index = playlist.current_index
         size = playlist.size
-        wrap = self._repeat is RepeatMode.ALL and size > 0
-        at_first, at_last = self._edges(playlist, index)
+        wrap = context.repeat is RepeatMode.ALL and size > 0
+        at_first, at_last = self._edges(context, playlist, index)
         return PlaybackState(
-            playlist_id=self._playlist_id,
+            playlist_id=context.playlist_id,
             song=playlist.current,
             index=index,
-            position=self._position,
-            playing=self._playing,
-            repeat=self._repeat,
-            shuffle=self._shuffle,
+            position=context.position,
+            playing=context.playing,
+            repeat=context.repeat,
+            shuffle=context.shuffle,
             size=size,
             available_next=size > 0 and (not at_last or wrap),
             available_previous=size > 0 and (not at_first or wrap),
-            next_index=self._next_index(playlist, index),
-            previous_index=self._previous_index(playlist, index),
+            next_index=self._next_index(context, playlist, index),
+            previous_index=self._previous_index(context, playlist, index),
             skip_seconds=self._skip_seconds,
         )
 
-    def next(self) -> PlaybackState:
+    def next(self, *, owner_id: str) -> PlaybackState:
         """Manual skip forward; honours the boundaries of ``PLAYLIST-009 = A``."""
-        return self._advance(honour_repeat_one=False)
+        return self._advance(owner_id=owner_id, honour_repeat_one=False)
 
-    def advance_on_end(self) -> PlaybackState:
+    def advance_on_end(self, *, owner_id: str) -> PlaybackState:
         """Track finished (``PLAYER-003`` autoplay); ``repeat one`` replays here."""
-        return self._advance(honour_repeat_one=True)
+        return self._advance(owner_id=owner_id, honour_repeat_one=True)
 
-    def previous(self) -> PlaybackState:
+    def previous(self, *, owner_id: str) -> PlaybackState:
         """Step back through the list (or through the shuffle order)."""
-        playlist = self._require_song()
-        self._ensure_order(playlist)
+        context = self._context(owner_id)
+        playlist = self._require_song(context, owner_id)
+        self._ensure_order(context, playlist)
 
-        if self._shuffle:
-            if self._order_index > 0:
-                self._play_order_position(playlist, self._order_index - 1)
-            elif self._repeat is RepeatMode.ALL:
-                self._play_order_position(playlist, len(self._order) - 1)
-            return self.state()
+        if context.shuffle:
+            if context.order_index > 0:
+                self._play_order_position(context, playlist, context.order_index - 1)
+            elif context.repeat is RepeatMode.ALL:
+                self._play_order_position(context, playlist, len(context.order) - 1)
+            return self.state(owner_id=owner_id)
 
         if playlist.move_previous():
-            self._sync_order_to_cursor(playlist)
-            self._position = 0.0
-            self._playing = True
-        elif self._repeat is RepeatMode.ALL:
+            self._sync_order_to_cursor(context, playlist)
+            context.position = 0.0
+            context.playing = True
+        elif context.repeat is RepeatMode.ALL:
             playlist.move_to(playlist.size - 1)
-            self._sync_order_to_cursor(playlist)
-            self._position = 0.0
-            self._playing = True
-        return self.state()
+            self._sync_order_to_cursor(context, playlist)
+            context.position = 0.0
+            context.playing = True
+        return self.state(owner_id=owner_id)
 
-    def skip(self, direction: SkipDirection) -> PlaybackState:
+    def skip(self, direction: SkipDirection, *, owner_id: str) -> PlaybackState:
         """Move exactly ``skip_seconds`` forward or backward (``PLAYER-001/002``).
 
         Backing up from ``position <= skip_seconds`` jumps to the previous song
         instead of going negative (``PLAYER-002a``).
         """
-        playlist = self._require_song()
-        if direction is SkipDirection.BACKWARD and self._position <= self._skip_seconds:
+        context = self._context(owner_id)
+        playlist = self._require_song(context, owner_id)
+        if direction is SkipDirection.BACKWARD and context.position <= self._skip_seconds:
             before = playlist.current_index
-            state = self.previous()
+            state = self.previous(owner_id=owner_id)
             if playlist.current_index == before:
                 # Already at the head: there is no previous song, so rewind to 0:00.
-                self._position = 0.0
-                return self.state()
+                context.position = 0.0
+                return self.state(owner_id=owner_id)
             return state
 
         delta = self._skip_seconds if direction is SkipDirection.FORWARD else -self._skip_seconds
-        self._position = self._clamp_position(playlist, self._position + delta)
-        return self.state()
+        context.position = self._clamp_position(playlist, context.position + delta)
+        return self.state(owner_id=owner_id)
 
-    def seek(self, position: float) -> PlaybackState:
+    def seek(self, position: float, *, owner_id: str) -> PlaybackState:
         """Move the cursor inside the current song (``PLAYER-007``)."""
-        playlist = self._require_song()
+        context = self._context(owner_id)
+        playlist = self._require_song(context, owner_id)
         duration = self._duration(playlist)
         if position < 0 or (duration > 0 and position > duration):
             upper = "duration" if duration <= 0 else f"{duration} seconds"
             raise ValidationError(f"seek position must be between 0 and {upper}")
-        self._position = position
-        return self.state()
+        context.position = position
+        return self.state(owner_id=owner_id)
 
     def report(
-        self, *, position: float | None = None, playing: bool | None = None
+        self,
+        *,
+        owner_id: str,
+        position: float | None = None,
+        playing: bool | None = None,
     ) -> PlaybackState:
         """Accept the position/audio state the frontend observes (``PLAYER-011``)."""
-        playlist = self._require_song()
+        context = self._context(owner_id)
+        playlist = self._require_song(context, owner_id)
         if position is not None:
             if position < 0:
                 raise ValidationError("reported position must not be negative")
-            self._position = self._clamp_position(playlist, position)
+            context.position = self._clamp_position(playlist, position)
         if playing is not None:
-            self._playing = playing
-        return self.state()
+            context.playing = playing
+        return self.state(owner_id=owner_id)
 
     def set_modes(
-        self, *, repeat: RepeatMode | None = None, shuffle: bool | None = None
+        self,
+        *,
+        owner_id: str,
+        repeat: RepeatMode | None = None,
+        shuffle: bool | None = None,
     ) -> PlaybackState:
         """Switch repeat (``FEAT-001-d``) and shuffle (``PLAYER-004``)."""
-        playlist = self._active()
+        context = self._context(owner_id)
+        playlist = self._active(context, owner_id)
         if repeat is not None:
-            self._repeat = repeat
-        if shuffle is not None and shuffle != self._shuffle:
-            self._shuffle = shuffle
-            self._order_playlist_id = None
-            self._ensure_order(playlist)
-        return self.state()
+            context.repeat = repeat
+        if shuffle is not None and shuffle != context.shuffle:
+            context.shuffle = shuffle
+            context.order_playlist_id = None
+            self._ensure_order(context, playlist)
+        return self.state(owner_id=owner_id)
 
     # ----------------------------------------------------------- internals
 
-    def _advance(self, *, honour_repeat_one: bool) -> PlaybackState:
+    def _advance(self, *, owner_id: str, honour_repeat_one: bool) -> PlaybackState:
         """Move to the next song of the playback order, stopping at the edges."""
-        playlist = self._require_song()
-        self._ensure_order(playlist)
+        context = self._context(owner_id)
+        playlist = self._require_song(context, owner_id)
+        self._ensure_order(context, playlist)
 
-        if honour_repeat_one and self._repeat is RepeatMode.ONE:
-            self._position = 0.0
-            self._playing = True
-            return self.state()
+        if honour_repeat_one and context.repeat is RepeatMode.ONE:
+            context.position = 0.0
+            context.playing = True
+            return self.state(owner_id=owner_id)
 
-        if self._shuffle:
-            if self._order_index + 1 < len(self._order):
-                self._play_order_position(playlist, self._order_index + 1)
-            elif self._repeat is RepeatMode.ALL:
-                self._play_order_position(playlist, 0)
+        if context.shuffle:
+            if context.order_index + 1 < len(context.order):
+                self._play_order_position(context, playlist, context.order_index + 1)
+            elif context.repeat is RepeatMode.ALL:
+                self._play_order_position(context, playlist, 0)
             else:
-                self._playing = False
-            return self.state()
+                context.playing = False
+            return self.state(owner_id=owner_id)
 
         if playlist.move_next():
-            self._sync_order_to_cursor(playlist)
-            self._position = 0.0
-            self._playing = True
-        elif self._repeat is RepeatMode.ALL:
+            self._sync_order_to_cursor(context, playlist)
+            context.position = 0.0
+            context.playing = True
+        elif context.repeat is RepeatMode.ALL:
             playlist.move_to(0)
-            self._sync_order_to_cursor(playlist)
-            self._position = 0.0
-            self._playing = True
+            self._sync_order_to_cursor(context, playlist)
+            context.position = 0.0
+            context.playing = True
         else:
             # PLAYLIST-009 = A: the list stops at the tail, it never loops.
-            self._playing = False
-        return self.state()
+            context.playing = False
+        return self.state(owner_id=owner_id)
 
-    def _require_song(self) -> Playlist:
+    def _require_song(self, context: _PlaybackContext, owner_id: str) -> Playlist:
         """Active playlist for an operation that needs at least one song."""
-        playlist = self._active()
-        self._ensure_order(playlist)
+        playlist = self._active(context, owner_id)
+        self._ensure_order(context, playlist)
         if playlist.size == 0:
             raise EmptyPlaylistError("the playlist has no songs")
         return playlist
 
-    def _active(self) -> Playlist:
+    def _active(self, context: _PlaybackContext, owner_id: str) -> Playlist:
         """Active playlist, or the matching domain error."""
-        if self._playlist_id is None:
+        if context.playlist_id is None:
             raise NoActivePlaybackError("no playlist is being played")
-        return self._find(self._playlist_id)
+        return self._find(context, context.playlist_id, owner_id)
 
-    def _find(self, playlist_id: str) -> Playlist:
-        playlist = self._repository.find_by_id(playlist_id)
+    def _find(
+        self, context: _PlaybackContext, playlist_id: str, owner_id: str
+    ) -> Playlist:
+        playlist = self._repository.find_by_id(playlist_id, owner_id=owner_id)
         if playlist is None:
             raise PlaylistNotFoundError(playlist_id)
         # The SQL adapter rebuilds the list on every read (ADR-004), so its
         # cursor always comes back at the head; restore ours before anyone reads.
-        cursor = self._cursors.get(playlist_id)
+        cursor = context.cursors.get(playlist_id)
         if cursor is not None and 0 <= cursor < playlist.size:
             playlist.move_to(cursor)
         return playlist
 
-    def _remember_cursor(self, playlist: Playlist) -> None:
+    def _remember_cursor(self, context: _PlaybackContext, playlist: Playlist) -> None:
         """Persist where the cursor sits so the next read starts there."""
         if playlist.current_index is not None:
-            self._cursors[playlist.id] = playlist.current_index
+            context.cursors[playlist.id] = playlist.current_index
 
-    def _edges(self, playlist: Playlist, index: int | None) -> tuple[bool, bool]:
+    def _edges(
+        self, context: _PlaybackContext, playlist: Playlist, index: int | None
+    ) -> tuple[bool, bool]:
         """Whether the cursor sits at the head and at the tail of the play order."""
-        if self._shuffle:
-            return self._order_index <= 0, self._order_index >= len(self._order) - 1
+        if context.shuffle:
+            return context.order_index <= 0, context.order_index >= len(context.order) - 1
         if index is None:
             return True, True
         return index <= 0, index >= playlist.size - 1
 
-    def _next_index(self, playlist: Playlist, index: int | None) -> int | None:
+    def _next_index(
+        self, context: _PlaybackContext, playlist: Playlist, index: int | None
+    ) -> int | None:
         """Index ``next`` would select, mirroring ``_advance`` without mutating."""
         if playlist.size == 0 or index is None:
             return None
-        if self._shuffle:
-            if self._order_index + 1 < len(self._order):
-                return self._order[self._order_index + 1]
-            return self._order[0] if self._repeat is RepeatMode.ALL else None
+        if context.shuffle:
+            if context.order_index + 1 < len(context.order):
+                return context.order[context.order_index + 1]
+            return context.order[0] if context.repeat is RepeatMode.ALL else None
         if index < playlist.size - 1:
             return index + 1
-        return 0 if self._repeat is RepeatMode.ALL else None
+        return 0 if context.repeat is RepeatMode.ALL else None
 
-    def _previous_index(self, playlist: Playlist, index: int | None) -> int | None:
+    def _previous_index(
+        self, context: _PlaybackContext, playlist: Playlist, index: int | None
+    ) -> int | None:
         """Index ``previous`` would select, mirroring ``previous`` without mutating."""
         if playlist.size == 0 or index is None:
             return None
-        if self._shuffle:
-            if self._order_index > 0:
-                return self._order[self._order_index - 1]
-            return self._order[-1] if self._repeat is RepeatMode.ALL else None
+        if context.shuffle:
+            if context.order_index > 0:
+                return context.order[context.order_index - 1]
+            return context.order[-1] if context.repeat is RepeatMode.ALL else None
         if index > 0:
             return index - 1
-        return playlist.size - 1 if self._repeat is RepeatMode.ALL else None
+        return playlist.size - 1 if context.repeat is RepeatMode.ALL else None
 
     def _duration(self, playlist: Playlist) -> float:
         song = playlist.current
@@ -318,43 +363,45 @@ class PlaybackService:
             return duration
         return position
 
-    def _play_order_position(self, playlist: Playlist, order_index: int) -> None:
-        """Select ``_order[order_index]`` as the song being played."""
-        self._order_index = order_index
-        playlist.move_to(self._order[order_index])
-        self._remember_cursor(playlist)
-        self._position = 0.0
-        self._playing = True
+    def _play_order_position(
+        self, context: _PlaybackContext, playlist: Playlist, order_index: int
+    ) -> None:
+        """Select ``context.order[order_index]`` as the song being played."""
+        context.order_index = order_index
+        playlist.move_to(context.order[order_index])
+        self._remember_cursor(context, playlist)
+        context.position = 0.0
+        context.playing = True
 
-    def _sync_order_to_cursor(self, playlist: Playlist) -> None:
+    def _sync_order_to_cursor(self, context: _PlaybackContext, playlist: Playlist) -> None:
         """Follow the list cursor back into the playback order (shuffle off)."""
         index = playlist.current_index
-        self._order_index = index if index is not None else 0
-        self._remember_cursor(playlist)
+        context.order_index = index if index is not None else 0
+        self._remember_cursor(context, playlist)
 
-    def _ensure_order(self, playlist: Playlist) -> None:
+    def _ensure_order(self, context: _PlaybackContext, playlist: Playlist) -> None:
         """Rebuild the playback order when the playlist identity or size changed."""
-        if self._order_playlist_id == playlist.id and len(self._order) == playlist.size:
+        if context.order_playlist_id == playlist.id and len(context.order) == playlist.size:
             return
-        self._rebuild_order(playlist)
-        self._order_playlist_id = playlist.id
+        self._rebuild_order(context, playlist)
+        context.order_playlist_id = playlist.id
 
-    def _rebuild_order(self, playlist: Playlist) -> None:
+    def _rebuild_order(self, context: _PlaybackContext, playlist: Playlist) -> None:
         """Recreate the order keeping the song under the cursor first."""
         size = playlist.size
         if size == 0:
-            self._order = []
-            self._order_index = 0
+            context.order = []
+            context.order_index = 0
             return
         current = playlist.current_index
         current = 0 if current is None else current
-        if self._shuffle:
+        if context.shuffle:
             others = [index for index in range(size) if index != current]
             self._rng.shuffle(others)
-            self._order = [current, *others]
+            context.order = [current, *others]
         else:
-            self._order = list(range(size))
-        self._order_index = self._order.index(current)
+            context.order = list(range(size))
+        context.order_index = context.order.index(current)
 
 
 __all__ = ["DEFAULT_SKIP_SECONDS", "PlaybackService"]

@@ -285,10 +285,9 @@ export class ApiClient {
 
   private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
     const init: RequestInit = { method, headers: { accept: "application/json" }, credentials: "include" };
-    const deviceId = getDeviceId();
-    if (deviceId) {
-      (init.headers as Record<string, string>)["x-device-id"] = deviceId;
-    }
+    // The backend scopes every playlist/playback call to this id, so it is
+    // always sent (an ephemeral id is minted when storage is unavailable).
+    (init.headers as Record<string, string>)["x-device-id"] = getDeviceId();
     if (body !== undefined) {
       init.body = JSON.stringify(body);
       (init.headers as Record<string, string>)["content-type"] = "application/json";

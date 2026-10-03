@@ -28,6 +28,15 @@
   `SqlPlaylistRepository` (PostgreSQL, `DB-002`) in production, or
   `InMemoryPlaylistRepository` in development and tests — both behind the same
   `PlaylistRepository` port.
+- **Every playlist and playback request requires an `X-Device-Id` header.** The
+  value is an anonymous per-browser UUID that the frontend mints and stores in
+  `localStorage`. All queries and writes are scoped to it; a missing or blank
+  header is answered `400`. A playlist that exists but belongs to another device
+  is reported as `404` (never `403`), so foreign ids are not enumerable. This is
+  UX isolation between devices, not authentication: clearing browser storage or
+  switching devices loses access to that device's playlists.
+- `POST /api/testing/reset` wipes every playlist and is mounted only when
+  `APP_ENV != production` (the E2E suite uses it); production never exposes it.
 
 ## Endpoints
 

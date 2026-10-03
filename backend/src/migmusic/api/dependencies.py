@@ -45,15 +45,21 @@ def get_music_provider(request: Request) -> MusicProvider:
 DEVICE_ID_HEADER = "x-device-id"
 
 
-def get_device_id(request: Request) -> str | None:
-    """Optional device scope: ``X-Device-Id`` narrows playlist visibility.
+def require_device_id(request: Request) -> str:
+    """Require the caller's anonymous device id: ``X-Device-Id``.
 
-    Missing or blank means "unscoped" (``None``): the caller sees every
-    playlist. This is UX isolation for local lists, not authentication — the
-    header is advisory and cheap to omit in tooling and curl checks.
+    Every playlist and playback call is scoped to this id, so a missing or
+    blank header is rejected (400) instead of silently falling back to an
+    unscoped view that would expose other devices' data. This is UX isolation
+    between devices, not authentication.
     """
     value = request.headers.get(DEVICE_ID_HEADER, "").strip()
-    return value or None
+    if not value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Device-Id header is required",
+        )
+    return value
 
 
 async def require_spotify_token(
@@ -76,7 +82,7 @@ async def require_spotify_token(
 
 PlaylistServiceDep = Annotated[PlaylistService, Depends(get_playlist_service)]
 PlaybackServiceDep = Annotated[PlaybackService, Depends(get_playback_service)]
-DeviceIdDep = Annotated[str | None, Depends(get_device_id)]
+DeviceIdDep = Annotated[str, Depends(require_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]
 MusicProviderDep = Annotated[MusicProvider, Depends(get_music_provider)]

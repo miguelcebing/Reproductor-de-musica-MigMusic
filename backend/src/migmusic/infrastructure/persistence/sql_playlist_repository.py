@@ -29,7 +29,8 @@ from migmusic.domain.ports.playlist_repository import PlaylistRepository
 # Idempotent schema: safe to run on every process start (`IF NOT EXISTS`).
 # ``created_seq`` gives ``list_all`` the insertion order of the in-memory
 # adapter; ``position`` is the dense fallback from `ADR-004`. ``owner_id`` is
-# the device that created the playlist (UX isolation, null = unscoped).
+# the device that created the playlist (UX isolation); the index keeps the
+# per-owner listing cheap.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS playlists (
     id TEXT PRIMARY KEY,
@@ -39,6 +40,8 @@ CREATE TABLE IF NOT EXISTS playlists (
 );
 
 ALTER TABLE playlists ADD COLUMN IF NOT EXISTS owner_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_playlists_owner_id ON playlists (owner_id);
 
 CREATE TABLE IF NOT EXISTS songs (
     playlist_id TEXT NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
@@ -121,7 +124,7 @@ class SqlPlaylistRepository(PlaylistRepository):
 
     # ----------------------------------------------------------------- write
 
-    def save(self, playlist: Playlist, *, owner_id: str | None = None) -> None:
+    def save(self, playlist: Playlist, *, owner_id: str) -> None:
         """Upsert the playlist and rewrite its songs as one transaction.
 
         Songs are immutable in place (``FEAT-001-b`` replaces the value), so a
@@ -169,19 +172,29 @@ class SqlPlaylistRepository(PlaylistRepository):
                     },
                 )
 
-    def delete(self, playlist_id: str) -> bool:
-        """Delete the playlist (songs cascade); ``False`` when absent."""
+    def delete(self, playlist_id: str, *, owner_id: str) -> bool:
+        """Delete the playlist when ``owner_id`` owns it (songs cascade)."""
         with self._connection() as connection:
-            cursor = connection.execute("DELETE FROM playlists WHERE id = %s", (playlist_id,))
+            cursor = connection.execute(
+                "DELETE FROM playlists WHERE id = %s AND owner_id = %s",
+                (playlist_id, owner_id),
+            )
             return cursor.rowcount > 0
+
+    def delete_all(self) -> int:
+        """Drop every playlist and its songs (development/test reset only)."""
+        with self._connection() as connection:
+            cursor = connection.execute("DELETE FROM playlists")
+            return cursor.rowcount
 
     # ------------------------------------------------------------------ read
 
-    def find_by_id(self, playlist_id: str) -> Playlist | None:
-        """Return the playlist rebuilt from its rows, or ``None``."""
+    def find_by_id(self, playlist_id: str, *, owner_id: str) -> Playlist | None:
+        """Return the playlist rebuilt from its rows when ``owner_id`` owns it."""
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT name FROM playlists WHERE id = %s", (playlist_id,)
+                "SELECT name FROM playlists WHERE id = %s AND owner_id = %s",
+                (playlist_id, owner_id),
             ).fetchone()
             if row is None:
                 return None
@@ -200,24 +213,16 @@ class SqlPlaylistRepository(PlaylistRepository):
             songs=[_row_to_song(song_row) for song_row in song_rows],
         )
 
-    def list_all(self, *, owner_id: str | None = None) -> list[Playlist]:
-        """Every playlist in insertion order with its songs.
-
-        ``owner_id`` narrows the query to one device; ``None`` lists all.
-        """
+    def list_all(self, *, owner_id: str) -> list[Playlist]:
+        """Every playlist owned by ``owner_id``, in insertion order."""
         with self._connection() as connection:
-            if owner_id is None:
-                playlist_rows = connection.execute(
-                    "SELECT id, name FROM playlists ORDER BY created_seq"
-                ).fetchall()
-            else:
-                playlist_rows = connection.execute(
-                    """
-                    SELECT id, name FROM playlists
-                    WHERE owner_id = %(owner_id)s ORDER BY created_seq
-                    """,
-                    {"owner_id": owner_id},
-                ).fetchall()
+            playlist_rows = connection.execute(
+                """
+                SELECT id, name FROM playlists
+                WHERE owner_id = %(owner_id)s ORDER BY created_seq
+                """,
+                {"owner_id": owner_id},
+            ).fetchall()
             song_rows = connection.execute(
                 """
                 SELECT playlist_id, position, song_id, title, artist, source,

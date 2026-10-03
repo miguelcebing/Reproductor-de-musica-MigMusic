@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
-from migmusic.api.routers import auth, health, playback, playlists, spotify
+from migmusic.api.routers import auth, health, playback, playlists, spotify, testing
 from migmusic.api.routers.auth import callback_get as legacy_callback_get
 from migmusic.application.services import PlaybackService, PlaylistService
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
@@ -140,6 +140,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(playback.router)
     app.include_router(auth.router)
     app.include_router(spotify.router)
+    if not config.is_production:
+        # The reset helper only exists outside production.
+        app.include_router(testing.router)
 
     # Legacy callback endpoint for Spotify redirect URI without /spotify/
     app.add_api_route(

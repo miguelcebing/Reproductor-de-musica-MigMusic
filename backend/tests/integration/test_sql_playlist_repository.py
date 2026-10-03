@@ -27,6 +27,9 @@ pytestmark = [
 ]
 
 
+OWNER = "device-owner"
+
+
 @pytest.fixture
 def sql_repository() -> Iterator[SqlPlaylistRepository]:
     """Fresh schema state per test, then an adapter over it."""
@@ -60,9 +63,9 @@ def test_save_and_find_round_trip(
         available=False,
     )
     playlist = Playlist("Road trip", songs=[song])
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
 
-    loaded = sql_repository.find_by_id(playlist.id)
+    loaded = sql_repository.find_by_id(playlist.id, owner_id=OWNER)
 
     assert loaded is not None
     assert loaded.id == playlist.id
@@ -74,20 +77,20 @@ def test_save_and_find_round_trip(
 
 
 def test_find_missing_playlist_returns_none(sql_repository: SqlPlaylistRepository) -> None:
-    assert sql_repository.find_by_id("nope") is None
+    assert sql_repository.find_by_id("nope", owner_id=OWNER) is None
 
 
 def test_save_upserts_name_and_rewrites_songs(
     sql_repository: SqlPlaylistRepository, make_song: Callable[..., Song]
 ) -> None:
     playlist = Playlist("First", songs=[make_song()])
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
     playlist.rename("Second")
     playlist.remove_at(0)
     playlist.add(make_song(title="Replacement"))
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
 
-    loaded = sql_repository.find_by_id(playlist.id)
+    loaded = sql_repository.find_by_id(playlist.id, owner_id=OWNER)
 
     assert loaded is not None
     assert loaded.name == "Second"
@@ -101,9 +104,9 @@ def test_list_all_preserves_insertion_order(
     second = Playlist("B")
     third = Playlist("C", songs=[make_song(), make_song()])
     for playlist in (first, second, third):
-        sql_repository.save(playlist)
+        sql_repository.save(playlist, owner_id=OWNER)
 
-    listed = sql_repository.list_all()
+    listed = sql_repository.list_all(owner_id=OWNER)
 
     assert [playlist.id for playlist in listed] == [first.id, second.id, third.id]
     assert [playlist.size for playlist in listed] == [1, 0, 2]
@@ -113,11 +116,11 @@ def test_delete_removes_playlist_and_songs(
     sql_repository: SqlPlaylistRepository, make_song: Callable[..., Song]
 ) -> None:
     playlist = Playlist("Doomed", songs=[make_song(), make_song()])
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
 
-    assert sql_repository.delete(playlist.id) is True
-    assert sql_repository.delete(playlist.id) is False
-    assert sql_repository.find_by_id(playlist.id) is None
+    assert sql_repository.delete(playlist.id, owner_id=OWNER) is True
+    assert sql_repository.delete(playlist.id, owner_id=OWNER) is False
+    assert sql_repository.find_by_id(playlist.id, owner_id=OWNER) is None
     assert _raw_songs(playlist.id) == []
 
 
@@ -127,7 +130,7 @@ def test_columns_mirror_the_doubly_linked_list(
     """`DB-003`: prev_id/next_id reflect the links; NULL at both ends."""
     songs = [make_song(), make_song(), make_song()]
     playlist = Playlist("Linked", songs=songs)
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
 
     rows = _raw_songs(playlist.id)
 
@@ -148,9 +151,9 @@ def test_duplicates_survive_and_cursor_resets_to_head(
     playlist = Playlist("Twice", songs=[song, make_song(), song])
     playlist.move_next()
     assert playlist.current_index == 1
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id=OWNER)
 
-    loaded = sql_repository.find_by_id(playlist.id)
+    loaded = sql_repository.find_by_id(playlist.id, owner_id=OWNER)
 
     assert loaded is not None
     assert loaded.size == 3
@@ -165,14 +168,24 @@ def test_empty_dsn_is_rejected() -> None:
 
 
 def test_list_all_scopes_to_one_device(sql_repository: SqlPlaylistRepository) -> None:
-    """`owner_id` narrows the listing; the unscoped view keeps everything."""
+    """`owner_id` narrows the listing to exactly one device."""
     sql_repository.save(Playlist("Phone mix"), owner_id="device-a")
     sql_repository.save(Playlist("Laptop mix"), owner_id="device-b")
-    sql_repository.save(Playlist("Shared"))
+    sql_repository.save(Playlist("Shared"), owner_id=OWNER)
 
     assert [p.name for p in sql_repository.list_all(owner_id="device-a")] == ["Phone mix"]
     assert [p.name for p in sql_repository.list_all(owner_id="device-b")] == ["Laptop mix"]
-    assert [p.name for p in sql_repository.list_all()] == ["Phone mix", "Laptop mix", "Shared"]
+    assert [p.name for p in sql_repository.list_all(owner_id=OWNER)] == ["Shared"]
+
+
+def test_find_and_delete_hide_foreign_playlists(sql_repository: SqlPlaylistRepository) -> None:
+    """A foreign id is a miss for reads and a no-op for deletes."""
+    playlist = Playlist("Phone mix")
+    sql_repository.save(playlist, owner_id="device-a")
+
+    assert sql_repository.find_by_id(playlist.id, owner_id="device-b") is None
+    assert sql_repository.delete(playlist.id, owner_id="device-b") is False
+    assert sql_repository.find_by_id(playlist.id, owner_id="device-a") is not None
 
 
 def test_owner_survives_updates(sql_repository: SqlPlaylistRepository) -> None:
@@ -180,7 +193,7 @@ def test_owner_survives_updates(sql_repository: SqlPlaylistRepository) -> None:
     playlist = Playlist("Owned")
     sql_repository.save(playlist, owner_id="device-a")
     playlist.rename("Renamed")
-    sql_repository.save(playlist)
+    sql_repository.save(playlist, owner_id="device-a")
 
     assert [p.name for p in sql_repository.list_all(owner_id="device-a")] == ["Renamed"]
     assert sql_repository.list_all(owner_id="device-b") == []
