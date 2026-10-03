@@ -218,6 +218,33 @@ describe("PlaybackController (F7 integration)", () => {
     await controller.onTrackChange(null);
   });
 
+  it("startup refresh never reopens a playing track (empty on entry)", async () => {
+    const api = makeApi();
+    api.getPlayback.mockResolvedValueOnce(makeState({ playing: true }));
+    const { controller, factory } = makeController(api);
+
+    const state = await controller.refresh(/* restorePlaying */ false);
+
+    expect(state?.playing).toBe(false);
+    expect(usePlaybackStore.getState().playback?.playing).toBe(false);
+    // The backend is told to pause so its state matches the screen.
+    expect(api.report).toHaveBeenCalledWith(undefined, false);
+    // No audio player is created: the user must press play.
+    expect(factory.createPlayer).not.toHaveBeenCalled();
+  });
+
+  it("refresh keeps a playing track when restorePlaying is allowed", async () => {
+    const api = makeApi();
+    api.getPlayback.mockResolvedValueOnce(makeState({ playing: true }));
+    const { controller } = makeController(api);
+
+    const state = await controller.refresh();
+
+    expect(state?.playing).toBe(true);
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true);
+    expect(api.report).not.toHaveBeenCalled();
+  });
+
   it("resumes a saved position after a reload, restarting at zero at the tail", async () => {
     usePlaybackStore.getState().setPlayback(makeState({ playing: true, position: 42 }));
     const first = makeController();

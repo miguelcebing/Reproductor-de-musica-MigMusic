@@ -130,17 +130,15 @@ export function App(): React.JSX.Element {
         useToastStore.getState().push("error", translate(language, "toast.error", { message }));
       }
       if (cancelled) return;
-      const [, playback] = await Promise.all([
+      // Startup never resumes audio by itself: the queue is loaded, but the
+      // player starts empty until the user presses play (autoplay policy and
+      // a clean "nothing playing" screen).
+      await Promise.all([
         controllers.playlists.refresh(),
-        controllers.playback.refresh(),
+        controllers.playback.refresh(/* restorePlaying */ false),
       ]);
-      if (cancelled || !playback?.playlist_id) return;
-      // A reload restarts `activeId` while the backend keeps its playback
-      // context: show the playlist being played, not the first one, or the
-      // list on screen stops matching the transport (`UX-011`).
-      const store = usePlaylistStore.getState();
-      const exists = store.playlists.some((item) => item.id === playback.playlist_id);
-      if (exists) store.setActiveId(playback.playlist_id);
+      if (cancelled) return;
+      usePlaybackStore.getState().reset();
     };
     void bootstrap();
     void controllers.auth.refresh();

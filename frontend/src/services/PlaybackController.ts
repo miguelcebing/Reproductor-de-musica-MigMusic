@@ -118,10 +118,25 @@ export class PlaybackController {
     this.userGesture = true;
   }
 
-  /** Load the transport state from backend. */
-  async refresh(): Promise<PlaybackState | null> {
+  /**
+   * Load the transport state from backend.
+   *
+   * `restorePlaying` (default `true`) controls what happens when the backend
+   * still holds a song marked as playing from an earlier session: on startup
+   * the app passes `false`, so the queue is restored but nothing is shown or
+   * played until the user presses play. Without this, a reload resumed the
+   * previous track on its own.
+   */
+  async refresh(restorePlaying = true): Promise<PlaybackState | null> {
     try {
       const state = await this.api.getPlayback();
+      if (!restorePlaying && state.playing) {
+        // Startup: keep the cursor/queue, but never reopen the audio by itself.
+        const paused = { ...state, playing: false };
+        usePlaybackStore.getState().setPlayback(paused);
+        void this.api.report(undefined, false).catch(() => undefined);
+        return paused;
+      }
       usePlaybackStore.getState().setPlayback(state);
       return state;
     } catch (cause) {
