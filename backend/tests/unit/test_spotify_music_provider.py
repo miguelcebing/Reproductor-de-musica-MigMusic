@@ -44,6 +44,25 @@ def _provider(payload: Any) -> SpotifyMusicProvider:
     return SpotifyMusicProvider(client)
 
 
+def test_repeated_searches_are_cached() -> None:
+    """The same query only hits Spotify once within the TTL (`PERF`)."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"tracks": {"items": [_track()]}})
+
+    current_access_token.set("token")
+    client = SpotifyApiClient(httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    provider = SpotifyMusicProvider(client)
+
+    first = asyncio.run(provider.search_tracks("night"))
+    second = asyncio.run(provider.search_tracks("NIGHT"))  # case-insensitive key
+
+    assert first == second
+    assert len(calls) == 1
+
+
 def test_track_maps_to_a_domain_song() -> None:
     """Every Spotify field lands on the matching ``Song`` attribute."""
     provider = _provider({"tracks": {"items": [_track()]}})

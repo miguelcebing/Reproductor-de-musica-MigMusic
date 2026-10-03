@@ -8,6 +8,7 @@ import { memo, useCallback, useMemo, useState, type DragEvent } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import type { Song } from "../../domain/types";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useT } from "../../i18n/useT";
 import { EmptyState } from "./EmptyState";
 import { TrackItem } from "./TrackItem";
@@ -48,6 +49,9 @@ export const TrackList = memo(function TrackList({
   const [noMatch, setNoMatch] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Filter on the debounced query: one pass ~300 ms after typing stops instead
+  // of one per keystroke (`PERF`).
+  const debouncedQuery = useDebouncedValue(query);
 
   const handleDragStart = useCallback(
     (index: number, event: DragEvent<HTMLLIElement>) => {
@@ -107,7 +111,7 @@ export const TrackList = memo(function TrackList({
     return <p className={styles.loading}>{t("list.loading")}</p>;
   }
 
-  const normalized = query.trim().toLowerCase();
+  const normalized = debouncedQuery.trim().toLowerCase();
   let visible = songs.map((song, index) => ({ song, index }));
   if (normalized) {
     visible = visible.filter(

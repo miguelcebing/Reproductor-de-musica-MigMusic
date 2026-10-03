@@ -16,10 +16,15 @@ from typing import Any
 from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.domain.entities.song import Song
 from migmusic.domain.ports.music_provider import MusicProvider
+from migmusic.infrastructure.cache import TtlCache
 from migmusic.infrastructure.spotify.spotify_client import SpotifyApiClient
 
 # Set per request by ``require_spotify_token``; read by the provider below.
 current_access_token: ContextVar[str | None] = ContextVar("spotify_access_token", default=None)
+
+# Searches repeat constantly while the user types; a short TTL removes the
+# duplicate Spotify round trips without serving stale results for long.
+_SEARCH_TTL_SECONDS = 300.0
 
 
 def _require_token() -> str:
@@ -35,10 +40,19 @@ class SpotifyMusicProvider(MusicProvider):
 
     def __init__(self, client: SpotifyApiClient) -> None:
         self._client = client
+        self._search_cache: TtlCache[str, list[Song]] = TtlCache(
+            ttl=_SEARCH_TTL_SECONDS, max_size=256
+        )
 
     async def search_tracks(self, query: str, *, limit: int = 20) -> list[Song]:
+        key = f"{query.strip().casefold()}::{limit}"
+        cached = self._search_cache.get(key)
+        if cached is not None:
+            return cached
         raw_items = await self._client.search_tracks(_require_token(), query, limit=limit)
-        return _songs_from(raw_items)
+        songs = _songs_from(raw_items)
+        self._search_cache.set(key, songs)
+        return songs
 
     async def get_track(self, track_id: str) -> Song | None:
         raw = await self._client.track(_require_token(), track_id)

@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from migmusic.api.error_handlers import register_error_handlers
 from migmusic.api.routers import auth, health, playback, playlists, spotify, testing, youtube
@@ -94,6 +95,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Compress JSON responses (catalogs and playlists are text-heavy; this cuts
+    # the wire size of a search page several times over on slow links).
+    app.add_middleware(GZipMiddleware, minimum_size=512)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
