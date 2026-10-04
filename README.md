@@ -79,6 +79,12 @@ Copia `.env.example` a `.env` y rellena. **Nunca** subas `.env` al repositorio.
 | `OAUTH_STATE_MAX_AGE` | Segundos que puede durar un login sin terminar (defecto `900`) |
 | `DATABASE_URL` | URL de conexiÃ³n a PostgreSQL (Neon) |
 | `RENDER_BACKEND_URL` | URL del backend para el proxy `/api/*` de Vercel |
+| `RATE_LIMIT_ENABLED` | Activa el rate limiting (por defecto `true`; `false` en desarrollo/tests) |
+| `RATE_LIMIT_DEFAULT_PER_MINUTE` | Presupuesto general por minuto (defecto `120`) |
+| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | Presupuesto estricto de bÃºsqueda/letras/YouTube (defecto `20`) |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | Presupuesto de `/api/auth/*` (defecto `10`) |
+| `MAX_REQUEST_BODY_BYTES` | TamaÃ±o mÃ¡ximo de cuerpo; por encima responde `413` (defecto `65536`) |
+| `TRUSTED_HOSTS` | Lista de Host permitidos (opcional; por defecto localhost + `*.onrender.com`) |
 
 ### Configurar la app en Spotify Dashboard
 
@@ -122,6 +128,7 @@ cd backend
 uv run ruff check .
 uv run mypy src
 uv run pytest          # incluye los tests SQL (PostgreSQL embebido vÃ­a pgserver)
+uv run pip-audit --skip-editable   # auditorÃ­a de dependencias (0 vulnerabilidades)
 
 cd frontend
 npm run lint

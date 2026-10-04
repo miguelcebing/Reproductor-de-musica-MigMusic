@@ -23,6 +23,8 @@
 uv run ruff check . ; uv run ruff format --check . ; uv run mypy
 uv run pytest --cov=src/migmusic --cov-report=term --cov-fail-under=80
 uv run coverage report --include="*/migmusic/domain/*" --fail-under=95
+# Auditoría de dependencias (sin vulnerabilidades conocidas)
+uv run pip-audit --skip-editable
 
 # Frontend (desde frontend/)
 npm run lint ; npm run typecheck
@@ -35,17 +37,56 @@ La suite E2E es hermética: no necesita `.env`, arranca Vite (5173) y Uvicorn (8
 fuerza `DATABASE_URL=""` (repositorio in-memory, nunca toca una base real) y resetea los
 playlists vía API en cada test.
 
-## 3. Estado actual (2026-10-02)
+### Cómo comprobar rate limiting y cabeceras a mano
+
+```powershell
+# Cabeceras de seguridad en la API (backend local o vía el proxy):
+curl -sI http://127.0.0.1:8000/api/health
+#   X-Content-Type-Options: nosniff · X-Frame-Options: DENY · Referrer-Policy
+#   Content-Security-Policy: default-src 'none'; frame-ancestors 'none'
+
+# Rate limiting en un endpoint estricto (búsqueda/letras): 429 + Retry-After
+1..25 | ForEach-Object { curl -s -o NUL -w "%{http_code} " -H "X-Device-Id: manual-test" `
+    "http://127.0.0.1:8000/api/youtube/search?q=a" }
+#   Los primeros N (RATE_LIMIT_EXPENSIVE_PER_MINUTE) responden 200; el resto 429.
+
+# Cuerpo demasiado grande: 413
+curl -s -o NUL -w "%{http_code}" -X POST http://127.0.0.1:8000/api/playlists `
+    -H "Content-Type: application/json" -H "X-Device-Id: manual-test" `
+    --data-binary ("{\"name\":\"" + ("x" * 70000) + "\"}")
+```
+
+La comprobación automática equivalente vive en `backend/tests/integration/test_security_middleware.py`.
+
+## 3. Estado actual (2026-10-03)
 
 | Métrica | Umbral (`TEST-002`) | Actual |
 |---|---|---|
-| Cobertura global backend | ≥ 80 % | **97.05 %** |
-| Cobertura `domain/` | ≥ 95 % | **100 %** |
-| Tests backend | — | **338** (unit + integración + property-based) |
-| Tests frontend (Vitest) | — | **116** (10 archivos) |
-| Tests E2E (Playwright) | — | **14** (10 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance) |
+| Cobertura global backend | ≥ 80 % | **94.3 %** |
+| Cobertura `domain/` | ≥ 95 % | **99 %** |
+| Tests backend | — | **401** (unit + integración + property-based) |
+| Tests frontend (Vitest) | — | **147** (15 archivos) |
+| Tests E2E (Playwright) | — | **21** (12 specs: smoke, maestro ×2, drag & drop, persistencia local, axe ×3, diálogo Spotify, bordes del transporte, aislamiento por dispositivo, reload, auto-avance, inicio inmediato, letras ×2) |
 | Violaciones axe (WCAG 2.1 A/AA) | 0 | **0** (light, dark y diálogo abierto) |
+| Auditoría de dependencias | 0 vulnerabilidades | **0** (`pip-audit` + `npm audit --omit=dev`) |
 | Jobs de CI (`TEST-003`) | bloquean | `backend`, `frontend`, `e2e`, `no-secrets` |
+
+### Suites añadidas en esta rama (F12/F13/SEC-001)
+
+| Área | Archivo | Qué cubre |
+|---|---|---|
+| Segundo plano | `frontend/src/services/mediaSession.test.ts` | Metadata + acciones play/pausa/seek, estado playing/paused, limpieza y ausencia de API |
+| Segundo plano | `frontend/src/services/playbackResilience.test.ts` | Reanudación al volver a visible, silencio estando oculto, `stop()` |
+| Reproducción inmediata | `frontend/src/services/PlaybackController.test.ts` (+5) | `select` optimista con `loading`, parada del audio anterior, cancelación de la petición previa, respuesta `aborted` muda |
+| Reproducción inmediata | `frontend/src/players/YouTubePlayer.test.ts` (actualizado) | Reutiliza el mismo iframe (`loadVideoById`) y `destroy()` no recrea el player |
+| Reproducción inmediata | `frontend/e2e/instant-play.spec.ts` | Mide clic→título y clic→audio; ráfaga de clics → solo suena la última |
+| Letras | `backend/tests/unit/test_application/test_lyrics_service.py` | Estrategia fuente-propia → LRCLIB, fallo = miss, caché de misses |
+| Letras | `backend/tests/unit/test_infrastructure/test_lrclib_client.py` | Plain/LRC, 404 = miss, 5xx y timeout = error de upstream |
+| Letras | `backend/tests/integration/test_lyrics_api.py` | 200 con texto, 204 sin letras, 422 con título vacío/enorme |
+| Letras | `frontend/src/services/LyricsController.test.ts` | Resultado, 204→vacío, caché por canción, error cacheado |
+| Letras | `frontend/e2e/lyrics.spec.ts` | Panel con texto y con estado vacío (respuesta interceptada) |
+| Seguridad | `backend/tests/integration/test_security_middleware.py` | 429 por presupuesto + `Retry-After`, aislamiento por device-id, health exento, `RATE_LIMIT_ENABLED=false`, 413 y cabeceras |
+| Seguridad | `frontend/src/services/localTracks.test.ts` | MP3/WAV por extensión y MIME, MIME vacío, formatos no admitidos, límite de tamaño |
 
 ## 4. Reporte: criterio → evidencia → estado
 
@@ -73,6 +114,13 @@ Equivale a la tabla que exige `SKILL6.md` §"Reporte final".
 | Desplegado en la nube (HTTPS, CORS, Redirect URI prod, logs) | 2026-10-01 sobre `19e9408`: `https://migmusic.vercel.app` + `https://migmusic-api.onrender.com` (health 200 directo y por proxy, preflight 200 con ACAO correcta + credenciales, Spotify acepta la Redirect URI, Render y Vercel auto-desplegaron, `keep-alive.yml` cada 5 min) | ✅ |
 | ≥2 funcionalidades adicionales aprobadas e implementadas | `FEAT-001-b/c/d/e` (favoritos, búsqueda, repeat, drag & drop) — 4 de 2 | ✅ |
 | Documentación actualizada | README, `docs/architecture.md`, `docs/api.md`, ADR-001..006, este documento | ✅ |
+| `F12` — música en segundo plano (Media Session + PWA) | `mediaSession.ts` + `playbackResilience.ts` (7 tests), manifest + service worker sin caché de `/api/*`, iconos generados | ✅ |
+| `F12` — arranque inmediato al pulsar una canción | `select` optimista + cancelación de peticiones + iframe de YouTube reutilizado + precarga; E2E `instant-play` mide **clic→título ~115 ms** y que solo suena la última pulsada | ✅ |
+| `F13` — letras | `POST /api/lyrics` (YouTube propio → LRCLIB, caché TTL), panel en el reproductor; unit + integración + E2E `lyrics` | ✅ |
+| `SEC-001` — rate limiting | Middleware por device-id/IP con buckets default/expensive/auth, 429 + `Retry-After`; `test_security_middleware.py` | ✅ |
+| `SEC-001` — validación y cabeceras | `max_length` en schemas, 413 de cuerpo, `X-Device-Id` con formato, cabeceras de seguridad + CSP de página en `vercel.json` | ✅ |
+| `SEC-001` — autorización por owner | Todos los endpoints de playlists/playback toman `owner_id` del header validado, nunca del body; SQL `WHERE ... owner_id` | ✅ |
+| `SEC-001` — dependencias y secretos | `pip-audit` y `npm audit` sin vulnerabilidades; historial de git sin secretos (nada que rotar) | ✅ |
 
 ## 5. Hallazgos (suite E2E y prueba manual en producción)
 
