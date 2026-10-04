@@ -11,6 +11,8 @@ data, even by guessing its UUID.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from migmusic.core import ValidationError
 from migmusic.domain.entities.playlist import Playlist
 from migmusic.domain.entities.song import Song
@@ -68,6 +70,25 @@ class PlaylistService:
             playlist.add(song)
         else:
             playlist.insert_at(index, song)
+        self._repository.save(playlist, owner_id=owner_id)
+        return playlist
+
+    def add_songs(
+        self, playlist_id: str, songs: Sequence[Song], *, index: int | None = None, owner_id: str
+    ) -> Playlist:
+        """Append (or insert) several songs with a single read and write.
+
+        Adding tracks one HTTP call at a time cost a full read+rewrite of the
+        playlist per song and multiplied the latency; batching keeps it to one
+        round trip regardless of how many tracks were picked.
+        """
+        playlist = self._get_owned(playlist_id, owner_id)
+        if index is None:
+            for song in songs:
+                playlist.add(song)
+        else:
+            for offset, song in enumerate(songs):
+                playlist.insert_at(index + offset, song)
         self._repository.save(playlist, owner_id=owner_id)
         return playlist
 

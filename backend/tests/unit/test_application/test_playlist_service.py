@@ -210,6 +210,35 @@ def test_add_song_refuses_a_foreign_playlist(
     assert playlist.size == 2
 
 
+def test_add_songs_batches_append_in_order(
+    playlist_service: PlaylistService,
+    seed_playlist: Callable[..., Playlist],
+    make_song: Callable[..., Song],
+) -> None:
+    """A batch appends every song in the order it was sent."""
+    playlist = seed_playlist(count=1)
+    batch = [make_song(title=f"B{i}") for i in range(3)]
+
+    result = playlist_service.add_songs(playlist.id, batch, owner_id=OWNER)
+
+    assert result.size == 4
+    assert [song.title for song in list(result)[1:]] == ["B0", "B1", "B2"]
+
+
+def test_add_songs_batches_insert_at_a_position(
+    playlist_service: PlaylistService,
+    seed_playlist: Callable[..., Playlist],
+    make_song: Callable[..., Song],
+) -> None:
+    """From ``index`` the whole batch is inserted contiguously, in order."""
+    playlist = seed_playlist(count=2)
+    batch = [make_song(title="A"), make_song(title="B")]
+
+    result = playlist_service.add_songs(playlist.id, batch, index=1, owner_id=OWNER)
+
+    assert [song.title for song in result] == ["Song 1", "A", "B", "Song 2"]
+
+
 def test_remove_song_returns_it_and_shrinks_the_list(
     playlist_service: PlaylistService,
     seed_playlist: Callable[..., Playlist],

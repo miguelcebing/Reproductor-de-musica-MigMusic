@@ -95,16 +95,14 @@ export class PlaylistController {
     position: TrackPosition,
   ): Promise<Playlist | null> {
     if (files.length === 0) return null;
+    const index =
+      position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
     return this.mutate(
       async () => {
-        let index =
-          position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
-        for (const file of files) {
-          const song = await localSongFromFile(file);
-          await this.api.addSong(playlistId, song, index);
-          if (index !== undefined) index += 1;
-        }
-        return this.api.getPlaylist(playlistId);
+        // Metadata extraction stays per file (it reads each blob), but the
+        // server call is batched: one read + one write instead of N of each.
+        const songs = await Promise.all(files.map((file) => localSongFromFile(file)));
+        return this.api.addSongs(playlistId, songs, index);
       },
       (playlist) => {
         usePlaylistStore.getState().upsertPlaylist(playlist);
@@ -113,23 +111,17 @@ export class PlaylistController {
     );
   }
 
-  /** Add several catalog songs in one pass, honouring the position (`F6`). */
+  /** Add several catalog songs in one request, honouring the position (`F6`). */
   async addSongs(
     playlistId: string,
     songs: readonly SongInput[],
     position: TrackPosition,
   ): Promise<Playlist | null> {
     if (songs.length === 0) return null;
+    const index =
+      position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
     return this.mutate(
-      async () => {
-        let index =
-          position.kind === "start" ? 0 : position.kind === "index" ? position.index : undefined;
-        for (const song of songs) {
-          await this.api.addSong(playlistId, song, index);
-          if (index !== undefined) index += 1;
-        }
-        return this.api.getPlaylist(playlistId);
-      },
+      () => this.api.addSongs(playlistId, songs, index),
       (playlist) => {
         usePlaylistStore.getState().upsertPlaylist(playlist);
         this.toast("success", "toast.added");

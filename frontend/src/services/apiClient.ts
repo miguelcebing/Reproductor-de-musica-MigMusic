@@ -26,6 +26,11 @@ import { getDeviceId } from "./deviceId";
 
 /** Nothing in this API legitimately takes longer; a hung button is worse. */
 export const REQUEST_TIMEOUT_MS = 10_000;
+/** A sleeping Render instance needs more room to answer the first request. */
+export const COLD_START_TIMEOUT_MS = 20_000;
+/** Idempotent reads retry once: a cold start must not look like a failure. */
+export const MAX_RETRIES = 1;
+export const RETRY_BACKOFF_MS = 400;
 
 /** Development uses the Vite proxy; production goes through Vercel's /api rewrite. */
 export function resolveApiBaseUrl(origin: string): string {
@@ -65,6 +70,24 @@ export function failureMessage(cause: unknown, language: Language): string {
     return translate(language, "toast.timeout");
   }
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+/**
+ * Whether a failed read is worth one silent retry.
+ *
+ * The typical case is a Render free instance waking up: the connection times
+ * out or the proxy answers 502/503/504 while the app boots. A real refusal
+ * (4xx) must never be retried.
+ */
+export function isRetryable(cause: unknown): boolean {
+  if (!(cause instanceof ApiError)) return false;
+  return (
+    cause.code === "timeout" ||
+    cause.code === "network_error" ||
+    cause.status === 502 ||
+    cause.status === 503 ||
+    cause.status === 504
+  );
 }
 
 const defaultFetch: FetchLike = (url, init) => fetch(url, init);
@@ -108,6 +131,16 @@ export class ApiClient {
   addSong(playlistId: string, song: SongInput, index?: number): Promise<Playlist> {
     const body = index === undefined ? { song } : { song, index };
     return this.send<Playlist>("POST", `/playlists/${encodeURIComponent(playlistId)}/songs`, body);
+  }
+
+  /** Add several songs in one request (batched: one read + one write server-side). */
+  addSongs(playlistId: string, songs: readonly SongInput[], index?: number): Promise<Playlist> {
+    const body = index === undefined ? { songs } : { songs, index };
+    return this.send<Playlist>(
+      "POST",
+      `/playlists/${encodeURIComponent(playlistId)}/songs/batch`,
+      body,
+    );
   }
 
   removeSong(playlistId: string, index: number): Promise<Song> {
@@ -315,6 +348,37 @@ export class ApiClient {
     body?: unknown,
     signal?: AbortSignal,
   ): Promise<T> {
+    // Reads (GET) are idempotent and the backend may be cold-starting, so they
+    // retry once with a longer first deadline. Writes never retry: a duplicate
+    // create/add is worse than a visible error.
+    const retryable = method === "GET";
+    const attempts = retryable ? MAX_RETRIES + 1 : 1;
+    const delay = (ms: number): Promise<void> =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await this.attempt<T>(method, path, body, signal, retryable && attempt === 0);
+      } catch (cause) {
+        lastError = cause;
+        if (signal?.aborted || !retryable || !isRetryable(cause) || attempt === attempts - 1) {
+          throw cause;
+        }
+        await delay(RETRY_BACKOFF_MS * (attempt + 1));
+      }
+    }
+    throw lastError;
+  }
+
+  /** One network attempt with its own timeout and abort wiring. */
+  private async attempt<T>(
+    method: string,
+    path: string,
+    body: unknown,
+    signal: AbortSignal | undefined,
+    coldStart: boolean,
+  ): Promise<T> {
     const init: RequestInit = { method, headers: { accept: "application/json" }, credentials: "include" };
     // The backend scopes every playlist/playback call to this id, so it is
     // always sent (an ephemeral id is minted when storage is unavailable).
@@ -325,13 +389,17 @@ export class ApiClient {
     }
 
     // A sleeping backend (Render free) must surface as a fast, clear toast
-    // instead of a button that stays silent until the browser gives up.
+    // instead of a button that stays silent until the browser gives up. The
+    // first attempt of a read gets extra room for the platform cold start.
     const controller = new AbortController();
     let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => {
+        timedOut = true;
+        controller.abort();
+      },
+      coldStart ? COLD_START_TIMEOUT_MS : REQUEST_TIMEOUT_MS,
+    );
     // A caller may cancel a superseded request (rapid track clicks): the abort
     // is intentional, so it is reported as `aborted` and never toasted.
     const onExternalAbort = (): void => controller.abort();

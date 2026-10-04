@@ -96,6 +96,13 @@ class SongCreate(BaseModel):
     index: int | None = Field(default=None, ge=0)
 
 
+class SongBatchCreate(BaseModel):
+    """Body of ``POST /api/playlists/{id}/songs/batch``: add many in one trip."""
+
+    songs: list[SongIn] = Field(min_length=1, max_length=100)
+    index: int | None = Field(default=None, ge=0)
+
+
 class SongMove(BaseModel):
     """Body of ``PUT /api/playlists/{id}/songs/order`` (``FEAT-001-e``)."""
 

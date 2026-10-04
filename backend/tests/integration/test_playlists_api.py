@@ -239,6 +239,56 @@ def test_add_song_with_invalid_domain_data_is_422(
     assert response.json()["error"]["code"] == "validation_error"
 
 
+def test_add_songs_in_one_batch(client: TestClient, create_playlist: CreatePlaylist) -> None:
+    """The latency fix: several tracks land append-only in a single request."""
+    payload = create_playlist()
+
+    response = client.post(
+        f"/api/playlists/{payload['id']}/songs/batch",
+        json={
+            "songs": [
+                {"id": "sp-1", "title": "One", "artist": "A", "source": "spotify"},
+                {"id": "sp-2", "title": "Two", "artist": "B", "source": "spotify"},
+                {"id": "sp-3", "title": "Three", "artist": "C", "source": "spotify"},
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    titles = [song["title"] for song in response.json()["songs"]]
+    assert titles == ["One", "Two", "Three"]
+
+
+def test_add_songs_batch_at_a_position(client: TestClient, filled_playlist: FilledPlaylist) -> None:
+    """An explicit ``index`` inserts the whole batch starting there, in order."""
+    payload = filled_playlist(count=2)
+
+    response = client.post(
+        f"/api/playlists/{payload['id']}/songs/batch",
+        json={
+            "songs": [
+                {"id": "x-1", "title": "First", "artist": "A", "source": "local"},
+                {"id": "x-2", "title": "Second", "artist": "B", "source": "local"},
+            ],
+            "index": 1,
+        },
+    )
+
+    assert response.status_code == 201
+    titles = [song["title"] for song in response.json()["songs"]]
+    assert titles == ["Song 0", "First", "Second", "Song 1"]
+
+
+def test_add_songs_batch_rejects_an_empty_list(
+    client: TestClient, create_playlist: CreatePlaylist
+) -> None:
+    payload = create_playlist()
+
+    response = client.post(f"/api/playlists/{payload['id']}/songs/batch", json={"songs": []})
+
+    assert response.status_code == 422
+
+
 def test_remove_song_returns_it(client: TestClient, filled_playlist: FilledPlaylist) -> None:
     """The removed song comes back so the UI can undo."""
     payload = filled_playlist(count=3)

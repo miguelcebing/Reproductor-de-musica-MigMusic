@@ -176,3 +176,29 @@ describe("PlaylistController.setFavorite", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+// --- addSongs batching (latency fix) ----------------------------------------
+
+describe("PlaylistController.addSongs", () => {
+  it("adds every song with a single request to the batch route", async () => {
+    seedStore();
+    const { controller, calls } = controllerWith(() => ({ status: 201, body: makePlaylist() }));
+
+    await controller.addSongs("pl-1", [makeSong(0), makeSong(1), makeSong(2)], { kind: "end" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toContain("/songs/batch");
+    const body = JSON.parse(String(calls[0]?.init?.body));
+    expect(body.songs).toHaveLength(3);
+  });
+
+  it("skips the network for an empty batch", async () => {
+    seedStore();
+    const { controller, calls } = controllerWith(() => {
+      throw new Error("should not be called");
+    });
+
+    await expect(controller.addSongs("pl-1", [], { kind: "end" })).resolves.toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+});

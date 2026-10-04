@@ -17,6 +17,7 @@ from migmusic.api.schemas import (
     PlaylistCreate,
     PlaylistOut,
     PlaylistRename,
+    SongBatchCreate,
     SongCreate,
     SongFavorite,
     SongFound,
@@ -79,6 +80,28 @@ def add_song(
     playlist = service.add_song(
         playlist_id,
         song=body.song.to_entity(),
+        index=body.index,
+        owner_id=owner_id,
+    )
+    return PlaylistOut.from_entity(playlist)
+
+
+@router.post(
+    "/{playlist_id}/songs/batch",
+    status_code=status.HTTP_201_CREATED,
+    summary="Append or insert several songs in one request",
+)
+def add_songs(
+    playlist_id: str, body: SongBatchCreate, service: PlaylistServiceDep, owner_id: DeviceIdDep
+) -> PlaylistOut:
+    """Add a batch of songs with one read and one write (latency fix).
+
+    Declared before ``/{playlist_id}/songs/{index}`` so ``batch`` is never
+    parsed as a song index.
+    """
+    playlist = service.add_songs(
+        playlist_id,
+        [song.to_entity() for song in body.songs],
         index=body.index,
         owner_id=owner_id,
     )

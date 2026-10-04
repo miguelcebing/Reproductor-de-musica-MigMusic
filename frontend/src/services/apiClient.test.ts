@@ -4,12 +4,13 @@ import {
   ApiClient,
   ApiError,
   apiUrl,
+  COLD_START_TIMEOUT_MS,
   failureMessage,
   REQUEST_TIMEOUT_MS,
+  RETRY_BACKOFF_MS,
   resolveApiBaseUrl,
   type FetchLike,
 } from "./apiClient";
-
 describe("resolveApiBaseUrl", () => {
   it("appends /api to the given origin", () => {
     expect(resolveApiBaseUrl("https://migmusic.vercel.app")).toBe(
@@ -275,8 +276,11 @@ describe("ApiClient request timeout", () => {
         });
       const api = ApiClient.fromOrigin(origin, fetchImpl);
 
+      // A read retries once and the extra attempt also hangs, so the request
+      // only settles after every attempt's deadline has passed.
       const outcome = api.getPlayback().catch((cause: unknown) => cause);
-      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(COLD_START_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(RETRY_BACKOFF_MS + REQUEST_TIMEOUT_MS + 1);
       const error = await outcome;
 
       expect(error).toBeInstanceOf(ApiError);
@@ -342,5 +346,60 @@ describe("failureMessage", () => {
     );
     expect(failureMessage(new Error("offline"), "es")).toBe("offline");
     expect(failureMessage("plain text", "es")).toBe("plain text");
+  });
+});
+
+describe("ApiClient cold-start resilience", () => {
+  const origin = "https://migmusic.example";
+
+  it("retries a GET once after a gateway error and succeeds", async () => {
+    let attempts = 0;
+    const fetchImpl: FetchLike = () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Promise.resolve(new Response("booting", { status: 503 }));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    };
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    const result = await api.searchSpotify("night");
+
+    expect(result).toEqual([]);
+    expect(attempts).toBe(2);
+  });
+
+  it("does not retry a write (POST) on a gateway error", async () => {
+    let attempts = 0;
+    const fetchImpl: FetchLike = () => {
+      attempts += 1;
+      return Promise.resolve(new Response("down", { status: 503 }));
+    };
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    await expect(api.createPlaylist("Mix")).rejects.toMatchObject({ status: 503 });
+    expect(attempts).toBe(1);
+  });
+
+  it("does not retry a real 4xx refusal", async () => {
+    let attempts = 0;
+    const fetchImpl: FetchLike = () => {
+      attempts += 1;
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: { code: "bad_request", message: "no" } }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    };
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+
+    await expect(api.searchYouTube("x")).rejects.toMatchObject({ status: 400 });
+    expect(attempts).toBe(1);
   });
 });

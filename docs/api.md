@@ -68,6 +68,7 @@
 | `PATCH` | `/api/playlists/{id}` | Rename (`PLAYLIST-003`). Body: `{"name": "New"}` |
 | `DELETE` | `/api/playlists/{id}` | Delete. `204`, empty body. |
 | `POST` | `/api/playlists/{id}/songs` | Append, or insert at `index` (`UX-003`). Returns the playlist. |
+| `POST` | `/api/playlists/{id}/songs/batch` | Append/insert **many** songs in one request (`songs[]`, 1..100). One read + one write server-side; the UI uses it when picking several tracks. |
 | `GET` | `/api/playlists/{id}/songs/find?text=…` | First song matching `text` (case-insensitive title/artist) + its index (`FEAT-001-c`). `404` on miss, `422` on blank. |
 | `DELETE` | `/api/playlists/{id}/songs/{index}` | Remove a song; returns the removed song (`PLAYLIST-009b`). |
 | `PUT` | `/api/playlists/{id}/songs/order` | Move `from_index` → `to_index` (`FEAT-001-e`). |
@@ -102,6 +103,23 @@ POST /api/playlists/{id}/songs
 
 `index` is optional; omit it to append at the tail. `source` is one of
 `local` / `spotify`.
+
+**Add many songs (batch)**
+
+```json
+POST /api/playlists/{id}/songs/batch
+{
+  "songs": [
+    { "id": "sp-1", "title": "One", "artist": "A", "source": "spotify" },
+    { "id": "sp-2", "title": "Two", "artist": "B", "source": "spotify" }
+  ],
+  "index": 1
+}
+```
+
+The frontend uses this route whenever more than one track is added, so a
+multi-track pick is a single round trip (and a single database read + write)
+instead of N of each. `songs` accepts 1..100 entries; `index` is optional.
 
 ---
 
@@ -283,6 +301,11 @@ the frontend shows an error state without interrupting playback.
   `RATE_LIMIT_AUTH_PER_MINUTE`. Over-budget requests answer `429` with a
   `Retry-After` header and `code: "rate_limited"`. `/api/health` is exempt.
   Disable with `RATE_LIMIT_ENABLED=false` (development/tests).
+- **Cold starts**: the Render free instance sleeps after ~15 idle minutes. The
+  client gives the first attempt of an idempotent `GET` a longer deadline
+  (`COLD_START_TIMEOUT_MS`, 20 s) and retries it once on timeout / network
+  error / `502`-`503`-`504`, so a wake-up is a short wait instead of an error.
+  Writes never retry (a duplicate add/create is worse than a visible error).
 - **Body size**: requests declaring more than `MAX_REQUEST_BODY_BYTES` are
   rejected with `413` (`payload_too_large`).
 - **`X-Device-Id`**: required, 8–128 chars, `[A-Za-z0-9._:-]` only; malformed
