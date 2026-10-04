@@ -27,8 +27,17 @@ uv sync --frozen --no-dev
 
 echo "==> Installing Nginx configuration"
 install -d -o root -g root -m 0755 /etc/nginx/snippets
-install -o root -g root -m 0644 "${APP_DIR}/infra/nginx/migmusic.conf" /etc/nginx/conf.d/migmusic.conf
+# Fail loudly if the TLS material is missing: nginx would refuse to start with a
+# broken certificate path, taking the whole site down instead of only HTTPS.
+CERT_DIR=/etc/letsencrypt/live/migmusicreproductor.duckdns.org
+if [[ ! -f "${CERT_DIR}/fullchain.pem" ]]; then
+  echo "error: ${CERT_DIR}/fullchain.pem missing - run certbot first:" >&2
+  echo "  certbot --nginx -d migmusicreproductor.duckdns.org --redirect" >&2
+  exit 1
+fi
+install -o root -g root -m 0644 "${APP_DIR}/infra/nginx/migmusic-locations.conf" /etc/nginx/snippets/migmusic-locations.conf
 install -o root -g root -m 0644 "${APP_DIR}/infra/nginx/security-headers.conf" /etc/nginx/snippets/security-headers.conf
+install -o root -g root -m 0644 "${APP_DIR}/infra/nginx/migmusic.conf" /etc/nginx/conf.d/migmusic.conf
 nginx -t
 systemctl reload nginx
 
