@@ -24,6 +24,7 @@ import {
 } from "@heroui/react";
 
 import type { Song, TrackPosition } from "../../domain/types";
+import { isSupportedAudioFile } from "../../services/localTracks";
 import { useT } from "../../i18n/useT";
 import styles from "./Queue.module.css";
 import { SpotifyIcon } from "./icons";
@@ -120,7 +121,12 @@ export const AddTrackDialog = memo(function AddTrackDialog({
       setError(t("dialog.noFiles"));
       return;
     }
-    onSubmit([...files], position);
+    const accepted = files.filter(isSupportedAudioFile);
+    if (accepted.length !== files.length) {
+      setError(t("dialog.invalidFiles"));
+      return;
+    }
+    onSubmit(accepted, position);
     setFiles([]);
     setError(null);
     onClose();

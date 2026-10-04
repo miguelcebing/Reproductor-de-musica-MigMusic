@@ -81,6 +81,25 @@ class Settings(BaseSettings):
     # --- Proxy ---
     render_backend_url: str = Field(default="", alias="RENDER_BACKEND_URL")
 
+    # --- Security hardening (`SEC-001`) ---
+    # Limits are per minute and counted per `X-Device-Id` (the anonymous
+    # per-user key) with the client IP as fallback for keyless routes.
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    rate_limit_default_per_minute: int = Field(
+        default=120, alias="RATE_LIMIT_DEFAULT_PER_MINUTE", ge=1
+    )
+    # Expensive routes: catalog search, lyrics, YouTube Music (external calls).
+    rate_limit_expensive_per_minute: int = Field(
+        default=20, alias="RATE_LIMIT_EXPENSIVE_PER_MINUTE", ge=1
+    )
+    rate_limit_auth_per_minute: int = Field(default=10, alias="RATE_LIMIT_AUTH_PER_MINUTE", ge=1)
+    # Reject bodies larger than this before they are parsed (bytes).
+    max_request_body_bytes: int = Field(
+        default=65536, alias="MAX_REQUEST_BODY_BYTES", ge=1024, le=10 * 1024 * 1024
+    )
+    # Comma-separated Host allow-list; empty derives the known platform hosts.
+    trusted_hosts: str = Field(default="", alias="TRUSTED_HOSTS")
+
     # --- Derived ---
 
     @property
@@ -94,6 +113,19 @@ class Settings(BaseSettings):
         origins = {origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()}
         origins.add(self.frontend_origin)
         return sorted(origins)
+
+    @property
+    def allowed_hosts(self) -> list[str]:
+        """Host header allow-list for ``TrustedHostMiddleware``.
+
+        The frontend reaches the API through a same-origin proxy, so the Host
+        is always the platform domain; the localhost hosts keep development and
+        the Render health check working. An explicit ``TRUSTED_HOSTS`` wins.
+        """
+        configured = [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+        if configured:
+            return configured
+        return ["localhost", "127.0.0.1", "testserver", "*.onrender.com"]
 
     @field_validator("spotify_redirect_uri")
     @classmethod

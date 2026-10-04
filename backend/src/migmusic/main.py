@@ -18,8 +18,11 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from migmusic.api.body_limit import MaxBodySizeMiddleware
 from migmusic.api.error_handlers import register_error_handlers
+from migmusic.api.rate_limit import RateLimiter, RateLimitMiddleware, RateLimits
 from migmusic.api.routers import (
     auth,
     health,
@@ -31,6 +34,7 @@ from migmusic.api.routers import (
     youtube,
 )
 from migmusic.api.routers.auth import callback_get as legacy_callback_get
+from migmusic.api.security_headers import SecurityHeadersMiddleware
 from migmusic.application.services import LyricsService, PlaybackService, PlaylistService
 from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
@@ -66,7 +70,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(config.log_level)
 
     # One shared HTTP client for every outbound call (Spotify auth and Web API).
-    http_client = httpx.AsyncClient()
+    # A global timeout bounds any call that forgets to set its own (the critical
+    # ones still override it), so an upstream hang can never freeze a request.
+    http_client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -108,14 +114,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Compress JSON responses (catalogs and playlists are text-heavy; this cuts
     # the wire size of a search page several times over on slow links).
     app.add_middleware(GZipMiddleware, minimum_size=512)
+    # Security hardening (`SEC-001`). Order matters only for the outermost
+    # behaviour; each is independent. CORS stays restricted to the frontend
+    # origin and now names the headers it accepts instead of `*`.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        allow_headers=["accept", "content-type", "x-device-id", "x-request-id"],
+        expose_headers=["X-Request-ID", "Retry-After"],
     )
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=config.allowed_hosts,
+        www_redirect=False,
+    )
+    app.add_middleware(MaxBodySizeMiddleware, max_bytes=config.max_request_body_bytes)
+    app.add_middleware(
+        RateLimitMiddleware,
+        limiter=RateLimiter(
+            RateLimits(
+                default=config.rate_limit_default_per_minute,
+                expensive=config.rate_limit_expensive_per_minute,
+                auth=config.rate_limit_auth_per_minute,
+            )
+        ),
+        enabled=config.rate_limit_enabled,
+    )
+    app.add_middleware(SecurityHeadersMiddleware, https_only=config.is_production)
 
     app.state.settings = config
     app.state.logger = logger
@@ -199,6 +226,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "cors_origins": config.cors_origins,
             "playlist_repository": repository_adapter,
             "spotify_token_store": "sql" if config.database_url else "in_memory",
+            "rate_limit_enabled": config.rate_limit_enabled,
+            "max_request_body_bytes": config.max_request_body_bytes,
         },
     )
     return app

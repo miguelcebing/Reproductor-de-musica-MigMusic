@@ -8,6 +8,13 @@ from migmusic.domain.entities.audio_source import AudioSourceType
 from migmusic.domain.entities.playlist import Playlist
 from migmusic.domain.entities.song import Song
 
+# Upper bounds keep a crafted body from pushing huge strings into the store or
+# the database; they are far above any real metadata value.
+_MAX_TITLE = 300
+_MAX_ARTIST = 300
+_MAX_URL = 2048
+_MAX_ID = 200
+
 
 class SongIn(BaseModel):
     """Song payload sent by the client.
@@ -16,14 +23,14 @@ class SongIn(BaseModel):
     always surfaces as the same ``422 validation_error``.
     """
 
-    id: str
-    title: str
-    artist: str
+    id: str = Field(min_length=1, max_length=_MAX_ID)
+    title: str = Field(min_length=1, max_length=_MAX_TITLE)
+    artist: str = Field(default="", max_length=_MAX_ARTIST)
     source: AudioSourceType
-    duration: float = 0.0
-    album: str | None = None
-    artwork_url: str | None = None
-    external_url: str | None = None
+    duration: float = Field(default=0.0, ge=0)
+    album: str | None = Field(default=None, max_length=_MAX_TITLE)
+    artwork_url: str | None = Field(default=None, max_length=_MAX_URL)
+    external_url: str | None = Field(default=None, max_length=_MAX_URL)
     available: bool = True
 
     def to_entity(self) -> Song:
@@ -73,13 +80,13 @@ class PlaylistOut(BaseModel):
 class PlaylistCreate(BaseModel):
     """Body of ``POST /api/playlists``."""
 
-    name: str
+    name: str = Field(min_length=1, max_length=120)
 
 
 class PlaylistRename(BaseModel):
     """Body of ``PATCH /api/playlists/{id}``."""
 
-    name: str
+    name: str = Field(min_length=1, max_length=120)
 
 
 class SongCreate(BaseModel):

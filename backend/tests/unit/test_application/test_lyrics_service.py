@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from migmusic.application.services.lyrics_service import LyricsService
+from migmusic.core.exceptions import ValidationError
 from migmusic.domain import AudioSourceType, Song
 from migmusic.domain.entities.lyrics import Lyrics
 from migmusic.domain.ports.lyrics_provider import LyricsProvider
@@ -115,7 +116,7 @@ async def test_misses_are_cached_so_they_are_not_asked_twice() -> None:
 
 @pytest.mark.asyncio
 async def test_empty_lyrics_object_is_rejected_by_the_entity() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Lyrics(text="   ", source="lrclib")
 
 

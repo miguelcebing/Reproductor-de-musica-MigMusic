@@ -34,7 +34,9 @@ async def test_returns_plain_lyrics_and_sends_the_match_params() -> None:
 @pytest.mark.asyncio
 async def test_strips_lrc_timestamps_when_only_synced_lyrics_exist() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"plainLyrics": None, "syncedLyrics": "[00:12.3] One\n[00:15.0] Two"})
+        return httpx.Response(
+            200, json={"plainLyrics": None, "syncedLyrics": "[00:12.3] One\n[00:15.0] Two"}
+        )
 
     lyrics = await make_client(handler).find(title="Song", artist="Artist")
 
