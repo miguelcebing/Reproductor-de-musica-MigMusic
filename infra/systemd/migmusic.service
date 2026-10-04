@@ -1,0 +1,43 @@
+[Unit]
+Description=MigMusic API (FastAPI served by Gunicorn behind Nginx)
+Documentation=https://github.com/miguelcebing/Reproductor-de-musica-MigMusic
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=migmusic
+Group=migmusic
+WorkingDirectory=/opt/migmusic/backend
+# Secrets live outside the repository and outside the web root.
+EnvironmentFile=/etc/migmusic/migmusic.env
+# The repository lives on a read-only mount for this unit; skip bytecode.
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/migmusic/backend/.venv/bin/gunicorn --config /opt/migmusic/infra/gunicorn/gunicorn.conf.py migmusic.main:app
+
+# The app must never stay down: restart on any exit, including OOM kills.
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# One line per event in the journal: journalctl -u migmusic -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=migmusic
+
+# Hardening: the service only reads /opt/migmusic and writes to its own /tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadOnlyPaths=/opt/migmusic
+
+[Install]
+WantedBy=multi-user.target

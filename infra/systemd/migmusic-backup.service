@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly MigMusic database backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/migmusic-backup.sh
+Nice=10
+IOSchedulingClass=idle
