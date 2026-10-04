@@ -16,6 +16,14 @@ def test_health_returns_ok(client: TestClient) -> None:
     assert body["environment"] == "development"
 
 
+def test_bare_health_alias_returns_ok(client: TestClient) -> None:
+    """The bare ``/health`` path answers like ``/api/health`` for LB probes."""
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == client.get("/api/health").json()
+
+
 def test_unknown_route_returns_structured_error(client: TestClient) -> None:
     """404s follow the uniform error envelope."""
     response = client.get("/api/does-not-exist")

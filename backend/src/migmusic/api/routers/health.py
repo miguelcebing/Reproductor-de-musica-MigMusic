@@ -20,3 +20,9 @@ async def health(request: Request) -> JSONResponse:
             "environment": settings.app_env,
         },
     )
+
+
+@router.get("/health", summary="Liveness probe (bare path)")
+async def health_bare(request: Request) -> JSONResponse:
+    """Alias of ``/api/health`` for load balancers that expect ``/health``."""
+    return await health(request)
