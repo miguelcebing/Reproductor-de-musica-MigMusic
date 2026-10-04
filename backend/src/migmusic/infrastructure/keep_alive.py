@@ -21,8 +21,9 @@ from migmusic.core import get_logger
 
 logger = get_logger(__name__)
 
-#: Render sleeps after 15 idle minutes; ping comfortably inside that window.
-KEEP_ALIVE_INTERVAL_S = 600.0
+#: Render sleeps after 15 idle minutes; ping well inside that window so the
+#: first real request never pays the full cold start.
+KEEP_ALIVE_INTERVAL_S = 240.0
 
 
 def keep_alive_url(base_url: str) -> str:

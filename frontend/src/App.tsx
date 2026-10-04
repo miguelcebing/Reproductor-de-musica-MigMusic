@@ -122,12 +122,15 @@ export function App(): React.JSX.Element {
   }, [theme, language]);
 
   // Keep Render awake while the tab is open: its free tier sleeps after
-  // 15 min without traffic, and the next press would pay the cold start.
+  // 15 min without traffic and the next press would pay the cold start. Ping
+  // immediately on load (so the instance starts waking while the UI paints)
+  // and then every 4 minutes, comfortably inside the sleep window.
   useEffect(() => {
     const ping = () => {
       void fetch("/api/health", { cache: "no-store" }).catch(() => undefined);
     };
-    const timer = setInterval(ping, 10 * 60_000);
+    ping();
+    const timer = setInterval(ping, 4 * 60_000);
     return () => clearInterval(timer);
   }, []);
 

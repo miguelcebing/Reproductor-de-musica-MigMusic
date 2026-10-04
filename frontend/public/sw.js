@@ -6,11 +6,12 @@
  * so their own caching and CORS rules apply.
  */
 
-const CACHE_NAME = "migmusic-static-v1";
+const CACHE_NAME = "migmusic-static-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
+  "/spotify-ready.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",

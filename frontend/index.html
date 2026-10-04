@@ -15,11 +15,10 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>MigMusic</title>
-    <!-- The Spotify Web Playback SDK throws on load unless this callback
-         exists; it only tells the SDK someone is listening. -->
-    <script>
-      window.onSpotifyWebPlaybackSDKReady = function () {};
-    </script>
+    <!-- External, not inline: the strict CSP (script-src 'self') blocks inline
+         scripts, which blanked the app. This stub only tells the Spotify Web
+         Playback SDK that a listener exists before it loads (lazily). -->
+    <script src="/spotify-ready.js"></script>
   </head>
   <body>
     <div id="root"></div>
