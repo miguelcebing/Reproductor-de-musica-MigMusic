@@ -89,3 +89,21 @@ async def test_tokens_survive_a_new_process(token_store: SqlTokenStore) -> None:
 def test_empty_dsn_is_rejected() -> None:
     with pytest.raises(ValueError, match="DSN"):
         SqlTokenStore("   ")
+
+
+def test_pool_validates_and_recycles_connections(token_store: SqlTokenStore) -> None:
+    """Neon suspends when idle and closes its side of every socket.
+
+    Handing a dead connection to a caller failed the Spotify callback with
+    ``AdminShutdown``. The pool must therefore validate each connection before
+    use (``check``) and retire idle/long-lived ones (``max_idle``,
+    ``max_lifetime``) so a suspended database can never poison a request.
+    """
+    pool = token_store._pool
+    stats = pool.get_stats()
+
+    assert stats["pool_max"] == 5
+    # psycopg_pool exposes the configured guard through the pool's attributes.
+    assert pool.check is not None
+    assert pool.max_idle is not None
+    assert pool.max_lifetime is not None

@@ -27,6 +27,15 @@ from psycopg_pool import ConnectionPool
 
 from migmusic.domain.ports.token_store import TokenBundle, TokenStore
 
+# Pool tuning for a managed PostgreSQL (Neon) that suspends when idle:
+# ``check`` discards a socket the server already closed, ``max_idle`` retires
+# one before Neon kills it, and ``reconnect_timeout`` waits for the database to
+# wake up instead of failing the request. Without these, logging in after an
+# idle period failed with ``AdminShutdown`` while writing the tokens.
+_MAX_IDLE_SECONDS = 120.0
+_MAX_LIFETIME_SECONDS = 600.0
+_RECONNECT_TIMEOUT_SECONDS = 30.0
+
 # Idempotent schema: safe to run on every process start (`IF NOT EXISTS`).
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS spotify_tokens (
@@ -60,13 +69,22 @@ class SqlTokenStore(TokenStore):
     """
 
     def __init__(self, dsn: str) -> None:
-        """Create the connection pool and the schema on startup."""
+        """Create the connection pool and the schema on startup.
+
+        The pool validates and recycles connections (see the constants above):
+        Neon suspends the database when idle and closes its side of every
+        socket, so a stale connection must never be handed to a caller.
+        """
         if not dsn.strip():
             raise ValueError("database DSN must not be empty")
         self._pool = ConnectionPool[psycopg.Connection[dict[str, Any]]](
             conninfo=dsn,
             min_size=0,
             max_size=5,
+            max_idle=_MAX_IDLE_SECONDS,
+            max_lifetime=_MAX_LIFETIME_SECONDS,
+            reconnect_timeout=_RECONNECT_TIMEOUT_SECONDS,
+            check=ConnectionPool.check_connection,
             kwargs={"row_factory": dict_row},
             name="spotify_tokens",
             open=True,

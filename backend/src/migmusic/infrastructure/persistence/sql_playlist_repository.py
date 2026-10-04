@@ -26,6 +26,17 @@ from migmusic.domain.entities.playlist import Playlist
 from migmusic.domain.entities.song import Song
 from migmusic.domain.ports.playlist_repository import PlaylistRepository
 
+# Pool tuning for a managed PostgreSQL (Neon) that suspends when idle:
+# - max_idle: retire an unused connection well before the server-side idle
+#   timeout, so the pool does not keep a socket Neon is about to close.
+# - max_lifetime: cap how long a single connection may live.
+# - reconnect_timeout: after a failed check, wait this long for the database to
+#   come back instead of failing the request outright.
+# - check: validate the connection right before handing it to the caller.
+_MAX_IDLE_SECONDS = 120.0
+_MAX_LIFETIME_SECONDS = 600.0
+_RECONNECT_TIMEOUT_SECONDS = 30.0
+
 # Idempotent schema: safe to run on every process start (`IF NOT EXISTS`).
 # ``created_seq`` gives ``list_all`` the insertion order of the in-memory
 # adapter; ``position`` is the dense fallback from `ADR-004`. ``owner_id`` is
@@ -104,13 +115,25 @@ class SqlPlaylistRepository(PlaylistRepository):
     """
 
     def __init__(self, dsn: str) -> None:
-        """Create the connection pool and the schema on first use."""
+        """Create the connection pool and the schema on first use.
+
+        Neon suspends an idle database and kills the server-side connections.
+        Without guards the pool keeps handing out those dead sockets and every
+        request fails with ``AdminShutdown``. ``check`` discards a connection
+        that no longer answers, ``max_idle`` retires one before Neon can kill
+        it, and ``reconnect_timeout`` waits for the database to wake up instead
+        of giving up immediately.
+        """
         if not dsn.strip():
             raise ValueError("database DSN must not be empty")
         self._pool = ConnectionPool[psycopg.Connection[dict[str, Any]]](
             conninfo=dsn,
             min_size=0,
             max_size=5,
+            max_idle=_MAX_IDLE_SECONDS,
+            max_lifetime=_MAX_LIFETIME_SECONDS,
+            reconnect_timeout=_RECONNECT_TIMEOUT_SECONDS,
+            check=ConnectionPool.check_connection,
             kwargs={"row_factory": dict_row},
             name="playlists",
             open=True,
