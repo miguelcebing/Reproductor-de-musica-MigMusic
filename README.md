@@ -19,8 +19,8 @@ de la lista enlazada pensada para la sustentaciÃ³n.
 | Fuentes de audio | HTML5 `<audio>` (local) Â· Spotify Web Playback SDK |
 | Testing | pytest Â· Vitest Â· Playwright |
 | Animaciones | Framer Motion (`MotionConfig reducedMotion="user"`) |
-| CI/CD | GitHub Actions (lint + tests que bloquean + *keep-alive* cada 10 min) |
-| Despliegue | Vercel (frontend) Â· Render (backend) Â· Neon (DB) |
+| CI/CD | GitHub Actions (lint + tests que bloquean) |
+| Despliegue | AWS EC2 (frontend + backend, `us-east-1`) Â· Neon (DB) Â· DuckDNS + Let's Encrypt (dominio y HTTPS) |
 
 ---
 
@@ -78,13 +78,13 @@ Copia `.env.example` a `.env` y rellena. **Nunca** subas `.env` al repositorio.
 | `SESSION_SECRET_KEY` | Firma de cookies de sesiÃ³n y del `state` OAuth |
 | `OAUTH_STATE_MAX_AGE` | Segundos que puede durar un login sin terminar (defecto `900`) |
 | `DATABASE_URL` | URL de conexiÃ³n a PostgreSQL (Neon) |
-| `RENDER_BACKEND_URL` | URL del backend para el proxy `/api/*` de Vercel |
 | `RATE_LIMIT_ENABLED` | Activa el rate limiting (por defecto `true`; `false` en desarrollo/tests) |
 | `RATE_LIMIT_DEFAULT_PER_MINUTE` | Presupuesto general por minuto (defecto `120`) |
 | `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | Presupuesto estricto de bÃºsqueda/letras/YouTube (defecto `20`) |
 | `RATE_LIMIT_AUTH_PER_MINUTE` | Presupuesto de `/api/auth/*` (defecto `10`) |
 | `MAX_REQUEST_BODY_BYTES` | TamaÃ±o mÃ¡ximo de cuerpo; por encima responde `413` (defecto `65536`) |
 | `TRUSTED_HOSTS` | Lista de Host permitidos (opcional; por defecto localhost + `*.onrender.com`) |
+| `YOUTUBE_MUSIC_ENABLED` | Activa la búsqueda en YouTube Music (defecto `true`) |
 
 ### Configurar la app en Spotify Dashboard
 
@@ -94,13 +94,13 @@ Copia `.env.example` a `.env` y rellena. **Nunca** subas `.env` al repositorio.
    | Entorno | URI |
    |---|---|
    | Desarrollo | `http://127.0.0.1:5173/callback` |
-   | ProducciÃ³n | `https://migmusic.vercel.app/api/auth/callback` |
+   | ProducciÃ³n | `https://migmusicreproductor.duckdns.org/api/auth/callback` |
 
    > `localhost` ya **no** es aceptado por Spotify desde el 27/11/2025: usa siempre
-   > `127.0.0.1`.
+   > `127.0.0.1`. En producciÃ³n Spotify exige **HTTPS**.
 3. Copia el **Client ID** a `SPOTIFY_CLIENT_ID` y el **Client Secret** a
-   `SPOTIFY_CLIENT_SECRET` en tu `.env` local y en el panel de Render. No los pegues
-   nunca en el chat ni en archivos versionados.
+   `SPOTIFY_CLIENT_SECRET` en tu `.env` local y en `/etc/migmusic/migmusic.env` del servidor.
+   No los pegues nunca en el chat ni en archivos versionados.
 4. **Usuarios de prueba:** en modo *Development* de la app solo funcionan las cuentas
    aÃ±adidas manualmente en *Users and access*. AÃ±ade tu cuenta y cualquier cuenta que
    vaya a la demo antes de presentar.
@@ -149,89 +149,94 @@ npm run test:e2e       # Playwright (desktop + mÃ³vil + axe); arranca vite y u
 
 ## Despliegue
 
-TopologÃ­a: **un solo origen**. Vercel sirve el frontend y hace *rewrite* de `/api/*` hacia
-el backend en Render.
+TopologÃ­a: **un servidor** (AWS EC2) que sirve la SPA y hace *reverse proxy* de `/api/*`
+hacia Gunicorn en `127.0.0.1:8000`. La DB sigue en Neon; el dominio y el TLS los aportan
+DuckDNS y Let's Encrypt. Un solo origen, asÃ­ que las cookies de sesiÃ³n viajan siempre
+*first-party* y el OAuth no depende de un proxy externo.
 
-### Estado actual (2026-09-30)
+```
+  navegador
+     â”‚  HTTPS (443)
+     â–¼
+  Nginx  â”€â”€â”€â”€ /assets, /icons, /  â”€â”€â”€â”€â–º  /opt/migmusic/frontend/dist   (SPA)
+  EC2    â”€â”€â”€â”€ /api/, /health      â”€â”€â”€â”€â–º  Gunicorn 127.0.0.1:8000     (FastAPI)
+     â”‚                                       â”‚
+     â””â”€â”€ Let's Encrypt (certbot, renovaciÃ³n automÃ¡tica)
+                                             â–¼
+                                    Neon PostgreSQL (us-east-2)
+```
+
+### Estado actual (2026-10-04)
 
 | Pieza | URL / recurso | Estado |
 | --- | --- | --- |
-| Frontend (Vercel, proyecto `migmusic`) | <https://migmusic.vercel.app> | âœ… desplegado |
-| Backend (Render `migmusic-api`, `srv-dauk5k8jo6nc73dgl7ug`) | <https://migmusic-api.onrender.com> | âœ… `live`, health 200 |
-| Proxy `/api/*` | <https://migmusic.vercel.app/api/health> | âœ… 200 â†’ Render |
-| CORS | preflight con ACAO `https://migmusic.vercel.app` | âœ… 200 |
+| App completa (SPA + API) | <https://migmusicreproductor.duckdns.org> | âœ… HTTPS 200 |
+| Health | <https://migmusicreproductor.duckdns.org/api/health> | âœ… `{"status":"ok","environment":"production"}` |
+| HTTP â†’ HTTPS | `http://migmusicreproductor.duckdns.org` | âœ… `301` permanente |
+| Certificado | Let's Encrypt, renovaciÃ³n por `certbot.timer` | âœ… vÃ¡lido, `dry-run` OK |
+| Instancia | EC2 `i-0c4b5c163d93e48a2` (`t3.micro`, us-east-1) + IP elÃ¡stica `54.166.184.47` | âœ… running |
 | BD (Neon, proyecto `MigMusic`) | schema auto-creado en el arranque | âœ… conectada |
+| Presupuesto | AWS Budgets `migmusic-monthly` (10 USD/mes, alertas 5 y 10) | âœ… activo |
 
-Verificado el 2026-10-01: health 200 directo y por el proxy, CORS con credenciales,
-Redirect URI aceptada por Spotify y auto-deploy de Vercel y Render con el Ãºltimo push.
-El *keep-alive* ya no depende de un servicio externo: el workflow `keep-alive.yml` de
-GitHub Actions pinga `/api/health` cada 10 minutos.
-Queda solo la demo manual con cuenta Premium (autorizar y reproducir con el Web
-Playback SDK).
-El auto-deploy de Vercel estÃ¡ activo (proyecto con *Root Directory* `frontend`); el de
-Render se dispara con `render deploys create` mientras no llegue el webhook de la App de
-GitHub.
+Verificado el 2026-10-04: reinicio completo del servidor con recuperaciÃ³n automÃ¡tica en
+~30 s, round-trip real contra Neon (crear â†’ listar â†’ borrar playlist), letras (lrclib) y
+bÃºsqueda de YouTube Music funcionando desde el servidor, y 411 tests backend + 152
+frontend en verde sobre un clon limpio.
 
-### 1. Backend en Render
+Queda pendiente solo la **demo manual con cuenta Premium** (autorizar y reproducir con el
+Web Playback SDK): no se puede automatizar por el 2FA y la pantalla de consentimiento.
 
-**OpciÃ³n A â€” Blueprint (recomendada):** Render â†’ *Blueprints* â†’ conecta el repo;
-detecta `render.yaml` en la raÃ­z y crea el servicio con las variables no secretas.
+### Desplegar un cambio
 
-**OpciÃ³n B â€” manual:**
+Todo el ciclo vive en `infra/`:
 
-1. Conecta el repo de GitHub y crea un **Web Service** con root directory `backend`.
-2. Build: `uv sync --frozen` Â· Start: `uv run uvicorn migmusic.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"`
-   (las cabeceras `X-Forwarded-*` que manda Vercel son las que dan el esquema y el host
-   reales a las redirecciones y a las cookies `Secure`).
-3. AÃ±ade todas las variables del panel (incluido `SPOTIFY_CLIENT_SECRET` y `DATABASE_URL` de Neon).
-4. Copia la URL generada (`https://<servicio>.onrender.com`) a `RENDER_BACKEND_URL` **y** al
-   destino del rewrite en `frontend/vercel.json`.
+```powershell
+# 1. Provisionar el servidor (una sola vez; es idempotente)
+bash infra/scripts/provision.sh
 
-### 2. Frontend en Vercel
-
-1. Importa el repo con root directory `frontend` y framework **Vite**.
-2. `frontend/vercel.json` ya trae el rewrite de `/api/*` hacia
-   `https://migmusic-api.onrender.com` con la cabecera
-   **`x-vercel-enable-rewrite-caching: 0`** (ajusta el destino si llamaste al
-   servicio de Render de otra forma).
-   > Desde el 06/04/2026 Vercel cachea los *rewrites* por defecto: sin esta cabecera el
-   > trÃ¡fico de `/api/*` puede quedar cacheado en el borde y servir respuestas viejas.
-   > El segundo rewrite (`/(.*)` â†’ `/index.html`) es el *catch-all* del SPA: sin Ã©l,
-   > el callback de OAuth y los enlaces profundos contestan `404` en Vercel.
-3. AÃ±ade `SPOTIFY_REDIRECT_URI=https://migmusic.vercel.app/api/auth/callback` al
-   Dashboard **y** las variables de entorno del proyecto.
-4. Despliega. Verifica que `/api/health` responde desde `https://migmusic.vercel.app/api/health`.
-
-### 3. VerificaciÃ³n desde CLI
-
-```bash
-# Ãšltimos deploys de Render (estado live / build_failed)
-render deploys list srv-dauk5k8jo6nc73dgl7ug
-
-# Salud del backend y del proxy de un solo origen
-curl https://migmusic-api.onrender.com/api/health
-curl https://migmusic.vercel.app/api/health
+# 2. Construir y subir (empaqueta, sube, uv sync, nginx, systemd, health check)
+.\infra\scripts\deploy.ps1 -Target 54.166.184.47
+#    -SkipBuild  reutiliza el frontend/dist ya construido
 ```
 
-### 4. Cold start y monitorizaciÃ³n
+`deploy.ps1` empaqueta el repo, lo sube por SSH, instala el entorno con `uv sync --frozen`
+y ejecuta `apply-deploy.sh`, que valida `/health` con reintentos antes de dar por bueno el
+despliegue. Los secretos **no** viajan en el paquete: viven en
+`/etc/migmusic/migmusic.env` (`root:migmusic`, `0640`).
 
-Render apaga el servicio en planes gratuitos. El workflow
-[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) pinga
-`https://migmusic-api.onrender.com/api/health` cada 10 minutos (`schedule` +
-`workflow_dispatch`), reintenta hasta 90 s para absorber el arranque en frÃ­o y despuÃ©s
-comprueba el mismo health a travÃ©s del proxy de Vercel. A la vez es *keep-alive* y
-monitor de producciÃ³n: si responde 200, el flujo completo (navegador â†’ Vercel â†’ Render)
-estÃ¡ vivo.
+### Primer arranque del servidor (resumen)
 
-> GitHub desactiva los `schedule` de un repositorio sin actividad durante 60 dÃ­as;
-> un commit o un disparo manual del workflow lo vuelve a activar.
+1. `provision.sh`: usuario de servicio `migmusic`, nginx, certbot, fail2ban, ufw
+   (solo 22 desde la IP del admin + 80/443), swap de 2 GB, `uv`, cliente de PostgreSQL.
+2. `/etc/migmusic/migmusic.env` con los 21 valores (`infra/env/migmusic.env.example`).
+3. `deploy.ps1 -Target <ip>`.
+4. `certbot --nginx -d migmusicreproductor.duckdns.org --redirect`.
+5. Actualizar el **Redirect URI** en el Dashboard de Spotify (ver arriba).
+
+### OperaciÃ³n
+
+```bash
+# Logs en vivo (una lÃnea JSON por evento)
+journalctl -u migmusic -f
+
+# Estado de los servicios
+systemctl status migmusic nginx
+systemctl list-timers            # backup nocturno y renovaciÃ³n del certificado
+
+# Backup manual de la base de datos (el timer lo hace cada noche)
+sudo systemctl start migmusic-backup.service
+```
 
 ### Rollback
 
-- **Vercel:** pestaÃ±a *Deployments* â†’ *Promote to Production* en el Ãºltimo deployment sano.
-- **Render:** *Deploys* â†’ *Rollback* al commit anterior.
-- **Neon:** *Restore* a un punto anterior de la rama `main`.
+- **App:** volver a un commit anterior y re-ejecutar `deploy.ps1` (el despliegue es
+  atÃ³mico a nivel de release: el health check decide si se mantiene).
+- **Neon:** *Restore* a un punto anterior de la rama `main`, o restaurar el volcado
+  nocturno que genera `migmusic-backup.timer`.
 - Migraciones reversibles: nunca despliegues una migraciÃ³n destructiva sin backup.
+
+> Los archivos `render.yaml`, `.github/workflows/keep-alive.yml` y `frontend/vercel.json`
+> pertenecen a la topologÃ­a antigua (Vercel + Render) y ya no participan en producciÃ³n.
 
 ---
 
@@ -243,7 +248,7 @@ migmusic/
 â”œâ”€â”€ docs/skills/             # skills del agente (SKILL0â€“SKILL7)
 â”œâ”€â”€ README.md
 â”œâ”€â”€ .env.example
-â”œâ”€â”€ .github/workflows/  # CI: lint + tests que bloquean + keep-alive
+â”œâ”€â”€ .github/workflows/  # CI: lint + tests que bloquean
 â”œâ”€â”€ docs/
 â”‚   â”œâ”€â”€ architecture.md # capas + diagramas Mermaid (clases, secuencia, ER)
 â”‚   â”œâ”€â”€ adr/            # Architecture Decision Records
@@ -255,10 +260,15 @@ migmusic/
 â”‚   â””â”€â”€ tests/          # unit / integration / conftest.py
 â”œâ”€â”€ frontend/           # React + Vite + TypeScript
 â”‚   â”œâ”€â”€ package.json
-â”‚   â”œâ”€â”€ vercel.json     # rewrite /api/* â†’ Render (un solo origen)
 â”‚   â”œâ”€â”€ e2e/            # Playwright: smoke, maestro, drag & drop, persistencia, axe
 â”‚   â””â”€â”€ src/
-â””â”€â”€ render.yaml         # blueprint de Render: Web Service + variables
+â””â”€â”€ infra/              # despliegue en AWS (ver infra/README.md)
+    â”œâ”€â”€ nginx/          # vhost + cabeceras de seguridad
+    â”œâ”€â”€ systemd/        # migmusic.service, backup nocturno
+    â”œâ”€â”€ gunicorn/       # configuraciÃ³n del WSGI
+    â”œâ”€â”€ env/            # plantilla de variables (sin valores)
+    â”œâ”€â”€ iam/            # polÃ­tica least-privilege del despliegue
+    â””â”€â”€ scripts/        # provision.sh, deploy.ps1, apply-deploy.sh, backup-db.sh
 ```
 
 ---

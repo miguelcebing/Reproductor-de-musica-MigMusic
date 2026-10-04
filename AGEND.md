@@ -1299,7 +1299,7 @@ DEPLOY-001:
   DependsOn: [CONS-005, FRONT-001, BACK-001, DB-001]
   Question: "Â¿DÃ³nde quieres desplegar MigMusic (Vercel, Render, Railway, Fly.io, AWS, Azure, Google Cloud, otro)?"
   Guidance: "Si no tiene preferencia: recomendar una arquitectura (ej. frontend estÃ¡tico en Vercel/Netlify + backend Python en Render/Railway/Fly.io + PostgreSQL gestionado si aplica), explicando por quÃ©, costos y limitaciones (arranque en frÃ­o, disco efÃ­mero)."
-  Answer: "A - Vercel (frontend) + Render (backend)"
+  Answer: "A - Vercel (frontend) + Render (backend) [2026-09-28] -> migrado a AWS EC2 en `DEPLOY-006` (2026-10-04)"
   DecidedOn: 2026-09-28
 
 DEPLOY-002:
@@ -1308,7 +1308,7 @@ DEPLOY-002:
   DependsOn: [DEPLOY-001]
   Question: "Â¿Frontend y backend estarÃ¡n en el mismo dominio (o subdominios) o en dominios distintos?"
   Guidance: "Determina CORS, cookies SameSite y la Redirect URI de Spotify."
-  Answer: "X - proxy /api/* en Vercel: un solo origen (migmusic.vercel.app)"
+  Answer: "X - proxy /api/* en Vercel: un solo origen (migmusic.vercel.app) -> mismo principio conservado en AWS: un solo origen en migmusicreproductor.duckdns.org (Nginx hace el proxy, `DEPLOY-006`)"
   DecidedOn: 2026-09-28
 
 DEPLOY-003:
@@ -1337,6 +1337,15 @@ DEPLOY-005:
   Guidance: "Nunca registrar tokens ni datos sensibles."
   Answer: "Vercel: miguelcebing; Render y Neon conectadas vÃ­a GitHub. Logs estructurados bÃ¡sicos + healthcheck (recomendado, 0 $)"
   DecidedOn: 2026-09-28
+
+DEPLOY-006:
+  Status: CONFIRMED
+  Priority: CRITICAL
+  DependsOn: [DEPLOY-001, DEPLOY-002, CONS-005]
+  Question: "Â¿Migrar de Vercel + Render a un servidor propio siempre encendido para eliminar el arranque en frÃ­o?"
+  Guidance: "El frÃ­o de Render free (8-25 s) y el cron de GitHub poco fiable degradaban la latencia y provocaban timeouts y reversiones del reproductor. Alternativas: seguir en free-tier con keep-alive (descartado: el `schedule` de GitHub disparaba 0/6), instancia siempre encendida en AWS EC2 (elegida), u otras nubes. La base de datos se mantiene en Neon: no era la causa de la lentitud y evita una migraciÃ³n."
+  Answer: "AWS EC2 `t3.micro` en us-east-1 (elegida por mediciÃ³n: 122 ms vs 196 ms de sa-east-1; Neon estÃ¡ en us-east-2 a ~12 ms). Un solo servidor con Nginx (SPA + proxy `/api/*`) + Gunicorn. Dominio DuckDNS `migmusicreproductor.duckdns.org`, HTTPS con Let's Encrypt (certbot), IP elÃ¡stica, presupuesto con alertas a 5/10 USD. Vercel/Render quedan retirados salvo el redirect URI de Spotify, que se actualiza al dominio nuevo."
+  DecidedOn: 2026-10-04
 ```
 
 ### R13 â€” Testing Questions
@@ -1639,6 +1648,7 @@ ConvenciÃ³n de IDs nuevos: `<PREFIJO>-<nÃºmero>` siguiente disponible, o suf
 | 2026-10-03 | F13-GATE | Letras: `POST /api/lyrics` reconstruido (entidad `Lyrics`, puerto `LyricsProvider`, `LyricsService` con estrategia fuente-propia -> LRCLIB y cache TTL inclusivo de los fallos) + adapter `LrclibClient` (keyless, timeout 8 s) + 204 cuando no hay letras; UI en el reproductor (`LyricsPanel` HeroUI, cache por cancion, estados carga/vacio/error, texto como JSX) | `FEAT-004`; un fallo de letras nunca interrumpe la reproduccion. Backend: ruff/mypy/**401 tests**/94.3 % |
 | 2026-10-03 | SEC-001-GATE | Rate limiting en proceso (ventana deslizante, clave device-id + IP), `MaxBodySizeMiddleware` (413), `SecurityHeadersMiddleware` (nosniff/frame/referrer/HSTS/Permissions-Policy/CSP de API), `TrustedHostMiddleware`, CORS con headers concretos, `X-Device-Id` con formato y longitud acotados, `max_length` en schemas, validacion de MP3/WAV + 100 MB en el frontend, timeout global del `httpx` compartido, versiones fijadas (`pyproject` + `uv.lock`), `pip-audit` y `npm audit` sin vulnerabilidades; CSP de la pagina en `vercel.json` ajustada a YouTube/Spotify | Auditoria de secretos: historial limpio, nada que rotar (el unico literal es el Client ID publico en este AGEND). Backend: 401 tests; frontend: lint/tsc/147 tests; E2E: 21 (20 desktop + 1 mobile) |
 | 2026-10-03 | LATENCY-FIX | Velocidad percibida: (1) `POST /api/playlists/{id}/songs/batch` + `PlaylistService.add_songs` anaden N canciones con **una** lectura y **una** escritura (antes: N peticiones HTTP, cada una releyendo y reescribiendo la playlist entera) y el frontend usa el lote al agregar varias canciones de Spotify/YouTube/local; (2) el `apiClient` reintenta una vez las lecturas idempotentes (`GET`) en timeout / red / 502-503-504, con un primer plazo ampliado (`COLD_START_TIMEOUT_MS` = 20 s) para absorber el arranque en frio de Render, de modo que "despertar" el servidor ya no muestra el toast de timeout; las escrituras nunca reintentan | Feedback del usuario: error "el servidor tarda demasiado" al agregar musica de Spotify. Backend: ruff/mypy/**405**/94.3 %; frontend: lint/tsc/**152**; E2E 21; verificado en vivo (3 canciones -> 1 request, `size=3`) |
+| 2026-10-04 | DEPLOY-006 | MigraciÃ³n a **AWS EC2** (`t3.micro`, us-east-1) con Nginx + Gunicorn en un solo origen `migmusicreproductor.duckdns.org` (Let's Encrypt, IP elÃ¡stica `54.166.184.47`, presupuesto con alertas 5/10 USD); la DB sigue en Neon; Vercel/Render retirados | Elimina el frÃ­o de Render free y la dependencia del cron de GitHub (`SPEED-FIX`/`WARM-FIX`). Dos bugs corregidos en el camino: `ProtectHome=yes` rompÃ­a libpq (home del servicio fuera de `/home`, `fix(infra)` `14f816b`) y `gzip` duplicado a nivel `http` (`fc7a69e`); vhost con `server_name` real para certbot (`7de0275`). Verificado: reinicio completo autorrecuperado en ~30 s, round-trip real contra Neon, 411 tests backend + 152 frontend en un clon limpio, HTTPS 200 y `301` desde HTTP |
 
 ## ValidaciÃ³n de entrega de este AGEND.md
 
