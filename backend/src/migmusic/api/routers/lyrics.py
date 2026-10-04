@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Response, status
 
 from migmusic.api.dependencies import LyricsServiceDep
-from migmusic.api.schemas.lyrics import LyricsOut, LyricsQuery
+from migmusic.api.schemas.lyrics import LyricsLineOut, LyricsOut, LyricsQuery
 from migmusic.domain.entities.song import Song
 
 router = APIRouter(prefix="/api/lyrics", tags=["lyrics"])
@@ -24,7 +24,12 @@ async def get_lyrics(
     lyrics = await service.lyrics_for(_song_from(body))
     if lyrics is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return LyricsOut(text=lyrics.text, source=lyrics.source, synced=lyrics.synced)
+    return LyricsOut(
+        text=lyrics.text,
+        source=lyrics.source,
+        synced=lyrics.synced,
+        lines=[LyricsLineOut(time=line.time, text=line.text) for line in lyrics.lines],
+    )
 
 
 def _song_from(body: LyricsQuery) -> Song:

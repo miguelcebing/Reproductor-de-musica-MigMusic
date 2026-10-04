@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from migmusic.domain.entities.lyrics import Lyrics
+from migmusic.domain.entities.lyrics import LyricLine, Lyrics
 
 
 class StubProvider:
@@ -36,7 +36,28 @@ def test_returns_lyrics_for_the_posted_track(settings: Any) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {"text": "La\nLa", "source": "lrclib", "synced": False}
+    assert response.json() == {"text": "La\nLa", "source": "lrclib", "synced": False, "lines": []}
+
+
+def test_returns_timed_lines_when_synced(settings: Any) -> None:
+    client = _client_with_lyrics(
+        settings,
+        Lyrics(
+            text="One\nTwo",
+            source="lrclib",
+            synced=True,
+            lines=(LyricLine(time=12.5, text="One"), LyricLine(time=15.0, text="Two")),
+        ),
+    )
+
+    response = client.post("/api/lyrics", json={"title": "Song", "source": "local"})
+
+    assert response.status_code == 200
+    assert response.json()["synced"] is True
+    assert response.json()["lines"] == [
+        {"time": 12.5, "text": "One"},
+        {"time": 15.0, "text": "Two"},
+    ]
 
 
 def test_answers_204_when_no_lyrics_exist(settings: Any) -> None:
@@ -62,3 +83,15 @@ def test_rejects_an_oversized_title(settings: Any) -> None:
     response = client.post("/api/lyrics", json={"title": "a" * 400})
 
     assert response.status_code == 422
+
+
+def test_a_synced_payload_keeps_the_text_usable(settings: Any) -> None:
+    client = _client_with_lyrics(
+        settings,
+        Lyrics(text="One\nTwo", source="lrclib", synced=True),
+    )
+
+    response = client.post("/api/lyrics", json={"title": "Song", "source": "local"})
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "One\nTwo"

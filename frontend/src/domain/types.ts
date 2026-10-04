@@ -122,11 +122,18 @@ export interface SpotifyPlayerState {
 
 // --- Lyrics (`F13`) ---------------------------------------------------------
 
+/** One timed lyric line: the moment it starts (seconds) and its text. */
+export interface LyricLine {
+  readonly time: number;
+  readonly text: string;
+}
+
 /** Lyrics for a track (`POST /api/lyrics`); `null` when the API answers 204. */
 export interface Lyrics {
   readonly text: string;
   readonly source: string;
   readonly synced: boolean;
+  readonly lines: readonly LyricLine[];
 }
 
 /** Request body for `POST /api/lyrics`: the track to look up. */

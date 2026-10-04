@@ -19,12 +19,20 @@ class LyricsQuery(BaseModel):
     track_id: str = Field(default="", max_length=200)
 
 
+class LyricsLineOut(BaseModel):
+    """One timed lyric line (`F13`): start instant (seconds) and its text."""
+
+    time: float
+    text: str
+
+
 class LyricsOut(BaseModel):
     """Serialised lyrics for a song."""
 
     text: str
     source: str
     synced: bool
+    lines: list[LyricsLineOut] = Field(default_factory=list)
 
 
-__all__ = ["LyricsOut", "LyricsQuery"]
+__all__ = ["LyricsLineOut", "LyricsOut", "LyricsQuery"]

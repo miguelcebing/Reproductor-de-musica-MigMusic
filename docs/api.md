@@ -256,7 +256,10 @@ it already holds (no second search) and either gets the lyrics or a friendly
 `≥0`), `source` (`local` \| `spotify` \| `youtube`), `track_id` (0–200).
 
 **`LyricsOut`** — `text` (plain text; never empty), `source`
-(`youtube` \| `lrclib`) and `synced` (whether timed LRC lyrics were available).
+(`youtube` \| `lrclib`), `synced` (whether timed lyrics were available) and
+`lines` (list of `{ time, text }`; empty when only plain text exists). The UI
+uses `lines` to highlight and scroll the current line; `text` is always
+renderable on its own.
 
 **Resolution strategy (first hit wins)**
 

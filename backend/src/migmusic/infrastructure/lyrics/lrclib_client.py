@@ -10,12 +10,13 @@ endpoint answers ``204`` so playback is never interrupted by missing lyrics.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
 
 from migmusic.core import get_logger
-from migmusic.domain.entities.lyrics import Lyrics
+from migmusic.domain.entities.lyrics import LyricLine, Lyrics
 from migmusic.domain.ports.lyrics_provider import LyricsProvider
 from migmusic.infrastructure.lyrics.errors import LrclibError
 
@@ -28,6 +29,9 @@ _TIMEOUT_SECONDS = 8.0
 # LRCLIB has no notion of a "best" hit; the exact-match endpoint either finds
 # the track or 404s, which keeps results predictable and cacheable.
 _NOT_FOUND = 404
+
+# LRC markers: one or more `[mm:ss.xx]` / `[mm:ss]` tags before a line of text.
+_LRC_TIME = re.compile(r"\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]")
 
 
 class LrclibClient(LyricsProvider):
@@ -76,15 +80,22 @@ class LrclibClient(LyricsProvider):
 
 
 def _to_lyrics(payload: Any) -> Lyrics | None:
-    """Map an LRCLIB payload to the domain value object (plain text preferred)."""
+    """Map an LRCLIB payload to the domain value object.
+
+    Plain lyrics are preferred for the readable body; when only synced (LRC)
+    lyrics exist, the timed lines are parsed and their text becomes the body so
+    the UI can both display and follow along.
+    """
     if not isinstance(payload, dict):
         return None
-    plain = payload.get("plainLyrics")
-    synced = payload.get("syncedLyrics")
-    text = _clean(plain) or _strip_timestamps(synced)
-    if not text:
-        return None
-    return Lyrics(text=text, source="lrclib", synced=bool(synced and not plain))
+    plain = _clean(payload.get("plainLyrics"))
+    lines = _parse_lrc(payload.get("syncedLyrics"))
+    if plain:
+        return Lyrics(text=plain, source="lrclib", synced=bool(lines), lines=lines)
+    if lines:
+        text = "\n".join(line.text for line in lines)
+        return Lyrics(text=text, source="lrclib", synced=True, lines=lines)
+    return None
 
 
 def _clean(value: Any) -> str | None:
@@ -95,21 +106,27 @@ def _clean(value: Any) -> str | None:
     return stripped or None
 
 
-def _strip_timestamps(value: Any) -> str | None:
-    """Drop ``[mm:ss.xx]`` LRC markers, keeping the readable lines."""
+def _parse_lrc(value: Any) -> tuple[LyricLine, ...]:
+    """Parse ``[mm:ss.xx] text`` LRC lines into timed lyric lines, sorted."""
     if not isinstance(value, str):
-        return None
-    lines: list[str] = []
+        return ()
+    parsed: list[LyricLine] = []
     for raw in value.splitlines():
-        line = raw.strip()
-        while line.startswith("["):
-            end = line.find("]")
-            if end == -1:
-                break
-            line = line[end + 1 :].strip()
-        if line:
-            lines.append(line)
-    return "\n".join(lines) or None
+        matches = list(_LRC_TIME.finditer(raw))
+        if not matches:
+            continue
+        text = _LRC_TIME.sub("", raw).strip()
+        # Skip pure metadata tags such as `[ar:Artist]` (no text after them).
+        if not text:
+            continue
+        for match in matches:
+            minutes = int(match.group(1))
+            seconds = int(match.group(2))
+            fraction = match.group(3) or "0"
+            millis = int(fraction.ljust(3, "0")[:3])
+            parsed.append(LyricLine(time=minutes * 60 + seconds + millis / 1000, text=text))
+    parsed.sort(key=lambda line: line.time)
+    return tuple(parsed)
 
 
 __all__ = ["LrclibClient"]
