@@ -7,12 +7,16 @@ import { withLiveArtwork } from "../services/localFileUrls";
 
 export interface PlaybackStoreState {
   playback: PlaybackState | null;
+  /** A track was picked and its audio is still being prepared (`F12`). */
+  loading: boolean;
   setPlayback: (playback: PlaybackState | null) => void;
+  setLoading: (loading: boolean) => void;
   reset: () => void;
 }
 
 export const usePlaybackStore = create<PlaybackStoreState>((set) => ({
   playback: null,
+  loading: false,
   setPlayback: (playback) =>
     set({
       playback:
@@ -20,5 +24,6 @@ export const usePlaybackStore = create<PlaybackStoreState>((set) => ({
           ? { ...playback, song: withLiveArtwork(playback.song) }
           : playback,
     }),
-  reset: () => set({ playback: null }),
+  setLoading: (loading) => set({ loading }),
+  reset: () => set({ playback: null, loading: false }),
 }));

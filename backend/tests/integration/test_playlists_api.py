@@ -163,7 +163,8 @@ def test_rename_with_an_empty_name_is_422(
     response = client.patch(f"/api/playlists/{payload['id']}", json={"name": ""})
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "validation_error"
+    # The schema now rejects an empty name before the domain sees it.
+    assert response.json()["error"]["code"] == "request_validation_error"
 
 
 def test_delete_playlist_then_404(client: TestClient, create_playlist: CreatePlaylist) -> None:

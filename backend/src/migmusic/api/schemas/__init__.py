@@ -6,6 +6,7 @@ from migmusic.api.schemas.auth import (
     CallbackBody,
     CallbackOut,
 )
+from migmusic.api.schemas.lyrics import LyricsOut, LyricsQuery
 from migmusic.api.schemas.playback import (
     ModeRequest,
     OpenRequest,
@@ -41,6 +42,8 @@ __all__ = [
     "CallbackBody",
     "CallbackOut",
     "DeviceRequest",
+    "LyricsOut",
+    "LyricsQuery",
     "ModeRequest",
     "OpenRequest",
     "PlayRequest",

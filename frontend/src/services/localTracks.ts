@@ -4,6 +4,22 @@ import type { SongInput } from "../domain/types";
 import { localArtworkUrls, localFileUrls } from "./localFileUrls";
 import { localLibrary } from "../storage/LocalLibraryRepository";
 
+/** Formats the app accepts (`LOCAL-001`): MP3 and WAV, by MIME or extension. */
+export const ALLOWED_AUDIO_EXTENSIONS = [".mp3", ".wav"] as const;
+export const ALLOWED_AUDIO_MIME = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"] as const;
+/** A local file the browser can hold comfortably; keeps IndexedDB healthy. */
+export const MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024;
+
+/** Whether a picked file is an allowed MP3/WAV within the size limit. */
+export function isSupportedAudioFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  const byExtension = ALLOWED_AUDIO_EXTENSIONS.some((ext) => name.endsWith(ext));
+  // Some browsers leave `file.type` empty; the extension is the fallback so the
+  // valid case is never rejected.
+  const byMime = file.type === "" || (ALLOWED_AUDIO_MIME as readonly string[]).includes(file.type);
+  return byExtension && byMime && file.size <= MAX_LOCAL_FILE_BYTES;
+}
+
 function uuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();

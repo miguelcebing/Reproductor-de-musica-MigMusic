@@ -940,4 +940,66 @@ describe("PlaybackController optimistic UI", () => {
     expect(toasts).toHaveLength(1);
     expect(toasts[0].text).toContain("boom");
   });
+
+  it("answers a track pick before the server and marks it as loading", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ index: 0, playing: false }));
+    const { controller, api } = makeController();
+    const hung = hang();
+    api.selectSong.mockReturnValue(hung.promise);
+
+    const inFlight = controller.select("pl-1", 2);
+
+    // The store shows the picked song, playing, before the round trip ends.
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:3");
+    expect(usePlaybackStore.getState().playback?.index).toBe(2);
+    expect(usePlaybackStore.getState().playback?.playing).toBe(true);
+    expect(usePlaybackStore.getState().loading).toBe(true);
+
+    hung.release(makeState({ index: 2, song: makeSong("local:3"), position: 0 }));
+    await inFlight;
+    expect(usePlaybackStore.getState().loading).toBe(false);
+  });
+
+  it("silences the previous track as soon as another one is picked", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ index: 0, playing: true }));
+    const { controller, api, factory } = makeController();
+    await controller.onTrackChange(makeState().song!);
+    expect(factory.players[0].pauseCalls).toBe(0);
+
+    const hung = hang();
+    api.selectSong.mockReturnValue(hung.promise);
+    const inFlight = controller.select("pl-1", 1);
+
+    expect(factory.players[0].pauseCalls).toBeGreaterThan(0);
+
+    hung.release(makeState({ index: 1, song: makeSong("local:2"), position: 0 }));
+    await inFlight;
+    await controller.onTrackChange(null);
+  });
+
+  it("cancels the previous pick so only the last one wins", async () => {
+    usePlaybackStore.getState().setPlayback(makeState({ index: 0, playing: true }));
+    const { controller, api } = makeController();
+    api.selectSong
+      .mockImplementationOnce(
+        (_playlistId: string, _index: number, signal?: AbortSignal) =>
+          new Promise<PlaybackState>((_resolve, reject) => {
+            signal?.addEventListener("abort", () =>
+              reject(new ApiError(0, "aborted", "request aborted")),
+            );
+          }),
+      )
+      .mockResolvedValueOnce(makeState({ index: 2, song: makeSong("local:3"), position: 0 }));
+
+    const first = controller.select("pl-1", 1);
+    const second = controller.select("pl-1", 2);
+
+    await first; // cancelled on purpose: silent, no rollback
+    await second;
+
+    expect(usePlaybackStore.getState().playback?.song?.id).toBe("local:3");
+    expect(usePlaybackStore.getState().playback?.index).toBe(2);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+    expect(usePlaybackStore.getState().loading).toBe(false);
+  });
 });

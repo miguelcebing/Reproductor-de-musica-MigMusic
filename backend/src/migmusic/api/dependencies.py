@@ -6,12 +6,13 @@ never inside routers, so tests can swap a single provider.
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request, status
 
 from migmusic.api.spotify_session import read_session_id
-from migmusic.application.services import PlaybackService, PlaylistService
+from migmusic.application.services import LyricsService, PlaybackService, PlaylistService
 from migmusic.application.services.music_provider_registry import MusicProviderRegistry
 from migmusic.application.services.spotify_auth_service import SpotifyAuthService
 from migmusic.domain.ports.music_provider import MusicProvider
@@ -30,6 +31,11 @@ def get_playlist_service(request: Request) -> PlaylistService:
 def get_playback_service(request: Request) -> PlaybackService:
     """Return the playback use cases attached by the composition root."""
     return cast(PlaybackService, request.app.state.playback_service)
+
+
+def get_lyrics_service(request: Request) -> LyricsService:
+    """Return the lyrics use cases attached by the composition root."""
+    return cast(LyricsService, request.app.state.lyrics_service)
 
 
 def get_spotify_auth_service(request: Request) -> SpotifyAuthService:
@@ -53,6 +59,11 @@ def get_music_provider_registry(request: Request) -> MusicProviderRegistry:
 
 
 DEVICE_ID_HEADER = "x-device-id"
+# The frontend mints a UUID; anything longer or with control characters is a
+# malformed client, not a legitimate device.
+_DEVICE_ID_MIN = 8
+_DEVICE_ID_MAX = 128
+_DEVICE_ID_ALLOWED = re.compile(r"^[A-Za-z0-9._:-]+$")
 
 
 def require_device_id(request: Request) -> str:
@@ -61,13 +72,19 @@ def require_device_id(request: Request) -> str:
     Every playlist and playback call is scoped to this id, so a missing or
     blank header is rejected (400) instead of silently falling back to an
     unscoped view that would expose other devices' data. This is UX isolation
-    between devices, not authentication.
+    between devices, not authentication. The value is bounded and
+    charset-restricted so it cannot bloat the cache or the database index.
     """
     value = request.headers.get(DEVICE_ID_HEADER, "").strip()
     if not value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Device-Id header is required",
+        )
+    if not (_DEVICE_ID_MIN <= len(value) <= _DEVICE_ID_MAX) or not _DEVICE_ID_ALLOWED.match(value):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Device-Id header is malformed",
         )
     return value
 
@@ -95,6 +112,7 @@ async def require_spotify_token(
 
 PlaylistServiceDep = Annotated[PlaylistService, Depends(get_playlist_service)]
 PlaybackServiceDep = Annotated[PlaybackService, Depends(get_playback_service)]
+LyricsServiceDep = Annotated[LyricsService, Depends(get_lyrics_service)]
 DeviceIdDep = Annotated[str, Depends(require_device_id)]
 SpotifyAuthServiceDep = Annotated[SpotifyAuthService, Depends(get_spotify_auth_service)]
 SpotifyClientDep = Annotated[SpotifyApiClient, Depends(get_spotify_client)]

@@ -9,6 +9,8 @@ import type {
   AuthStatus,
   CallbackResult,
   ErrorEnvelope,
+  Lyrics,
+  LyricsQuery,
   PlaybackState,
   Playlist,
   RepeatMode,
@@ -122,10 +124,12 @@ export class ApiClient {
     });
   }
 
-  selectSong(playlistId: string, index: number): Promise<PlaybackState> {
+  selectSong(playlistId: string, index: number, signal?: AbortSignal): Promise<PlaybackState> {
     return this.send<PlaybackState>(
       "POST",
       `/playlists/${encodeURIComponent(playlistId)}/songs/${index}/select`,
+      undefined,
+      signal,
     );
   }
 
@@ -246,6 +250,21 @@ export class ApiClient {
     return this.send<Song[]>("GET", `/youtube/search${params}`);
   }
 
+  // --- Lyrics (`F13`) -------------------------------------------------------
+
+  /** Lyrics for a track; a `204` (no lyrics) resolves to `null`. */
+  async getLyrics(query: LyricsQuery): Promise<Lyrics | null> {
+    const body = {
+      title: query.title,
+      artist: query.artist,
+      duration: query.duration,
+      source: query.source,
+      track_id: query.id,
+    };
+    const result = await this.send<Lyrics | undefined>("POST", "/lyrics", body);
+    return result ?? null;
+  }
+
   // --- Spotify player proxy (`F6`) ------------------------------------------
 
   spotifyPlay(params: {
@@ -290,7 +309,12 @@ export class ApiClient {
 
   // --- Plumbing ------------------------------------------------------------
 
-  private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async send<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const init: RequestInit = { method, headers: { accept: "application/json" }, credentials: "include" };
     // The backend scopes every playlist/playback call to this id, so it is
     // always sent (an ephemeral id is minted when storage is unavailable).
@@ -303,8 +327,19 @@ export class ApiClient {
     // A sleeping backend (Render free) must surface as a fast, clear toast
     // instead of a button that stays silent until the browser gives up.
     const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+    // A caller may cancel a superseded request (rapid track clicks): the abort
+    // is intentional, so it is reported as `aborted` and never toasted.
+    const onExternalAbort = (): void => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
     init.signal = controller.signal;
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await this.request(apiUrl(this.base, path), init);
       if (!response.ok) {
@@ -316,7 +351,8 @@ export class ApiClient {
       return (await response.json()) as T;
     } catch (cause) {
       if (controller.signal.aborted) {
-        throw new ApiError(0, "timeout", "request timed out");
+        if (timedOut) throw new ApiError(0, "timeout", "request timed out");
+        throw new ApiError(0, "aborted", "request aborted");
       }
       if (cause instanceof ApiError) throw cause;
       throw new ApiError(
@@ -326,6 +362,7 @@ export class ApiClient {
       );
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onExternalAbort);
     }
   }
 

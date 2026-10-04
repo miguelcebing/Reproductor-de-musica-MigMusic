@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { YouTubePlayer } from "./YouTubePlayer";
+import { YouTubePlayer, disposeYouTubeEngine } from "./YouTubePlayer";
 import type {
   YouTubePlayerEvent,
   YouTubePlayerInstance,
@@ -18,6 +18,7 @@ class FakeInnerPlayer implements YouTubePlayerInstance {
   state = 1;
   destroyed = false;
   seekedTo: number | null = null;
+  loadedVideos: string[] = [];
   options: YouTubePlayerOptions;
   private readonly mount: HTMLElement;
 
@@ -34,6 +35,14 @@ class FakeInnerPlayer implements YouTubePlayerInstance {
   }
   stopVideo(): void {
     this.playing = false;
+  }
+  loadVideoById(videoId: string, startSeconds?: number): void {
+    this.loadedVideos.push(videoId);
+    this.playing = false;
+    if (startSeconds !== undefined) {
+      this.seekedTo = startSeconds;
+      this.currentTime = startSeconds;
+    }
   }
   seekTo(seconds: number): void {
     this.seekedTo = seconds;
@@ -96,6 +105,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  disposeYouTubeEngine();
   vi.restoreAllMocks();
 });
 
@@ -143,19 +153,16 @@ describe("YouTubePlayer", () => {
     expect(inner.seekedTo).toBe(42);
   });
 
-  it("destroys the previous inner player on a source switch", async () => {
+  it("reuses the same inner player and loads the new video on a source switch", async () => {
     const { player } = await loaded("first");
     const firstInner = created[0];
 
-    const secondLoad = player.load("second");
-    await Promise.resolve();
-    await Promise.resolve();
-    const secondInner = created[created.length - 1];
-    secondInner.ready();
-    await secondLoad;
+    await player.load("second");
 
-    // The old inner player was stopped and destroyed: no stale audio remains.
-    expect(firstInner.destroyed).toBe(true);
+    // Same iframe, new video: the player is not rebuilt (`F12`).
+    expect(created).toHaveLength(1);
+    expect(firstInner.destroyed).toBe(false);
+    expect(firstInner.loadedVideos).toContain("second");
     expect(player.source).toBe("second");
   });
 
@@ -229,12 +236,14 @@ describe("YouTubePlayer", () => {
     );
   });
 
-  it("destroys cleanly and removes the host container", async () => {
+  it("pauses and detaches but keeps the shared iframe for the next track", async () => {
     const { player, inner } = await loaded();
+    inner.playing = true;
 
     player.destroy();
 
-    expect(inner.destroyed).toBe(true);
-    expect(document.getElementById("migmusic-youtube-host")).toBeNull();
+    expect(inner.playing).toBe(false); // stale audio stopped
+    expect(inner.destroyed).toBe(false); // the iframe is reused (`F12`)
+    expect(document.getElementById("migmusic-youtube-host")).not.toBeNull();
   });
 });

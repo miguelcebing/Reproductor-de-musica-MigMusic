@@ -71,12 +71,41 @@
   max-width: 100%;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
 .trackTitle {
   margin: 0;
   font-size: var(--font-size-xl);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lyricsButton {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-3);
+  min-height: 30px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  /* Always readable: accent text over the raised surface (AA on both themes). */
+  color: var(--color-accent-text);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.lyricsButton:hover,
+.lyricsButtonActive {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-raised));
 }
 
 .trackArtist {

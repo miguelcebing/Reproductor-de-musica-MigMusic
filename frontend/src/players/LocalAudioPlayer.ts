@@ -3,6 +3,10 @@
 import type { AudioPlayer, PlayerEventType, PlayerEventListener } from "./AudioPlayer";
 import { getObjectUrlForTrack } from "../services/localFileUrls";
 
+/** Hidden elements that warm the next local track's bytes (`F12`). */
+const preloadedTracks = new Map<string, HTMLAudioElement>();
+const PRELOAD_LIMIT = 4;
+
 export class LocalAudioPlayer implements AudioPlayer {
   private readonly audio: HTMLAudioElement;
   private readonly listeners: Map<PlayerEventType, Set<PlayerEventListener>> = new Map();
@@ -93,6 +97,29 @@ export class LocalAudioPlayer implements AudioPlayer {
 
   setMuted(muted: boolean): void {
     this.audio.muted = muted;
+  }
+
+  /**
+   * Warm the next local track so its metadata is already decoded when the user
+   * reaches it (`F12`). The element is kept small (a bounded cache) and never
+   * played; `load()` still opens its own element, but the bytes come from cache.
+   */
+  preload(source: string): void {
+    if (preloadedTracks.has(source)) return;
+    void getObjectUrlForTrack(source)
+      .then((url) => {
+        if (!url || preloadedTracks.has(source)) return;
+        if (preloadedTracks.size >= PRELOAD_LIMIT) {
+          const oldest = preloadedTracks.keys().next().value;
+          if (oldest !== undefined) preloadedTracks.delete(oldest);
+        }
+        const audio = new Audio();
+        audio.preload = "auto";
+        audio.src = url;
+        audio.load();
+        preloadedTracks.set(source, audio);
+      })
+      .catch(() => undefined);
   }
 
   destroy(): void {

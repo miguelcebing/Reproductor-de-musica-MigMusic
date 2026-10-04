@@ -309,6 +309,24 @@ describe("ApiClient request timeout", () => {
       vi.useRealTimers();
     }
   });
+
+  it("reports a caller-cancelled request as aborted, not as a timeout", async () => {
+    const fetchImpl: FetchLike = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    const api = ApiClient.fromOrigin(origin, fetchImpl);
+    const controller = new AbortController();
+
+    const outcome = api.selectSong("pl-1", 0, controller.signal).catch((cause: unknown) => cause);
+    controller.abort();
+    const error = await outcome;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 0, code: "aborted" });
+  });
 });
 
 describe("failureMessage", () => {

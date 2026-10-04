@@ -239,7 +239,58 @@ through the official YouTube IFrame player using that `videoId`.
   frontend hides the YouTube tab.
 - Search results are cached in-process for 5 minutes; a failed call answers
   `502/504` and never breaks Spotify or local playback.
-- Lyrics for YouTube tracks use the watch-playlist browse id (see `F9`).
+
+---
+
+### Lyrics (`F13`)
+
+Resolve the lyrics of the current track. The frontend posts the track metadata
+it already holds (no second search) and either gets the lyrics or a friendly
+`204` when none exist. A miss is **not** an error: playback must keep working.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/lyrics` | Body `LyricsQuery` → `LyricsOut`, or `204` when no lyrics exist. |
+
+**`LyricsQuery`** — `title` (1–300), `artist` (0–300), `duration` (seconds,
+`≥0`), `source` (`local` \| `spotify` \| `youtube`), `track_id` (0–200).
+
+**`LyricsOut`** — `text` (plain text; never empty), `source`
+(`youtube` \| `lrclib`), `synced` (whether timed lyrics were available) and
+`lines` (list of `{ time, text }`; empty when only plain text exists). The UI
+uses `lines` to highlight and scroll the current line; `text` is always
+renderable on its own.
+
+**Resolution strategy (first hit wins)**
+
+1. The track's own source: YouTube Music, via `get_watch_playlist` +
+   `get_lyrics` (cached 24 h).
+2. LRCLIB (keyless, `https://lrclib.net`) matched by title/artist, which covers
+   Spotify and local tracks.
+
+Results — including misses — are cached for 24 h, so replaying a song never
+hits the network again. A failure from either upstream answers `502/504` and
+the frontend shows an error state without interrupting playback.
+
+---
+
+## Security
+
+- **Rate limiting** (`SEC-001`): per-minute sliding window keyed by
+  `X-Device-Id` (fallback: client IP). General routes use
+  `RATE_LIMIT_DEFAULT_PER_MINUTE`; catalog search and lyrics use the stricter
+  `RATE_LIMIT_EXPENSIVE_PER_MINUTE`; `/api/auth/*` uses
+  `RATE_LIMIT_AUTH_PER_MINUTE`. Over-budget requests answer `429` with a
+  `Retry-After` header and `code: "rate_limited"`. `/api/health` is exempt.
+  Disable with `RATE_LIMIT_ENABLED=false` (development/tests).
+- **Body size**: requests declaring more than `MAX_REQUEST_BODY_BYTES` are
+  rejected with `413` (`payload_too_large`).
+- **`X-Device-Id`**: required, 8–128 chars, `[A-Za-z0-9._:-]` only; malformed
+  values answer `400`.
+- **Security headers** on every API response: `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, restrictive
+  `Content-Security-Policy` and (production) `Strict-Transport-Security`. The
+  page-level CSP is served by Vercel (`frontend/vercel.json`).
 
 ---
 
@@ -247,8 +298,10 @@ through the official YouTube IFrame player using that `videoId`.
 
 | Code | Meaning |
 |---|---|
-| 400 | Domain rule violated (`DomainError`) |
+| 400 | Domain rule violated (`DomainError`), or malformed `X-Device-Id` |
 | 404 | Entity not found (`NotFoundError`), or no open playlist (`no_active_playback`) |
+| 413 | Request body larger than `MAX_REQUEST_BODY_BYTES` (`payload_too_large`) |
 | 422 | Request body failed validation (`request_validation_error`), or a domain rule (`validation_error`) |
-| 502/503 | Upstream failure (Spotify, database) |
+| 429 | Rate limit exceeded (`rate_limited`); see `Retry-After` |
+| 502/503 | Upstream failure (Spotify, YouTube Music, LRCLIB, database) |
 | 500 | Unhandled error; details only in the logs |

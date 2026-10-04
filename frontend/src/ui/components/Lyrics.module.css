@@ -1,0 +1,143 @@
+/* Full-screen lyrics view (`F13`): large type, current line highlighted. */
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(96vw, 900px);
+  max-height: 92vh;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 40px 120px -50px rgba(0, 0, 0, 0.85);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-3);
+}
+
+.headings {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  flex: none;
+}
+
+.body {
+  overflow-y: auto;
+  /* Fade the top/bottom edges so long lyrics feel like they scroll in/out. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 48px,
+    #000 calc(100% - 48px),
+    transparent 100%
+  );
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.status {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+  text-align: center;
+  padding: var(--space-8) 0;
+}
+
+.plain {
+  margin: 0 auto;
+  max-width: 60ch;
+  font-family: var(--font-sans, inherit);
+  font-size: clamp(1.25rem, 2.6vw, 2rem);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: center;
+  color: var(--color-text);
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 60ch;
+  margin: 0 auto;
+}
+
+.line {
+  margin: 0;
+  font-size: clamp(1.15rem, 2.4vw, 1.9rem);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  transition:
+    color 0.25s ease,
+    transform 0.25s ease,
+    opacity 0.25s ease;
+  opacity: 0.65;
+}
+
+/* The line playing right now: large, bright and slightly lifted. */
+.lineActive {
+  color: var(--color-text);
+  opacity: 1;
+  font-weight: 700;
+  transform: scale(1.06);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+.credit {
+  margin: var(--space-8) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line,
+  .lineActive {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Narrow phones: keep the type readable without overflowing the width. */
+@media (max-width: 480px) {
+  .dialog {
+    width: 94vw;
+    padding: var(--space-4);
+  }
+
+  .plain {
+    font-size: 1.35rem;
+  }
+
+  .line {
+    font-size: 1.2rem;
+  }
+}

@@ -8,8 +8,11 @@ import { PlaybackController } from "./services/PlaybackController";
 import { AuthController } from "./services/AuthController";
 import { SpotifyController } from "./services/SpotifyController";
 import { YouTubeController } from "./services/YouTubeController";
+import { LyricsController } from "./services/LyricsController";
 import { readCallbackParams } from "./services/callbackParams";
 import { restoreObjectUrlsFromIndexedDB } from "./services/localFileUrls";
+import { MediaSessionBridge } from "./services/mediaSession";
+import { PlaybackResilience } from "./services/playbackResilience";
 import { REPEAT_CYCLE } from "./ui/constants";
 import { useT } from "./i18n/useT";
 import { translate } from "./i18n/messages";
@@ -33,6 +36,7 @@ import { SourceCard } from "./ui/components/SourceCard";
 import { AddTrackDialog } from "./ui/components/AddTrackDialog";
 import { LinkedListView } from "./ui/components/LinkedListView";
 import { SpotifyCallback } from "./ui/components/SpotifyCallback";
+import { LyricsPanel } from "./ui/components/LyricsPanel";
 import type { Song, TrackPosition } from "./domain/types";
 import shellStyles from "./ui/layouts/AppShell.module.css";
 import { BorderBeam } from "./ui/vengence/border-beam";
@@ -69,6 +73,7 @@ export function App(): React.JSX.Element {
   const playbackIndex = usePlaybackStore((s) => s.playback?.index ?? null);
   const playlistId = usePlaybackStore((s) => s.playback?.playlist_id ?? null);
   const skipSeconds = usePlaybackStore((s) => s.playback?.skip_seconds ?? 5);
+  const trackLoading = usePlaybackStore((s) => s.loading);
 
   // Spotify link + catalog (`F6`)
   const spotifyStatus = useAuthStore((s) => s.status);
@@ -86,6 +91,7 @@ export function App(): React.JSX.Element {
   // UI state
   const [nodesVisible, setNodesVisible] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
   // Which tab the dialog opens on, so a source button jumps straight there.
   const [dialogTab, setDialogTab] = useState<"local" | "spotify" | "youtube">("local");
 
@@ -106,6 +112,7 @@ export function App(): React.JSX.Element {
       auth: new AuthController(api, { language: lang }),
       spotify: new SpotifyController(api, { language: lang }),
       youtube: new YouTubeController(api, { language: lang }),
+      lyrics: new LyricsController(api, { language: lang }),
     };
   }, []);
 
@@ -123,6 +130,20 @@ export function App(): React.JSX.Element {
     const timer = setInterval(ping, 10 * 60_000);
     return () => clearInterval(timer);
   }, []);
+
+  // Background playback (`F12`): publish lock-screen metadata/controls and
+  // resume audio the browser paused while hidden. Bound to the controller
+  // instance, so it survives every re-render.
+  useEffect(() => {
+    const mediaSession = new MediaSessionBridge(controllers.playback);
+    const resilience = new PlaybackResilience(controllers.playback);
+    mediaSession.start();
+    resilience.start();
+    return () => {
+      mediaSession.stop();
+      resilience.stop();
+    };
+  }, [controllers]);
 
   // Initial load: rebuild the local object URLs *before* the queue is read, so
   // `blob:` artwork URLs that died on reload are replaced, and tracks whose
@@ -412,6 +433,14 @@ export function App(): React.JSX.Element {
     setNodesVisible((v) => !v);
   }, []);
 
+  const handleToggleLyrics = useCallback(() => {
+    setLyricsOpen((value) => !value);
+  }, []);
+
+  const handleCloseLyrics = useCallback(() => {
+    setLyricsOpen(false);
+  }, []);
+
   const handleCloseDialog = useCallback(() => {
     setDialogOpen(false);
   }, []);
@@ -452,6 +481,9 @@ export function App(): React.JSX.Element {
           <NowPlaying
             title={song ? song.title : t("player.noTrack")}
             artist={song ? song.artist : t("player.selectHint")}
+            lyricsEnabled={hasTrack}
+            lyricsOpen={lyricsOpen}
+            onToggleLyrics={handleToggleLyrics}
           />
           <ProgressBar duration={duration} disabled={!hasTrack} step={skipSeconds} onSeek={handleSeek} />
           <PlayerControls
@@ -490,6 +522,7 @@ export function App(): React.JSX.Element {
           songs={songs}
           currentIndex={currentIndex}
           loading={loading}
+          trackLoading={trackLoading}
           onPlay={handlePlayTrack}
           onRemove={handleRemoveTrack}
           onMove={handleMoveTrack}
@@ -542,6 +575,13 @@ export function App(): React.JSX.Element {
         onSpotifyConnect={handleSpotifyConnect}
         onSpotifyDisconnect={handleSpotifyDisconnect}
         onYouTubeSearch={handleYouTubeSearch}
+      />
+
+      <LyricsPanel
+        open={lyricsOpen}
+        song={song}
+        controller={controllers.lyrics}
+        onClose={handleCloseLyrics}
       />
     </AppShell>
   );

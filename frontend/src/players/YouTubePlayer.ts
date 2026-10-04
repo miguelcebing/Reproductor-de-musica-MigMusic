@@ -1,18 +1,22 @@
-/** YouTube IFrame implementation of `AudioPlayer` (`F8`).
-
+/** YouTube IFrame implementation of `AudioPlayer` (`F8`, reused in `F12`).
+ *
  * Audio plays through YouTube's official embedded player using the track's
  * `videoId`; nothing is downloaded or extracted server-side. The player mounts
  * into a hidden, off-screen host element so the existing custom controls drive
  * it via the shared `AudioPlayer` contract.
-
- * State handling: `load()` destroys any previous inner player before creating a
- * new one, so switching songs never leaves a stale player echoing audio (the
- * "plays 2 s then jumps back" symptom).
+ *
+ * One iframe is created for the whole session and reused for every track
+ * (`F12`): switching songs calls `loadVideoById` on the same instance instead
+ * of rebuilding the iframe, which removes the hundreds of milliseconds of
+ * player setup on each click. A wrapper is still created per track (it is a
+ * thin object), but it only owns listeners and the ticker; the shared engine
+ * survives `destroy()` so the next track starts instantly.
  */
 
 import type { AudioPlayer, PlayerEventType, PlayerEventListener } from "./AudioPlayer";
 import {
   loadYouTubeApi,
+  type YouTubeApi,
   type YouTubePlayerInstance,
   type YouTubePlayerVars,
 } from "./youtubeIframe";
@@ -20,9 +24,76 @@ import {
 const HOST_ID = "migmusic-youtube-host";
 const POLL_INTERVAL_MS = 500;
 
+/** The one iframe shared by every wrapper; `owner` is the active wrapper. */
+interface YouTubeEngine {
+  readonly api: YouTubeApi;
+  readonly container: HTMLDivElement;
+  readonly mount: HTMLDivElement;
+  readonly player: YouTubePlayerInstance;
+  videoId: string;
+  owner: YouTubePlayer | null;
+}
+
+let engine: YouTubeEngine | null = null;
+let engineCreation: Promise<YouTubeEngine> | null = null;
+
+/** Create the shared iframe once; the promise is shared by concurrent loads. */
+function createEngine(api: YouTubeApi, source: string): Promise<YouTubeEngine> {
+  const container = document.createElement("div");
+  container.id = HOST_ID;
+  // Hidden but alive: YouTube refuses to play a display:none iframe reliably,
+  // so keep it off-screen instead of `display: none`.
+  Object.assign(container.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: "320px",
+    height: "180px",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(container);
+
+  const mount = document.createElement("div");
+  container.appendChild(mount);
+
+  const playerVars: YouTubePlayerVars = {
+    autoplay: 0,
+    controls: 0,
+    disablekb: 1,
+    modestbranding: 1,
+    playsinline: 1,
+    rel: 0,
+    origin: window.location.origin,
+  };
+
+  return new Promise<YouTubeEngine>((resolve) => {
+    new api.Player(mount, {
+      videoId: source,
+      playerVars,
+      events: {
+        onReady: (event) =>
+          resolve({ api, container, mount, player: event.target, videoId: source, owner: null }),
+        onStateChange: (event) => engine?.owner?.handleStateChange(event.data ?? -1, api),
+        onError: (event) => engine?.owner?.handleError(event.data ?? -1),
+      },
+    });
+  });
+}
+
+/** Tear down the shared iframe; used on app teardown and in tests. */
+export function disposeYouTubeEngine(): void {
+  if (!engine) return;
+  try {
+    engine.player.destroy();
+  } catch {
+    // The frame may already be gone.
+  }
+  engine.container.remove();
+  engine = null;
+}
+
 export class YouTubePlayer implements AudioPlayer {
   private readonly listeners = new Map<PlayerEventType, Set<PlayerEventListener>>();
-  private container: HTMLDivElement | null = null;
   private player: YouTubePlayerInstance | null = null;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private _source = "";
@@ -61,43 +132,29 @@ export class YouTubePlayer implements AudioPlayer {
     this.destroyed = false;
     this.endedEmitted = false;
     this._source = source;
-    this.teardownPlayer();
+    this._duration = 0;
+    this._playing = false;
 
     const api = await loadYouTubeApi();
     if (this.destroyed) return;
 
-    const container = this.ensureContainer();
-    const mount = document.createElement("div");
-    container.appendChild(mount);
+    const shared = await this.ensureEngine(api, source);
+    if (this.destroyed) return;
 
-    const playerVars: YouTubePlayerVars = {
-      autoplay: 0,
-      controls: 0,
-      disablekb: 1,
-      modestbranding: 1,
-      playsinline: 1,
-      rel: 0,
-      origin: window.location.origin,
-    };
+    shared.owner = this;
+    this.player = shared.player;
+    this.applyVolume();
+
     const startTime = Math.max(0, options?.startTime ?? 0);
+    if (shared.videoId !== source) {
+      // Same iframe, new video: no teardown, no player construction.
+      shared.videoId = source;
+      shared.player.loadVideoById(source, startTime > 0 ? startTime : undefined);
+    } else if (startTime > 0) {
+      shared.player.seekTo(startTime, true);
+    }
 
-    this.player = await new Promise<YouTubePlayerInstance>((resolve) => {
-      const player = new api.Player(mount, {
-        videoId: source,
-        playerVars,
-        events: {
-          onReady: (event) => {
-            event.target.setVolume(this._muted ? 0 : this._volume * 100);
-            this._duration = event.target.getDuration() || 0;
-            if (startTime > 0) event.target.seekTo(startTime, true);
-            resolve(player);
-          },
-          onStateChange: (event) => this.onStateChange(event.data ?? -1, api),
-          onError: (event) => this.onError(event.data ?? -1),
-        },
-      });
-    });
-
+    this._duration = shared.player.getDuration() || 0;
     this.startTicker();
   }
 
@@ -117,7 +174,7 @@ export class YouTubePlayer implements AudioPlayer {
 
   setVolume(volume: number): void {
     this._volume = Math.min(1, Math.max(0, volume));
-    if (this.player) this.player.setVolume(this._muted ? 0 : this._volume * 100);
+    this.applyVolume();
   }
 
   setMuted(muted: boolean): void {
@@ -130,12 +187,25 @@ export class YouTubePlayer implements AudioPlayer {
     }
   }
 
+  /**
+   * Detach this wrapper from the shared iframe (`F12`).
+   *
+   * The iframe itself is kept alive for the next track; only the audio is
+   * paused and the owner cleared, so a source switch cannot leave stale audio
+   * behind while still avoiding the cost of rebuilding the player.
+   */
   destroy(): void {
     this.destroyed = true;
     this.stopTicker();
-    this.teardownPlayer();
-    this.container?.remove();
-    this.container = null;
+    if (engine?.owner === this) {
+      engine.owner = null;
+      try {
+        engine.player.pauseVideo();
+      } catch {
+        // The frame may already be gone.
+      }
+    }
+    this.player = null;
     this.listeners.clear();
   }
 
@@ -147,13 +217,33 @@ export class YouTubePlayer implements AudioPlayer {
 
   // ------------------------------------------------------------- internals
 
+  /** Reuse the live iframe, or create it once (concurrent loads share it). */
+  private async ensureEngine(api: YouTubeApi, source: string): Promise<YouTubeEngine> {
+    if (engine && document.body.contains(engine.container)) return engine;
+    if (!engineCreation) {
+      engineCreation = createEngine(api, source)
+        .then((created) => {
+          engine = created;
+          return created;
+        })
+        .finally(() => {
+          engineCreation = null;
+        });
+    }
+    return engineCreation;
+  }
+
+  private applyVolume(): void {
+    if (this.player) this.player.setVolume(this._muted ? 0 : this._volume * 100);
+  }
+
   /**
    * YouTube error codes that mean "cannot be played embedded" (`100`, `101`,
    * `150`: video missing/private, embedding disabled by the owner, or the
    * owner restricted it). These are not fixable client-side, so the caller
    * shows a friendly message and skips instead of a raw error.
    */
-  private onError(code: number): void {
+  handleError(code: number): void {
     if (code === 100 || code === 101 || code === 150) {
       this.emit("error", { error: "youtube_unplayable", code });
       return;
@@ -161,7 +251,7 @@ export class YouTubePlayer implements AudioPlayer {
     this.emit("error", { error: `youtube_error_${code}`, code });
   }
 
-  private onStateChange(state: number, api: { PlayerState: { ENDED: number; PLAYING: number; PAUSED: number } }): void {
+  handleStateChange(state: number, api: YouTubeApi): void {
     if (state === api.PlayerState.PLAYING) {
       this._playing = true;
       this.emit("play");
@@ -177,7 +267,7 @@ export class YouTubePlayer implements AudioPlayer {
   private startTicker(): void {
     this.stopTicker();
     this.ticker = setInterval(() => {
-      if (this.destroyed || !this.player) return;
+      if (this.destroyed || !this.player || engine?.owner !== this) return;
       this._duration = this.player.getDuration() || this._duration;
       this.emit("timeupdate", { currentTime: this.player.getCurrentTime() });
     }, POLL_INTERVAL_MS);
@@ -188,45 +278,6 @@ export class YouTubePlayer implements AudioPlayer {
       clearInterval(this.ticker);
       this.ticker = null;
     }
-  }
-
-  /** Detach the inner player so a source switch cannot leave it playing. */
-  private teardownPlayer(): void {
-    this.stopTicker();
-    if (this.player) {
-      try {
-        this.player.stopVideo();
-      } catch {
-        // The frame may already be gone; destroying below is what matters.
-      }
-      try {
-        this.player.destroy();
-      } catch {
-        // Ignore: the iframe was removed already.
-      }
-      this.player = null;
-    }
-    if (this.container) this.container.innerHTML = "";
-    this._playing = false;
-    this._duration = 0;
-  }
-
-  private ensureContainer(): HTMLDivElement {
-    if (this.container) return this.container;
-    const existing = document.getElementById(HOST_ID) as HTMLDivElement | null;
-    const container = existing ?? document.createElement("div");
-    container.id = HOST_ID;
-    // Hidden but alive: YouTube refuses to play a display:none iframe reliably,
-    // so keep it off-screen instead of `display: none`.
-    container.style.position = "fixed";
-    container.style.left = "-10000px";
-    container.style.top = "0";
-    container.style.width = "320px";
-    container.style.height = "180px";
-    container.style.pointerEvents = "none";
-    if (!existing) document.body.appendChild(container);
-    this.container = container;
-    return container;
   }
 
   private emitEnded(): void {
