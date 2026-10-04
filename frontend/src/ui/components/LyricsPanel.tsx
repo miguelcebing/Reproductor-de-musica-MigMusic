@@ -45,7 +45,12 @@ export function LyricsPanel({
 
   // Load whenever the panel opens or the track changes while it is open.
   useEffect(() => {
-    if (!open || !song) return;
+    if (!open) return;
+    if (!song) {
+      // No track loaded: show the empty state instead of a stuck spinner.
+      setState({ kind: "ready", result: { status: "empty" } });
+      return;
+    }
     let cancelled = false;
     setState({ kind: "loading" });
     void controller.forSong(song).then((result) => {

@@ -66,6 +66,21 @@ def test_rate_limiting_can_be_disabled(settings: Settings) -> None:
     assert response.status_code == 200
 
 
+def test_cors_preflights_never_consume_the_budget(settings: Settings) -> None:
+    """OPTIONS is browser bookkeeping; a burst of preflights must not 429."""
+    client = make_app(settings, rate_limit_default_per_minute=1)
+    preflight = {
+        "Origin": "http://127.0.0.1:5173",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "x-device-id,content-type",
+    }
+
+    for _ in range(5):
+        response = client.options("/api/playlists", headers=preflight)
+
+    assert response.status_code == 200
+
+
 def test_oversized_bodies_are_rejected_with_413(settings: Settings) -> None:
     client = make_app(settings, max_request_body_bytes=1024)
     payload = {"name": "x" * 5000}

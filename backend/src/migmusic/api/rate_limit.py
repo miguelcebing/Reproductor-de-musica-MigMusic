@@ -66,6 +66,11 @@ class RateLimiter:
         self._buckets: dict[tuple[str, str], deque[float]] = {}
         self._lock = threading.Lock()
 
+    @property
+    def limits(self) -> RateLimits:
+        """Budgets this limiter enforces (read-only)."""
+        return self._limits
+
     def check(self, rule: RateLimitRule, key: str, *, now: float | None = None) -> float | None:
         """Return ``None`` when allowed, or the seconds to wait when limited."""
         moment = time.monotonic() if now is None else now
@@ -107,12 +112,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not self._enabled:
             return await call_next(request)
         # Health checks must never be throttled: the platform and the keep-alive
-        # loop depend on them.
+        # loop depend on them. CORS preflights are browser bookkeeping, not work.
+        if request.method == "OPTIONS":
+            return await call_next(request)
         path = request.url.path
         if path == "/api/health":
             return await call_next(request)
 
-        rule = rule_for(path, self._limiter._limits)
+        rule = rule_for(path, self._limiter.limits)
         retry_after = self._limiter.check(rule, client_key(request))
         if retry_after is not None:
             return _too_many_requests(retry_after)
