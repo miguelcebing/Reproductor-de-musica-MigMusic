@@ -1,59 +1,76 @@
-# ADR-003: Single origin via Vercel rewrite proxy
+# ADR-003: Single-origin deployment
 
-- **Status:** Accepted
+- **Status:** Accepted (superseded in implementation, see §Update)
 - **Date:** 2026-09-28
-- **Updated:** 2026-10-01 (catch-all rewrite, uvicorn `--proxy-headers`, keep-alive)
-- **Related:** `DEPLOY-001`, `DEPLOY-002`, `SPOTIFY-003`, `SPOTIFY-004`,
-  `CONS-005`
+- **Updated:** 2026-10-04 — the **principle** (one origin) is unchanged; the
+  implementation moved from a Vercel rewrite to an Nginx reverse proxy on AWS
+  (`DEPLOY-006`).
+- **Related:** `DEPLOY-001`, `DEPLOY-002`, `DEPLOY-006`, `SPOTIFY-003`,
+  `SPOTIFY-004`, `CONS-005`
 
 ## Context
 
-Only free tiers are allowed (`CONS-005`): static frontend on Vercel, Python
-backend on Render. Splitting them across two domains forces `SameSite=None`
-cookies, CORS with credentials, and two Redirect URIs to configure.
+Only free tiers were allowed (`CONS-005`). Serving the static frontend and the
+Python API from two different domains forces `SameSite=None` cookies, CORS with
+credentials and two Redirect URIs to configure. A **single origin** avoids all
+three: the cookie is `first-party` and the OAuth round-trip stays on one host.
 
-## Decision
+## Decision (unchanged)
 
-Deploy the frontend on **Vercel** and the API on **Render**, but expose a
-**single origin** by rewriting `/api/*` from Vercel to the Render service.
+Serve the SPA and the API from **one origin**, with `/api/*` reaching the
+backend and everything else falling back to the SPA's `index.html`.
+
+### Implementation history
+
+**2026-09-28 — Vercel rewrite (original).** Frontend on Vercel, API on Render,
+joined by a rewrite:
 
 ```json
 {
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://migmusic-api.onrender.com/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "x-vercel-enable-rewrite-caching", "value": "0" }
-      ]
-    }
   ]
 }
 ```
 
-The second rewrite is the SPA catch-all: without it, the OAuth callback path
-answers `404` on Vercel instead of reaching the API, and deep links land on a
-blank page. `/api/*` is matched first, so it always wins over `index.html`.
+The second rewrite was the SPA catch-all (without it the OAuth callback answered
+`404`); `/api/*` matched first. `x-vercel-enable-rewrite-caching: 0` was
+mandatory because Vercel caches rewrites by default since 2026-04-06. Production
+Redirect URI: `https://migmusic.vercel.app/api/auth/callback`.
 
-Production Redirect URI: `https://migmusic.vercel.app/api/auth/callback`.
-Development: `http://127.0.0.1:5173/callback` (Spotify rejects `localhost`
-since 2025-11-27).
+**2026-10-04 — Nginx reverse proxy (current).** The Render free tier slept and
+the GitHub `keep-alive` cron was unreliable, so both the cold start and the
+external dependency were removed by moving to an always-on EC2 instance
+(`DEPLOY-006`). The single origin is now provided by Nginx on the same server:
+
+```nginx
+server_name migmusicreproductor.duckdns.org;
+
+location /api/   { proxy_pass http://migmusic_api; }   # Gunicorn 127.0.0.1:8000
+location = /health { proxy_pass http://migmusic_api; }
+location /       { try_files $uri $uri/ /index.html; } # SPA catch-all
+```
+
+- The page-level CSP and gzip moved from `vercel.json` into the Nginx vhost.
+- Nginx forwards `X-Forwarded-Proto` / `X-Forwarded-For`, so redirects and
+  `Secure` cookies still see the real scheme and client.
+- Production Redirect URI:
+  `https://migmusicreproductor.duckdns.org/api/auth/callback`.
+- Development: `http://127.0.0.1:5173/callback` (Spotify rejects `localhost`
+  since 2025-11-27).
 
 ## Consequences
 
-- No cross-origin cookies and no CORS headaches in production; the browser
-  only ever talks to `migmusic.vercel.app`.
-- **`x-vercel-enable-rewrite-caching: 0` is mandatory.** Since 2026-04-06
-  Vercel caches rewrites by default, which would serve stale API responses.
-- The rewrite proxy inherits Vercel's 120 s timeout; long polling is not
-  supported (not needed here).
-- Uvicorn runs with `--proxy-headers --forwarded-allow-ips="*"` (`render.yaml`)
-  so redirects and `Secure` cookies are built from the `X-Forwarded-*` values
-  Vercel sends, not from the internal Render host.
-- Render sleeps on the free tier → the `keep-alive` GitHub Actions workflow
-  pings `/api/health` every 10 min (backend first, then the Vercel proxy) and
-  doubles as a production monitor. It replaces the external UptimeRobot
-  monitor, so no third-party service has to be kept configured.
+- **One origin is preserved in both topologies**, so the cookie/CORS reasoning
+  never changed; only the component doing the proxying did (Vercel → Nginx).
+- The API is no longer exposed on a public hostname of its own: it binds to
+  `127.0.0.1:8000` and is reachable only through Nginx, which also enforces the
+  per-IP rate limits and the `client_max_body_size` cap.
+- No cold start and no `keep-alive` cron: the server is always on, so
+  `SPEED-FIX` / `WARM-FIX` workarounds and the Render self-ping are retired
+  (`RENDER_BACKEND_URL` stays empty in production).
+- HTTPS is provided by Let's Encrypt through `certbot --nginx`, renewed
+  automatically by `certbot.timer`.
+- The single server is now a single point of failure; the instance is covered by
+  an AWS Budget with alerts at 5 and 10 USD/month and a nightly database backup.

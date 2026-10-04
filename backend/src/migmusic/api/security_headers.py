@@ -2,8 +2,8 @@
 
 The API answers JSON and is consumed by the frontend through a same-origin
 proxy, so the headers here harden API responses (no sniffing, HSTS, no framing,
-no referrer leakage). The page-level Content-Security-Policy lives in Vercel's
-``vercel.json`` because the HTML is served by the CDN, not by this app.
+no referrer leakage). The page-level Content-Security-Policy lives in the Nginx
+vhost (``infra/nginx/migmusic.conf``), which serves the SPA's HTML.
 """
 
 from __future__ import annotations

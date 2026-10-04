@@ -76,8 +76,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Free-tier Render sleeps after 15 idle minutes; a self-ping on the
-        # public URL keeps the instance warm (dev/tests have no base URL).
+        # Legacy of the Render free tier, which slept after 15 idle minutes; a
+        # self-ping on the public URL kept the instance warm. On AWS the server
+        # is always on, so `RENDER_BACKEND_URL` stays empty and no task starts
+        # (dev/tests have no base URL either).
         keep_alive_task: asyncio.Task[None] | None = None
         if config.render_backend_url:
             keep_alive_task = asyncio.create_task(

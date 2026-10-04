@@ -119,8 +119,9 @@ class Settings(BaseSettings):
         """Host header allow-list for ``TrustedHostMiddleware``.
 
         The frontend reaches the API through a same-origin proxy, so the Host
-        is always the platform domain; the localhost hosts keep development and
-        the Render health check working. An explicit ``TRUSTED_HOSTS`` wins.
+        is always the domain in front of Nginx; the localhost hosts keep
+        development and container health checks working. Production sets an
+        explicit ``TRUSTED_HOSTS`` (the DuckDNS domain), which wins.
         """
         configured = [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
         if configured:

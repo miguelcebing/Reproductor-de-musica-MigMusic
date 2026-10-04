@@ -236,7 +236,8 @@ sudo systemctl start migmusic-backup.service
 - Migraciones reversibles: nunca despliegues una migraciÃ³n destructiva sin backup.
 
 > Los archivos `render.yaml`, `.github/workflows/keep-alive.yml` y `frontend/vercel.json`
-> pertenecen a la topologÃ­a antigua (Vercel + Render) y ya no participan en producciÃ³n.
+> pertenecen a la topologÃ­a antigua (Vercel + Render) y se retiraron al migrar a AWS
+> (`DEPLOY-006`). Si necesitas volver a ellos, estÃ¡n en el historial de Git.
 
 ---
 
